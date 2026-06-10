@@ -1,4 +1,4 @@
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import {
   RESOURCE_INFO,
   SOLDIER_HP,
@@ -17,15 +17,17 @@ import { gridToScreen, type IsoGrid } from '../world/IsoGrid';
 import type { GhostState } from '../systems/BuildSystem';
 import {
   PALETTE,
-  drawBuildingView,
   drawEnemy,
   drawGhost,
+  drawHpBar,
   drawSelection,
   drawSoldier,
   drawTerrainTile,
   drawWorker,
+  footprintCorners,
 } from './placeholders';
 import { rotatedFootprint } from '../systems/BuildSystem';
+import { BuildingSprites } from './BuildingSprites';
 
 /** World-space bounding box used for culling. */
 interface Bounds {
@@ -36,7 +38,9 @@ interface Bounds {
 }
 
 interface BuildingViewEntry {
-  view: Graphics;
+  view: Container;
+  sprite: Sprite;
+  hpBar: Graphics;
   bounds: Bounds;
   lastHp: number;
   lastLevel: number;
@@ -92,7 +96,8 @@ export class WorldRenderer {
   private markerLayer!: Container;
   private objectLayer!: Container;
 
-  private terrainChunks: { view: Graphics; bounds: Bounds }[] = [];
+  private terrainChunks: { view: Sprite; bounds: Bounds }[] = [];
+  private buildingSprites = new BuildingSprites();
   private buildingViews = new Map<number, BuildingViewEntry>();
   private workerViews = new Map<number, WorkerViewEntry>();
   private soldierViews = new Map<number, SoldierViewEntry>();
@@ -118,6 +123,7 @@ export class WorldRenderer {
     });
     this.app.ticker.stop(); // frames are rendered manually from the game loop
     root.appendChild(this.app.canvas);
+    await this.buildingSprites.loadExternal();
 
     this.world = new Container();
     this.terrainLayer = new Container();
@@ -147,9 +153,9 @@ export class WorldRenderer {
     this.app.renderer.resize(w, h);
   }
 
-  /** (Re)build the static terrain chunk graphics. Call after terrain changes. */
+  /** (Re)build the static terrain chunk textures. Call after terrain changes. */
   buildTerrain(grid: IsoGrid): void {
-    for (const chunk of this.terrainChunks) chunk.view.destroy();
+    for (const chunk of this.terrainChunks) chunk.view.destroy(true);
     this.terrainChunks = [];
     this.terrainLayer.removeChildren();
 
@@ -170,15 +176,35 @@ export class WorldRenderer {
             bounds.maxY = Math.max(bounds.maxY, p.y + TILE_H / 2);
           }
         }
-        this.terrainLayer.addChild(g);
-        this.terrainChunks.push({ view: g, bounds });
+        // Subtle build grid: a few long lines per chunk instead of one
+        // stroked outline per tile (massively fewer vertices).
+        for (let gx = cx; gx <= maxX; gx++) {
+          const a = gridToScreen(gx - 0.5, cy - 0.5);
+          const b = gridToScreen(gx - 0.5, maxY - 0.5);
+          g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+        }
+        for (let gy = cy; gy <= maxY; gy++) {
+          const a = gridToScreen(cx - 0.5, gy - 0.5);
+          const b = gridToScreen(maxX - 0.5, gy - 0.5);
+          g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+        }
+        g.stroke({ color: 0x3a5c30, width: 1, alpha: 0.22 });
+        // Bake the chunk once: one textured quad per chunk instead of
+        // thousands of polygons every frame.
+        const localBounds = g.getLocalBounds();
+        const texture = this.app.renderer.generateTexture({ target: g });
+        g.destroy();
+        const sprite = new Sprite(texture);
+        sprite.position.set(localBounds.minX, localBounds.minY);
+        this.terrainLayer.addChild(sprite);
+        this.terrainChunks.push({ view: sprite, bounds });
       }
     }
   }
 
   /** Remove all building/unit views (new game / load). */
   clearEntities(): void {
-    for (const entry of this.buildingViews.values()) entry.view.destroy();
+    for (const entry of this.buildingViews.values()) entry.view.destroy({ children: true });
     for (const entry of this.workerViews.values()) entry.view.destroy();
     for (const entry of this.soldierViews.values()) entry.view.destroy();
     for (const entry of this.enemyViews.values()) entry.view.destroy();
@@ -282,25 +308,47 @@ export class WorldRenderer {
     }
   }
 
+  /** Health bar geometry over the roof (world px, relative to the anchor). */
+  private updateHpBar(entry: BuildingViewEntry, b: Building): void {
+    entry.hpBar.clear();
+    const [n, , s] = footprintCorners(b.w, b.h);
+    drawHpBar(
+      entry.hpBar,
+      (n[0] + s[0]) / 2,
+      n[1] - b.def.art.height - 10,
+      Math.max(28, b.w * 18),
+      b.hp / b.maxHp,
+    );
+  }
+
   private syncBuildings(state: RenderState): void {
     for (const [id, entry] of this.buildingViews) {
       if (!state.buildings.has(id)) {
-        entry.view.destroy();
+        entry.view.destroy({ children: true });
         this.buildingViews.delete(id);
       }
     }
     for (const b of state.buildings.values()) {
       const existing = this.buildingViews.get(b.id);
       if (existing) {
-        if (existing.lastHp !== b.hp || existing.lastLevel !== b.level) {
-          drawBuildingView(existing.view, b.def, b.w, b.h, b.hp / b.maxHp, b.level);
-          existing.lastHp = b.hp;
+        if (existing.lastLevel !== b.level) {
+          const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
+          existing.sprite.texture = tex.texture;
+          existing.sprite.position.set(tex.offsetX, tex.offsetY);
           existing.lastLevel = b.level;
+        }
+        if (existing.lastHp !== b.hp) {
+          this.updateHpBar(existing, b);
+          existing.lastHp = b.hp;
         }
         continue;
       }
-      const view = new Graphics();
-      drawBuildingView(view, b.def, b.w, b.h, b.hp / b.maxHp, b.level);
+      const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
+      const sprite = new Sprite(tex.texture);
+      sprite.position.set(tex.offsetX, tex.offsetY);
+      const hpBar = new Graphics();
+      const view = new Container();
+      view.addChild(sprite, hpBar);
       const anchor = gridToScreen(b.x, b.y);
       view.position.set(anchor.x, anchor.y);
       view.zIndex = b.zIndex;
@@ -311,8 +359,10 @@ export class WorldRenderer {
         gridToScreen(b.x + b.w - 1, b.y + b.h - 1),
         gridToScreen(b.x, b.y + b.h - 1),
       ];
-      this.buildingViews.set(b.id, {
+      const entry: BuildingViewEntry = {
         view,
+        sprite,
+        hpBar,
         bounds: {
           minX: Math.min(...corners.map((c) => c.x)) - TILE_W / 2,
           maxX: Math.max(...corners.map((c) => c.x)) + TILE_W / 2,
@@ -321,7 +371,9 @@ export class WorldRenderer {
         },
         lastHp: b.hp,
         lastLevel: b.level,
-      });
+      };
+      this.updateHpBar(entry, b);
+      this.buildingViews.set(b.id, entry);
     }
   }
 

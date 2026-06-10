@@ -70,7 +70,7 @@ export interface BuildingDef {
   /** Short German description for the info panel. */
   description: string;
   /** Placeholder art parameters; replaced by sprite atlas entries later. */
-  art: { color: number; height: number };
+  art: { color: number; height: number; material?: 'wood' | 'stone' };
 }
 
 export const BUILDING_DEFS = {
@@ -257,7 +257,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.Grass,
     description: 'Blockiert den Weg. Baue Linien, um die Burg zu schützen.',
     maxHp: 80,
-    art: { color: 0x8a8f99, height: 34 },
+    art: { color: 0x8a8f99, height: 34, material: 'stone' },
   },
   gate: {
     id: 'gate',
@@ -269,7 +269,7 @@ export const BUILDING_DEFS = {
     passable: true,
     description: 'Durchgang in der Mauer — eigene Einheiten können passieren.',
     maxHp: 60,
-    art: { color: 0xa08252, height: 30 },
+    art: { color: 0xa08252, height: 30, material: 'stone' },
   },
   tower: {
     id: 'tower',
@@ -280,7 +280,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.Grass,
     description: 'Beschießt Angreifer in Reichweite automatisch.',
     maxHp: 100,
-    art: { color: 0x6f7682, height: 58 },
+    art: { color: 0x6f7682, height: 58, material: 'stone' },
   },
   barracks: {
     id: 'barracks',

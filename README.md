@@ -129,6 +129,14 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   die richtige Grundlage, weil Kämpfe server- wie clientseitig identisch
   nachgerechnet werden können.
 
+## Echte Grafiken einbinden
+
+Das Spiel rendert Gebäude über gebackene Texturen mit einem Drop-in-Override:
+PNG-Sprites in `public/sprites/` legen, in `public/sprites/manifest.json`
+eintragen — fertig, kein Code nötig. Nicht eingetragene Gebäude behalten
+ihren Platzhalter (gebäudeweise Umstellung möglich). Pixel-Spezifikation,
+Ankerpunkt-Konvention und Stil-Briefing: siehe **ASSETS.md**.
+
 ## Play-Store-Build (Capacitor)
 
 Auf einem Rechner mit Android Studio (inkl. Android SDK):

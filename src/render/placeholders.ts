@@ -73,9 +73,7 @@ export function drawTerrainTile(
   const hash = tileHash(gx, gy);
   switch (terrain) {
     case Terrain.Grass: {
-      g.poly(diamond(cx, cy))
-        .fill(checker ? PALETTE.grassA : PALETTE.grassB)
-        .stroke({ color: PALETTE.grassLine, width: 1, alpha: 0.35 });
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.grassA : PALETTE.grassB);
       // Atmosphere: scattered flowers, bushes and pebbles.
       const ox = ((hash % 13) - 6) * 1.6;
       const oy = ((hash % 7) - 3) * 1.4;
@@ -93,19 +91,18 @@ export function drawTerrainTile(
     }
     case Terrain.Water: {
       g.poly(diamond(cx, cy)).fill(checker ? PALETTE.water : PALETTE.waterDeep);
-      // Light streaks suggest current.
+      // Light streaks suggest current (fills are cheaper than strokes).
       if (hash % 5 < 2) {
         const sy = cy - 4 + (hash % 9);
-        g.moveTo(cx - 12 + (hash % 6), sy)
-          .lineTo(cx + 4 + (hash % 8), sy)
-          .stroke({ color: 0x7ba6e0, width: 1.2, alpha: 0.5 });
+        g.rect(cx - 12 + (hash % 6), sy, 16 + (hash % 8), 1.2).fill({
+          color: 0x7ba6e0,
+          alpha: 0.5,
+        });
       }
       break;
     }
     case Terrain.Forest: {
-      g.poly(diamond(cx, cy))
-        .fill(checker ? PALETTE.grassA : PALETTE.grassB)
-        .stroke({ color: PALETTE.grassLine, width: 1, alpha: 0.35 });
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.grassA : PALETTE.grassB);
       // Two stylized firs per tile (offset for variety via checker).
       const tree = (tx: number, ty: number, s: number): void => {
         g.rect(tx - 1.5 * s, ty - 2 * s, 3 * s, 4 * s).fill(PALETTE.trunk);
@@ -193,6 +190,58 @@ export function drawBuildingBlock(
   // Roof.
   g.poly([n[0], n[1] - lift, e[0], e[1] - lift, s[0], s[1] - lift, wp[0], wp[1] - lift])
     .fill({ color: shade(color, 1.12), alpha });
+
+  if (lift <= 6 || opts.colorOverride !== undefined) return; // ghosts/flat stay plain
+
+  const lerp = (a: number[], b2: number[], t: number): [number, number] => [
+    a[0] + (b2[0] - a[0]) * t,
+    a[1] + (b2[1] - a[1]) * t,
+  ];
+  if (art.material === 'stone') {
+    // Mortar courses on both wall faces.
+    for (const tt of [0.33, 0.66]) {
+      g.moveTo(wp[0], wp[1] - lift * tt)
+        .lineTo(s[0], s[1] - lift * tt)
+        .lineTo(e[0], e[1] - lift * tt)
+        .stroke({ color: shade(color, 0.45), width: 1, alpha: 0.55 * alpha });
+    }
+    for (const tt of [0.25, 0.5, 0.75]) {
+      const [bx, by] = lerp(s, e, tt);
+      g.moveTo(bx, by).lineTo(bx, by - lift * 0.33).stroke({
+        color: shade(color, 0.45),
+        width: 1,
+        alpha: 0.45 * alpha,
+      });
+      const [lx, ly] = lerp(wp, s, tt);
+      g.moveTo(lx, ly - lift * 0.33).lineTo(lx, ly - lift * 0.66).stroke({
+        color: shade(color, 0.5),
+        width: 1,
+        alpha: 0.4 * alpha,
+      });
+    }
+  } else {
+    // Vertical planks on the right wall.
+    for (const tt of [0.25, 0.5, 0.75]) {
+      const [bx, by] = lerp(s, e, tt);
+      g.moveTo(bx, by).lineTo(bx, by - lift).stroke({
+        color: shade(color, 0.42),
+        width: 1,
+        alpha: 0.45 * alpha,
+      });
+    }
+  }
+  // Roof shingle lines parallel to the north-east edge.
+  for (const tt of [0.33, 0.66]) {
+    const [ax, ay] = lerp([n[0], n[1] - lift], [wp[0], wp[1] - lift], tt);
+    const [bx, by] = lerp([e[0], e[1] - lift], [s[0], s[1] - lift], tt);
+    g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: shade(color, 0.95), width: 1, alpha: 0.5 * alpha });
+  }
+  // Sun-lit edge highlight along the roof's north-west rim.
+  g.moveTo(wp[0], wp[1] - lift).lineTo(n[0], n[1] - lift).lineTo(e[0], e[1] - lift).stroke({
+    color: shade(color, 1.35),
+    width: 1.5,
+    alpha: 0.8 * alpha,
+  });
 }
 
 /** Small health bar centered at (cx, cy); only drawn when damaged. */
