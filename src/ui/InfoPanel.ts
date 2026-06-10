@@ -99,12 +99,16 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   /** Refresh the action buttons that depend on live building state. */
   const updateActions = (b: Building): void => {
     updateStaffRow(b);
+    const costLine = (cost: Partial<Record<(typeof RESOURCE_IDS)[number], number>>): string =>
+      RESOURCE_IDS.filter((r) => (cost[r] ?? 0) > 0)
+        .map((r) => `${RESOURCE_INFO[r].icon} ${cost[r]}`)
+        .join(' ');
     const upgradeTarget = b.def.upgradesTo ? getDef(b.def.upgradesTo as BuildingDefId) : null;
     if (upgradeTarget) {
-      const costText = RESOURCE_IDS.filter((r) => (upgradeTarget.cost[r] ?? 0) > 0)
-        .map((r) => `${RESOURCE_INFO[r].icon} ${upgradeTarget.cost[r]}`)
-        .join(' ');
-      upgradeBtn.textContent = `Ausbauen: ${upgradeTarget.name} (${costText})`;
+      upgradeBtn.textContent = `Ausbauen: ${upgradeTarget.name} (${costLine(upgradeTarget.cost)})`;
+      upgradeBtn.hidden = false;
+    } else if (b.level < b.maxLevel) {
+      upgradeBtn.textContent = `⭐ Stufe ${b.level + 1} (${costLine(game.levelUpgradeCost(b))})`;
       upgradeBtn.hidden = false;
     } else {
       upgradeBtn.hidden = true;
@@ -196,7 +200,8 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       return;
     }
     currentSoldier = null;
-    title.textContent = building.def.name;
+    title.textContent =
+      building.level > 1 ? `${building.def.name} ⭐${building.level}` : building.def.name;
     desc.textContent = building.def.description;
     demolishBtn.hidden = building.def.isWarehouse === true;
     recruitBtn.hidden = building.def.recruitsSoldiers !== true;

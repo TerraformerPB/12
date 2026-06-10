@@ -9,6 +9,8 @@ import {
   TOWER_ATTACK_INTERVAL,
   TOWER_DAMAGE,
   TOWER_RANGE,
+  UPGRADE_TOWER_DAMAGE_BONUS,
+  UPGRADE_TOWER_RANGE_BONUS,
 } from '../data/config';
 import type { Building } from '../entities/Building';
 import type { Enemy } from '../entities/Enemy';
@@ -221,7 +223,7 @@ export class CombatSystem {
       }
       const center = b.center;
       let target: Enemy | null = null;
-      let bestDist = TOWER_RANGE;
+      let bestDist = TOWER_RANGE + UPGRADE_TOWER_RANGE_BONUS * (b.level - 1);
       for (const e of this.ctx.enemies) {
         const d = Math.hypot(e.x - center.x, e.y - center.y);
         if (d <= bestDist) {
@@ -233,7 +235,8 @@ export class CombatSystem {
       this.towerCooldowns.set(b.id, TOWER_ATTACK_TICKS);
       this.projectiles.push({ x0: center.x, y0: center.y, x1: target.x, y1: target.y, age: 0 });
       this.ctx.playSound('arrow');
-      this.damageEnemy(target, TOWER_DAMAGE * this.ctx.towerDamageFactor());
+      const levelBonus = 1 + UPGRADE_TOWER_DAMAGE_BONUS * (b.level - 1);
+      this.damageEnemy(target, TOWER_DAMAGE * levelBonus * this.ctx.towerDamageFactor());
     }
   }
 

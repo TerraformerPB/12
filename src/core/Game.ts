@@ -45,6 +45,7 @@ import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
+import { UPGRADE_COST_FACTOR } from '../data/config';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
 import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
@@ -173,9 +174,13 @@ export class Game {
       getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
       nextEntityId: () => this.nextId++,
       getSoldierCount: () => this.soldiers.length,
-      getSpeedFactor: () => (this.techs.has('fastCarriers') ? TECH_EFFECTS.fastCarriersSpeed : 1),
+      getSpeedFactor: () =>
+        (this.techs.has('fastCarriers') ? TECH_EFFECTS.fastCarriersSpeed : 1) *
+        (this.techs.has('freeBeer') ? TECH_EFFECTS.freeBeerSpeed : 1),
     });
-    this.soldierSystem = new SoldierSystem(this.grid, this.soldiers);
+    this.soldierSystem = new SoldierSystem(this.grid, this.soldiers, () =>
+      this.techs.has('fieldRations') ? TECH_EFFECTS.fieldRationsSpeed : 1,
+    );
     this.waveSystem = new WaveSystem({
       grid: this.grid,
       enemies: this.enemies,
@@ -490,24 +495,54 @@ export class Game {
     events.emit('toast:show', { message: `${b.def.name} repariert` });
   }
 
-  /** Info-panel action: upgrade e.g. a road into a paved road. */
+  /** Cost of the next level (base or explicit upgrade cost × level). */
+  levelUpgradeCost(b: Building): Partial<Record<ResourceId, number>> {
+    const base = b.def.upgradeCost ?? b.def.cost;
+    const cost: Partial<Record<ResourceId, number>> = {};
+    for (const r of RESOURCE_IDS) {
+      const c = Math.ceil((base[r] ?? 0) * UPGRADE_COST_FACTOR * b.level);
+      if (c > 0) cost[r] = c;
+    }
+    return cost;
+  }
+
+  /**
+   * Info-panel action: roads swap their definition (Straße → Pflasterstraße),
+   * every other building rises one level (more hp, faster production,
+   * stronger towers, larger huts).
+   */
   upgradeBuilding(id: number): void {
     const b = this.buildings.get(id);
-    const targetId = b?.def.upgradesTo as BuildingDefId | undefined;
-    if (!b || !targetId) return;
-    const target = getDef(targetId);
-    const missing = missingResourcesMessage(this.store, target.cost);
+    if (!b) return;
+    const targetId = b.def.upgradesTo as BuildingDefId | undefined;
+    if (targetId) {
+      const target = getDef(targetId);
+      const missing = missingResourcesMessage(this.store, target.cost);
+      if (missing) {
+        events.emit('toast:show', { message: missing });
+        return;
+      }
+      this.store.pay(target.cost);
+      this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
+      this.buildings.delete(b.id);
+      this.economy.onBuildingRemoved(b.id);
+      const upgraded = this.addBuilding(targetId, b.x, b.y, b.rotated);
+      this.sound.play('place');
+      this.select(upgraded.id);
+      return;
+    }
+    if (b.level >= b.maxLevel) return;
+    const cost = this.levelUpgradeCost(b);
+    const missing = missingResourcesMessage(this.store, cost);
     if (missing) {
       events.emit('toast:show', { message: missing });
       return;
     }
-    this.store.pay(target.cost);
-    this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
-    this.buildings.delete(b.id);
-    this.economy.onBuildingRemoved(b.id);
-    const upgraded = this.addBuilding(targetId, b.x, b.y, b.rotated);
+    this.store.pay(cost);
+    b.level++;
+    b.hp = b.maxHp; // an upgrade includes a full repair
     this.sound.play('place');
-    this.select(upgraded.id);
+    events.emit('toast:show', { message: `${b.def.name} auf Stufe ${b.level} ausgebaut` });
   }
 
   demolish(id: number): void {

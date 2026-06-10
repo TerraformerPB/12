@@ -17,6 +17,8 @@ export const PlacementRule = {
   AdjacentForest: 'adjacentForest',
   /** Free water tiles (bridges). */
   Water: 'water',
+  /** Free grass tiles with at least one water tile orthogonally adjacent. */
+  AdjacentWater: 'adjacentWater',
 } as const;
 export type PlacementRule = (typeof PlacementRule)[keyof typeof PlacementRule];
 
@@ -57,6 +59,10 @@ export interface BuildingDef {
   upgradesTo?: string;
   /** Workers that must be assigned before the building produces. */
   workersRequired?: number;
+  /** Maximum upgrade level; BUILDING_MAX_LEVEL when omitted, 1 = fixed. */
+  maxLevel?: number;
+  /** Per-level upgrade cost; derived from `cost` when omitted. */
+  upgradeCost?: Partial<Record<ResourceId, number>>;
   /** Soldiers can be recruited here (barracks). */
   recruitsSoldiers?: boolean;
   /** Hit points; BUILDING_DEFAULT_HP when omitted. */
@@ -76,6 +82,7 @@ export const BUILDING_DEFS = {
     cost: {},
     placement: PlacementRule.Grass,
     isWarehouse: true,
+    upgradeCost: { wood: 40, stone: 20 },
     description: 'Zentrales Lager. Träger liefern hier alle Waren ab.',
     maxHp: 150,
     art: { color: 0xb08a4f, height: 40 },
@@ -128,6 +135,19 @@ export const BUILDING_DEFS = {
     description: 'Schmiedet 1 Erz zu 1 Waffe (5 Sekunden). Nötig für Soldaten.',
     art: { color: 0x55504e, height: 28 },
   },
+  fishery: {
+    id: 'fishery',
+    category: 'economy',
+    name: 'Fischerhütte',
+    footprint: { w: 2, h: 1 },
+    cost: { wood: 25 },
+    placement: PlacementRule.AdjacentWater,
+    recipe: { output: 'fish', duration: 6 },
+    workersRequired: 1,
+    description: 'Fängt 1 Fisch alle 6 Sekunden. Muss am Wasser stehen.',
+    maxHp: 40,
+    art: { color: 0x5e7f95, height: 18 },
+  },
   farm: {
     id: 'farm',
     category: 'economy',
@@ -164,6 +184,18 @@ export const BUILDING_DEFS = {
     description: 'Backt 1 Mehl zu 1 Brot (3 Sekunden).',
     art: { color: 0xb5663c, height: 30 },
   },
+  brewery: {
+    id: 'brewery',
+    category: 'economy',
+    name: 'Brauerei',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 45, stone: 15 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'wheat', output: 'beer', duration: 6 },
+    workersRequired: 1,
+    description: 'Braut 1 Weizen zu 1 Bier (6 Sekunden). Für Forschung.',
+    art: { color: 0x8c6f3f, height: 32 },
+  },
   hut: {
     id: 'hut',
     category: 'economy',
@@ -179,6 +211,7 @@ export const BUILDING_DEFS = {
   road: {
     id: 'road',
     category: 'economy',
+    maxLevel: 1,
     name: 'Straße',
     footprint: { w: 1, h: 1 },
     cost: { wood: 2 },
@@ -192,6 +225,7 @@ export const BUILDING_DEFS = {
   roadStone: {
     id: 'roadStone',
     category: 'economy',
+    maxLevel: 1,
     name: 'Pflasterstraße',
     footprint: { w: 1, h: 1 },
     cost: { stone: 3 },
@@ -204,6 +238,7 @@ export const BUILDING_DEFS = {
   bridge: {
     id: 'bridge',
     category: 'economy',
+    maxLevel: 1,
     name: 'Brücke',
     footprint: { w: 1, h: 1 },
     cost: { wood: 10 },
@@ -274,9 +309,11 @@ export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
       'lumberjack',
       'quarry',
       'mine',
+      'fishery',
       'farm',
       'mill',
       'bakery',
+      'brewery',
       'smithy',
       'hut',
       'road',

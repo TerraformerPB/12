@@ -37,6 +37,11 @@ export function migrateSave(data: SaveData): SaveData | null {
     console.warn('Savegame vor Version 5 — Terrain hat sich geändert, starte neu.');
     return null;
   }
+  if (data.saveVersion === 5) {
+    // v5 → v6: building levels introduced.
+    for (const b of data.buildings) b.level = 1;
+    data.saveVersion = 6;
+  }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }
 

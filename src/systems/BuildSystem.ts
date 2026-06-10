@@ -67,6 +67,9 @@ export function checkPlacement(
   if (def.placement === PlacementRule.AdjacentForest) {
     return requireAdjacent(Terrain.Forest, 'Muss an Wald grenzen');
   }
+  if (def.placement === PlacementRule.AdjacentWater) {
+    return requireAdjacent(Terrain.Water, 'Muss am Wasser stehen');
+  }
   return { ok: true };
 }
 

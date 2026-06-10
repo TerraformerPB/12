@@ -210,6 +210,7 @@ export function drawBuildingView(
   w: number,
   h: number,
   hpRatio: number,
+  level = 1,
 ): void {
   g.clear();
   if (def.roadTier !== undefined) {
@@ -226,10 +227,33 @@ export function drawBuildingView(
   }
   drawBuildingBlock(g, w, h, def.art);
   drawDecorations(g, def, w, h);
+  drawLevelTrim(g, def, w, h, level);
   // Bar floats above the roof, centered over the footprint.
   const [n, , s] = footprintCorners(w, h);
   const cx = (n[0] + s[0]) / 2;
   drawHpBar(g, cx, n[1] - def.art.height - 10, Math.max(28, w * 18), hpRatio);
+}
+
+/** Visual upgrade markers: timber bracing at level 2, gold trim + banner at 3. */
+function drawLevelTrim(g: Graphics, def: BuildingDef, w: number, h: number, level: number): void {
+  if (level < 2) return;
+  const lift = def.art.height;
+  const [n, e, s, wp] = footprintCorners(w, h);
+  // Timber corner posts on the two front edges.
+  for (const c of [s, wp, e]) {
+    g.moveTo(c[0], c[1]).lineTo(c[0], c[1] - lift).stroke({ color: 0x4a3826, width: 2.5 });
+  }
+  if (level >= 3) {
+    // Gold trim along the roof edge + a banner above the roof.
+    g.poly([n[0], n[1] - lift, e[0], e[1] - lift, s[0], s[1] - lift, wp[0], wp[1] - lift]).stroke({
+      color: 0xe3b341,
+      width: 2,
+    });
+    const cx = (n[0] + s[0]) / 2;
+    const cy = (n[1] + s[1]) / 2 - lift;
+    g.moveTo(cx, cy).lineTo(cx, cy - 12).stroke({ color: 0x4a3826, width: 2 });
+    g.poly([cx, cy - 12, cx + 8, cy - 9.5, cx, cy - 7]).fill(0xe3b341);
+  }
 }
 
 /** Per-building placeholder details (roofs, blades, flags, crates …). */
@@ -308,6 +332,39 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): v
           .fill(PALETTE.trunk)
           .stroke({ color: shade(PALETTE.trunk, 1.4), width: 1 });
       }
+      break;
+    }
+    case 'fishery': {
+      // Fishing rod leaning over the front edge with a line.
+      g.moveTo(s[0] - 2, s[1] - 6).lineTo(s[0] + 12, s[1] - 18).stroke({ color: PALETTE.trunk, width: 2 });
+      g.moveTo(s[0] + 12, s[1] - 18).lineTo(s[0] + 12, s[1] - 4).stroke({ color: 0xd8d8d8, width: 1 });
+      g.circle(s[0] + 12, s[1] - 3, 1.5).fill(0x7fb6d9);
+      break;
+    }
+    case 'brewery': {
+      // Barrel beside the entrance.
+      const bx = (s[0] + e[0]) / 2 + 4;
+      const by = (s[1] + e[1]) / 2 - 4;
+      g.ellipse(bx, by, 4.5, 5.5).fill(0x9c7340).stroke({ color: 0x5a4026, width: 1.2 });
+      g.moveTo(bx - 4.5, by - 1.5).lineTo(bx + 4.5, by - 1.5).stroke({ color: 0x5a4026, width: 1 });
+      g.moveTo(bx - 4.5, by + 1.5).lineTo(bx + 4.5, by + 1.5).stroke({ color: 0x5a4026, width: 1 });
+      break;
+    }
+    case 'mine': {
+      // Dark adit with support beams on the right wall.
+      const mx = (s[0] + e[0]) / 2;
+      const my = (s[1] + e[1]) / 2;
+      g.poly([mx, my - 1, mx + 8, my - 5, mx + 8, my - 14, mx, my - 10]).fill(0x1f1812);
+      g.moveTo(mx, my - 1).lineTo(mx, my - 10).stroke({ color: PALETTE.trunk, width: 2 });
+      g.moveTo(mx + 8, my - 5).lineTo(mx + 8, my - 14).stroke({ color: PALETTE.trunk, width: 2 });
+      break;
+    }
+    case 'smithy': {
+      // Anvil silhouette at the front + glowing forge window.
+      g.poly([s[0] - 8, s[1] - 4, s[0] + 1, s[1] - 4, s[0] + 1, s[1] - 7, s[0] - 8, s[1] - 7]).fill(0x2a2a30);
+      const fx = (s[0] + e[0]) / 2 + 2;
+      const fy = (s[1] + e[1]) / 2 - 8;
+      g.rect(fx, fy, 5, 5).fill(0xe07b30);
       break;
     }
     case 'hut': {

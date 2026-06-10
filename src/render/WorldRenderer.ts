@@ -39,6 +39,7 @@ interface BuildingViewEntry {
   view: Graphics;
   bounds: Bounds;
   lastHp: number;
+  lastLevel: number;
 }
 
 interface WorkerViewEntry {
@@ -291,14 +292,15 @@ export class WorldRenderer {
     for (const b of state.buildings.values()) {
       const existing = this.buildingViews.get(b.id);
       if (existing) {
-        if (existing.lastHp !== b.hp) {
-          drawBuildingView(existing.view, b.def, b.w, b.h, b.hp / b.maxHp);
+        if (existing.lastHp !== b.hp || existing.lastLevel !== b.level) {
+          drawBuildingView(existing.view, b.def, b.w, b.h, b.hp / b.maxHp, b.level);
           existing.lastHp = b.hp;
+          existing.lastLevel = b.level;
         }
         continue;
       }
       const view = new Graphics();
-      drawBuildingView(view, b.def, b.w, b.h, b.hp / b.maxHp);
+      drawBuildingView(view, b.def, b.w, b.h, b.hp / b.maxHp, b.level);
       const anchor = gridToScreen(b.x, b.y);
       view.position.set(anchor.x, anchor.y);
       view.zIndex = b.zIndex;
@@ -318,6 +320,7 @@ export class WorldRenderer {
           maxY: Math.max(...corners.map((c) => c.y)) + TILE_H / 2,
         },
         lastHp: b.hp,
+        lastLevel: b.level,
       });
     }
   }

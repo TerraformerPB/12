@@ -41,7 +41,7 @@ function sampleData(): SaveData {
     saveVersion: SAVE_VERSION,
     seed: 1234567,
     nextEntityId: 10,
-    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9 },
+    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9, fish: 5, beer: 1 },
     buildings: [new Building(1, 'warehouse', 23, 23, false).toSave(), mill.toSave()],
     workers: [worker.toSave()],
     soldiers: [soldier.toSave()],
@@ -85,6 +85,16 @@ describe('save/load roundtrip', () => {
     const { soldier, target } = Soldier.fromSave(original);
     expect(soldier.tile).toEqual({ x: 20, y: 21 });
     expect(target).toEqual({ x: 18, y: 21 });
+  });
+
+  it('migrates v5 savegames: buildings start at level 1', () => {
+    const v5 = JSON.parse(JSON.stringify(sampleData())) as SaveData;
+    v5.saveVersion = 5;
+    for (const b of v5.buildings) delete (b as Partial<typeof b>).level;
+    const migrated = migrateSave(v5);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.buildings.every((b) => b.level === 1)).toBe(true);
   });
 
   it('rejects pre-v5 savegames (terrain generator changed)', () => {

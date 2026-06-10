@@ -1,4 +1,13 @@
-import { BUILDING_DEFAULT_HP, LOCAL_STORE_CAP, TICK_RATE, type ResourceId } from '../data/config';
+import {
+  BUILDING_DEFAULT_HP,
+  BUILDING_MAX_LEVEL,
+  LOCAL_STORE_CAP,
+  TICK_RATE,
+  UPGRADE_HP_BONUS,
+  UPGRADE_HUT_POPULATION,
+  UPGRADE_SPEED_BONUS,
+  type ResourceId,
+} from '../data/config';
 import { getDef, type BuildingDef, type BuildingDefId } from '../data/buildings';
 import type { IsoGrid, Point } from '../world/IsoGrid';
 
@@ -17,6 +26,8 @@ export interface BuildingSave {
   hp: number;
   /** Since save version 5. */
   assignedWorkers: number;
+  /** Since save version 6. */
+  level: number;
 }
 
 /**
@@ -45,6 +56,8 @@ export class Building {
   hp: number;
   /** Population assigned to operate this building (phase 7). */
   assignedWorkers = 0;
+  /** Upgrade level 1..maxLevel (phase 8). */
+  level = 1;
 
   // Transient reservation counters (recomputed from worker jobs on load).
   /** Output units already promised to a pickup job. */
@@ -61,8 +74,19 @@ export class Building {
     this.hp = this.maxHp;
   }
 
+  get maxLevel(): number {
+    return this.def.maxLevel ?? BUILDING_MAX_LEVEL;
+  }
+
   get maxHp(): number {
-    return getDef(this.defId).maxHp ?? BUILDING_DEFAULT_HP;
+    const base = getDef(this.defId).maxHp ?? BUILDING_DEFAULT_HP;
+    return Math.round(base * (1 + UPGRADE_HP_BONUS * (this.level - 1)));
+  }
+
+  /** Carrier capacity provided (huts grow with their level). */
+  get populationBonus(): number {
+    const base = this.def.population ?? 0;
+    return base === 0 ? 0 : base + UPGRADE_HUT_POPULATION * (this.level - 1);
   }
 
   /** Center of the footprint in grid coordinates (tower range checks). */
@@ -106,11 +130,16 @@ export class Building {
     return Math.min(1, this.assignedWorkers / required);
   }
 
+  /** Production speed factor from the upgrade level. */
+  get levelFactor(): number {
+    return 1 + UPGRADE_SPEED_BONUS * (this.level - 1);
+  }
+
   /** Advance production by one logic tick, scaled by assigned workers. */
   tickProduction(): void {
     const recipe = this.def.recipe;
     if (!recipe) return;
-    const speed = this.staffingFactor;
+    const speed = this.staffingFactor * this.levelFactor;
     if (speed <= 0) return;
 
     if (!this.active) {
@@ -192,11 +221,13 @@ export class Building {
       outputStore: this.outputStore,
       hp: this.hp,
       assignedWorkers: this.assignedWorkers,
+      level: this.level,
     };
   }
 
   static fromSave(s: BuildingSave): Building {
     const b = new Building(s.id, s.defId, s.x, s.y, s.rotated);
+    b.level = Math.max(1, Math.min(s.level, b.maxLevel));
     b.active = s.active;
     b.progress = s.progress;
     b.inputStore = s.inputStore;

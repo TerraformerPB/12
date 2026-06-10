@@ -6,7 +6,7 @@
 
 // --- Resources -------------------------------------------------------------
 
-export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread'] as const;
+export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
 
 export interface ResourceInfo {
@@ -24,6 +24,8 @@ export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
   wheat: { label: 'Weizen', icon: '🌾', color: 0xe3c558 },
   flour: { label: 'Mehl', icon: '⚪', color: 0xf1e9d6 },
   bread: { label: 'Brot', icon: '🥖', color: 0xc07a3a },
+  fish: { label: 'Fisch', icon: '🐟', color: 0x7fb6d9 },
+  beer: { label: 'Bier', icon: '🍺', color: 0xd9a441 },
 };
 
 // --- Simulation ------------------------------------------------------------
@@ -87,6 +89,8 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   wheat: 0,
   flour: 0,
   bread: 2,
+  fish: 0,
+  beer: 0,
 };
 
 // --- Roads (phase 4) -------------------------------------------------------------
@@ -146,6 +150,22 @@ export const WAVE_MAX_COUNT = 30;
 /** Default hit points for buildings without an explicit maxHp. */
 export const BUILDING_DEFAULT_HP = 50;
 
+// --- Building levels (phase 8) ------------------------------------------------------
+
+/** Maximum upgrade level for regular buildings (roads upgrade by def swap). */
+export const BUILDING_MAX_LEVEL = 3;
+/** Upgrade to level n costs base cost × (n − 1). */
+export const UPGRADE_COST_FACTOR = 1;
+/** Hp bonus per level above 1 (fraction of base maxHp). */
+export const UPGRADE_HP_BONUS = 0.5;
+/** Production speed bonus per level above 1. */
+export const UPGRADE_SPEED_BONUS = 0.3;
+/** Tower damage bonus / extra range per level above 1. */
+export const UPGRADE_TOWER_DAMAGE_BONUS = 0.35;
+export const UPGRADE_TOWER_RANGE_BONUS = 0.75;
+/** Extra hut population per level above 1. */
+export const UPGRADE_HUT_POPULATION = 1;
+
 // --- Monetization (phase 6) -------------------------------------------------------
 
 /**
@@ -160,5 +180,5 @@ export const ADMOB_USE_TEST_ADS = true;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

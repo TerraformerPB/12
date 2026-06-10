@@ -117,7 +117,7 @@ export class EconomySystem {
   populationTotal(): number {
     let total = START_WORKERS;
     for (const b of this.ctx.buildings.values()) {
-      total += b.def.population ?? 0;
+      total += b.populationBonus;
     }
     return total;
   }

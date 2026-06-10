@@ -13,10 +13,13 @@ const SPEED_PER_TICK = SOLDIER_SPEED / TICK_RATE;
 export class SoldierSystem {
   private grid: IsoGrid;
   private soldiers: Soldier[];
+  /** Research speed multiplier (Marschverpflegung). */
+  private speedFactor: () => number;
 
-  constructor(grid: IsoGrid, soldiers: Soldier[]) {
+  constructor(grid: IsoGrid, soldiers: Soldier[], speedFactor: () => number = () => 1) {
     this.grid = grid;
     this.soldiers = soldiers;
+    this.speedFactor = speedFactor;
   }
 
   tick(): void {
@@ -26,7 +29,7 @@ export class SoldierSystem {
         continue;
       }
       const roadBonus = this.grid.speedFactorAt(s.tile.x, s.tile.y);
-      if (s.step(SPEED_PER_TICK * roadBonus) && s.mode === 'command') {
+      if (s.step(SPEED_PER_TICK * roadBonus * this.speedFactor()) && s.mode === 'command') {
         // Order completed: take up guard duty here.
         s.mode = 'guard';
         s.anchor = s.tile;

@@ -67,6 +67,14 @@ describe('placement validation', () => {
     expect(isFinite(grid.moveCost(4, 4))).toBe(true);
   });
 
+  it('requires the fishery to touch water orthogonally', () => {
+    const grid = makeGrid();
+    const fishery = getDef('fishery');
+    expect(checkPlacement(grid, fishery, 4, 4, false).ok).toBe(false);
+    grid.setTerrain(4, 3, Terrain.Water);
+    expect(checkPlacement(grid, fishery, 4, 4, false).ok).toBe(true);
+  });
+
   it('applies the rotated footprint', () => {
     const def = {
       ...getDef('mill'),

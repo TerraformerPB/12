@@ -109,7 +109,17 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   (Blumen, Büsche, Wasser-Strömung) und überarbeitete Gebäude-/Einheiten-
   Platzhalter mit Lauf-Animation. Savegame v5 (ältere Stände starten neu,
   da sich die Kartengenerierung geändert hat).
-- **Phase 8 (Konzept) — Burg-Duell (PvP):** Asynchroner 1-gegen-1-Modus im
+- **Phase 8 (✓) — Ausbau & neue Ketten:** Alle Gebäude sind aufrüstbar
+  (Stufe 1–3 im Info-Panel: mehr HP, +30% Produktionstempo pro Stufe,
+  Türme mit mehr Schaden/Reichweite, Hütten mit mehr Bevölkerung; Ausbau
+  repariert mit). Neue Waren Fisch und Bier mit eigenen Betrieben:
+  Fischerhütte (muss am Wasser stehen, 2×1 — rotierbar) und Brauerei
+  (Weizen → Bier); beide speisen zwei neue Forschungen (Marschverpflegung:
+  +25% Soldaten-Tempo, Freibier: +15% Träger-Tempo). Stufen-Optik mit
+  Holzverstrebungen (Stufe 2) und Goldzier + Banner (Stufe 3), neue
+  Dekorationen für Mine, Schmiede, Fischerhütte und Brauerei. Savegame v6
+  (migriert verlustfrei von v5).
+- **Phase 9 (Konzept) — Burg-Duell (PvP):** Asynchroner 1-gegen-1-Modus im
   Clash-of-Clans-Stil: Man greift den Burg-Schnappschuss eines anderen
   Spielers an, aber statt Karten/Truppen direkt zu steuern, schickt das
   eigene Wirtschaftssystem automatisch Angriffswellen — wer seine Produktion
