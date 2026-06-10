@@ -26,6 +26,9 @@ export const PALETTE = {
   selection: 0xffd966,
   workerBody: 0xf2e6c9,
   workerOutline: 0x4a3b28,
+  soldierBody: 0xb5443c,
+  soldierHelmet: 0xb9c0cc,
+  soldierOutline: 0x3a1f1c,
 } as const;
 
 /** Multiply an RGB color by a brightness factor. */
@@ -152,6 +155,20 @@ export function drawSelection(g: Graphics, w: number, h: number): void {
   g.clear();
   const [n, e, s, wp] = footprintCorners(w, h);
   g.poly([...n, ...e, ...s, ...wp]).stroke({ color: PALETTE.selection, width: 3, alpha: 0.9 });
+}
+
+/** Draw a soldier placeholder (red body, steel helmet). */
+export function drawSoldier(g: Graphics, selected: boolean): void {
+  g.clear();
+  if (selected) {
+    g.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
+  }
+  g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+  g.circle(0, -7, 6.5)
+    .fill(PALETTE.soldierBody)
+    .stroke({ color: PALETTE.soldierOutline, width: 1.5 });
+  // Helmet cap.
+  g.circle(0, -10, 4).fill(PALETTE.soldierHelmet);
 }
 
 /** Create the display object for a carrier. Redrawn when cargo changes. */

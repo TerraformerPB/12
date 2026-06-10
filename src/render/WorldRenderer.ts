@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js';
 import { RESOURCE_INFO, TERRAIN_CHUNK_SIZE, TILE_H, TILE_W } from '../data/config';
 import { getDef } from '../data/buildings';
 import type { Building } from '../entities/Building';
+import type { Soldier } from '../entities/Soldier';
 import type { Worker } from '../entities/Worker';
 import type { Camera } from '../world/Camera';
 import { gridToScreen, type IsoGrid } from '../world/IsoGrid';
@@ -11,6 +12,7 @@ import {
   createBuildingView,
   drawGhost,
   drawSelection,
+  drawSoldier,
   drawTerrainTile,
   drawWorker,
 } from './placeholders';
@@ -34,13 +36,20 @@ interface WorkerViewEntry {
   lastCarrying: string | null;
 }
 
+interface SoldierViewEntry {
+  view: Graphics;
+  lastSelected: boolean;
+}
+
 /** Everything the renderer needs to draw one frame. */
 export interface RenderState {
   grid: IsoGrid;
   buildings: Map<number, Building>;
   workers: Worker[];
+  soldiers: Soldier[];
   ghost: GhostState | null;
   selectedId: number | null;
+  selectedSoldierId: number | null;
 }
 
 const CULL_MARGIN = TILE_W * 2;
@@ -62,6 +71,7 @@ export class WorldRenderer {
   private terrainChunks: { view: Graphics; bounds: Bounds }[] = [];
   private buildingViews = new Map<number, BuildingViewEntry>();
   private workerViews = new Map<number, WorkerViewEntry>();
+  private soldierViews = new Map<number, SoldierViewEntry>();
   private ghostView!: Graphics;
   private ghostKey = '';
   private selectionView!: Graphics;
@@ -136,12 +146,14 @@ export class WorldRenderer {
     }
   }
 
-  /** Remove all building/worker views (new game / load). */
+  /** Remove all building/unit views (new game / load). */
   clearEntities(): void {
     for (const entry of this.buildingViews.values()) entry.view.destroy();
     for (const entry of this.workerViews.values()) entry.view.destroy();
+    for (const entry of this.soldierViews.values()) entry.view.destroy();
     this.buildingViews.clear();
     this.workerViews.clear();
+    this.soldierViews.clear();
     this.ghostKey = '';
     this.selectionKey = '';
   }
@@ -151,10 +163,42 @@ export class WorldRenderer {
     camera.apply(this.world);
     this.syncBuildings(state);
     this.syncWorkers(state, alpha);
+    this.syncSoldiers(state, alpha);
     this.syncGhost(state);
     this.syncSelection(state);
     this.cull(camera);
     this.app.render();
+  }
+
+  private syncSoldiers(state: RenderState, alpha: number): void {
+    const liveIds = new Set<number>();
+    for (const s of state.soldiers) {
+      liveIds.add(s.id);
+      let entry = this.soldierViews.get(s.id);
+      if (!entry) {
+        const view = new Graphics();
+        drawSoldier(view, false);
+        this.objectLayer.addChild(view);
+        entry = { view, lastSelected: false };
+        this.soldierViews.set(s.id, entry);
+      }
+      const selected = state.selectedSoldierId === s.id;
+      if (entry.lastSelected !== selected) {
+        drawSoldier(entry.view, selected);
+        entry.lastSelected = selected;
+      }
+      const fx = s.prevX + (s.x - s.prevX) * alpha;
+      const fy = s.prevY + (s.y - s.prevY) * alpha;
+      const p = gridToScreen(fx, fy);
+      entry.view.position.set(p.x, p.y);
+      entry.view.zIndex = fx + fy + 0.5;
+    }
+    for (const [id, entry] of this.soldierViews) {
+      if (!liveIds.has(id)) {
+        entry.view.destroy();
+        this.soldierViews.delete(id);
+      }
+    }
   }
 
   private syncBuildings(state: RenderState): void {
@@ -270,6 +314,10 @@ export class WorldRenderer {
     for (const chunk of this.terrainChunks) chunk.view.visible = visible(chunk.bounds);
     for (const entry of this.buildingViews.values()) entry.view.visible = visible(entry.bounds);
     for (const entry of this.workerViews.values()) {
+      const { x, y } = entry.view.position;
+      entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+    for (const entry of this.soldierViews.values()) {
       const { x, y } = entry.view.position;
       entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
     }

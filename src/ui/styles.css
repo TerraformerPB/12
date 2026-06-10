@@ -175,12 +175,25 @@ button:active {
   background: var(--ui-text-dim);
 }
 
-.build-grid {
+.build-content {
   overflow-y: auto;
+  padding-bottom: 14px;
+}
+
+.build-section-title {
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ui-text-dim);
+}
+
+.build-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 8px;
-  padding: 4px 10px 14px;
+  padding: 4px 10px 0;
 }
 
 .build-card {
