@@ -1,0 +1,124 @@
+import { MAP_H, MAP_W, TILE_H, TILE_W } from '../data/config';
+
+/**
+ * Coordinate conventions
+ * ----------------------
+ * Grid coordinates (gx, gy) are integer tile indices. On screen, the +gx axis
+ * points to the lower-right and the +gy axis to the lower-left (classic
+ * 2:1 isometric diamond).
+ *
+ * World coordinates are pixels in the un-zoomed world space. The world origin
+ * (0, 0) is the CENTER of tile (0, 0). Each tile is a diamond of
+ * TILE_W × TILE_H pixels around its center.
+ *
+ * Depth sorting: zIndex of an object standing on tile (gx, gy) is gx + gy.
+ * Buildings with a footprint larger than 1×1 sort by their front corner:
+ * (gx + w - 1) + (gy + h - 1).
+ */
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+const HALF_W = TILE_W / 2;
+const HALF_H = TILE_H / 2;
+
+/** Center of tile (gx, gy) in world pixels. Pure function. */
+export function gridToScreen(gx: number, gy: number): Point {
+  return {
+    x: (gx - gy) * HALF_W,
+    y: (gx + gy) * HALF_H,
+  };
+}
+
+/** Inverse of gridToScreen; returns fractional grid coordinates. Pure function. */
+export function screenToGrid(sx: number, sy: number): Point {
+  const a = sx / HALF_W;
+  const b = sy / HALF_H;
+  return {
+    x: (a + b) / 2,
+    y: (b - a) / 2,
+  };
+}
+
+/** The integer tile containing the world point (sx, sy). */
+export function screenToTile(sx: number, sy: number): Point {
+  const g = screenToGrid(sx, sy);
+  return { x: Math.round(g.x), y: Math.round(g.y) };
+}
+
+// --- Terrain -----------------------------------------------------------------
+
+export const Terrain = {
+  Grass: 0,
+  Rock: 1,
+  Water: 2,
+} as const;
+export type Terrain = (typeof Terrain)[keyof typeof Terrain];
+
+export const NO_OCCUPANT = 0;
+
+/**
+ * Tile data for the whole map: terrain plus building occupancy.
+ * Pure data + queries; rendering lives elsewhere.
+ */
+export class IsoGrid {
+  readonly width: number;
+  readonly height: number;
+  private terrain: Uint8Array;
+  /** Building id occupying each tile, NO_OCCUPANT (0) if free. */
+  private occupant: Int32Array;
+
+  constructor(width: number = MAP_W, height: number = MAP_H) {
+    this.width = width;
+    this.height = height;
+    this.terrain = new Uint8Array(width * height); // all grass
+    this.occupant = new Int32Array(width * height);
+  }
+
+  inBounds(gx: number, gy: number): boolean {
+    return gx >= 0 && gy >= 0 && gx < this.width && gy < this.height;
+  }
+
+  private idx(gx: number, gy: number): number {
+    return gy * this.width + gx;
+  }
+
+  terrainAt(gx: number, gy: number): Terrain {
+    return this.terrain[this.idx(gx, gy)] as Terrain;
+  }
+
+  setTerrain(gx: number, gy: number, t: Terrain): void {
+    this.terrain[this.idx(gx, gy)] = t;
+  }
+
+  occupantAt(gx: number, gy: number): number {
+    return this.occupant[this.idx(gx, gy)];
+  }
+
+  setOccupantRect(gx: number, gy: number, w: number, h: number, id: number): void {
+    for (let y = gy; y < gy + h; y++) {
+      for (let x = gx; x < gx + w; x++) {
+        this.occupant[this.idx(x, y)] = id;
+      }
+    }
+  }
+
+  /** Buildable: in bounds, grass, no building. */
+  isFree(gx: number, gy: number): boolean {
+    return (
+      this.inBounds(gx, gy) &&
+      this.terrainAt(gx, gy) === Terrain.Grass &&
+      this.occupantAt(gx, gy) === NO_OCCUPANT
+    );
+  }
+
+  /**
+   * Movement cost of entering a tile; Infinity = not walkable.
+   * Extension point: roads will return < 1 here later, walls Infinity.
+   */
+  moveCost(gx: number, gy: number): number {
+    return this.isFree(gx, gy) ? 1 : Infinity;
+  }
+}

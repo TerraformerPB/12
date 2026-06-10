@@ -1,0 +1,87 @@
+/**
+ * Central balancing and engine configuration.
+ * Every tunable number in the game lives here or in `buildings.ts` —
+ * never hardcode balancing values elsewhere.
+ */
+
+// --- Resources -------------------------------------------------------------
+
+export const RESOURCE_IDS = ['wood', 'stone', 'wheat', 'flour', 'bread'] as const;
+export type ResourceId = (typeof RESOURCE_IDS)[number];
+
+export interface ResourceInfo {
+  label: string;
+  icon: string;
+  /** Placeholder tint used by the renderer for carried goods. */
+  color: number;
+}
+
+export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
+  wood: { label: 'Holz', icon: '🪵', color: 0x9a6b3f },
+  stone: { label: 'Stein', icon: '🪨', color: 0xa8adb8 },
+  wheat: { label: 'Weizen', icon: '🌾', color: 0xe3c558 },
+  flour: { label: 'Mehl', icon: '⚪', color: 0xf1e9d6 },
+  bread: { label: 'Brot', icon: '🥖', color: 0xc07a3a },
+};
+
+// --- Simulation ------------------------------------------------------------
+
+/** Logic ticks per second (fixed timestep). */
+export const TICK_RATE = 20;
+/** Milliseconds per logic tick. */
+export const TICK_MS = 1000 / TICK_RATE;
+/** Clamp for frame delta so a backgrounded tab never fast-forwards. */
+export const MAX_FRAME_DELTA_MS = 250;
+
+// --- Map / iso grid ----------------------------------------------------------
+
+export const TILE_W = 64;
+export const TILE_H = 32;
+export const MAP_W = 48;
+export const MAP_H = 48;
+
+/** Side length of square terrain render chunks, in tiles. */
+export const TERRAIN_CHUNK_SIZE = 12;
+
+// Terrain generation (phase 1: a river band plus a few rock clusters).
+export const TERRAIN_ROCK_CLUSTERS = 6;
+export const TERRAIN_ROCK_CLUSTER_MIN = 4;
+export const TERRAIN_ROCK_CLUSTER_MAX = 10;
+export const TERRAIN_RIVER_WIDTH = 2;
+/** Square around map center kept free of obstacles (start area), in tiles. */
+export const TERRAIN_SAFE_RADIUS = 6;
+
+// --- Camera / input ----------------------------------------------------------
+
+export const ZOOM_MIN = 0.5;
+export const ZOOM_MAX = 2.0;
+export const ZOOM_DEFAULT = 1.0;
+export const WHEEL_ZOOM_STEP = 1.1;
+/** A pointer release counts as a tap below both thresholds. */
+export const TAP_MAX_MS = 250;
+export const TAP_MAX_PX = 10;
+
+// --- Economy -----------------------------------------------------------------
+
+/** Local output/input storage capacity of production buildings. */
+export const LOCAL_STORE_CAP = 5;
+/** Carrier walking speed in tiles per second. */
+export const WORKER_SPEED = 2.2;
+/** Carriers available at game start. */
+export const START_WORKERS = 4;
+/** Fraction of building cost refunded on demolition. */
+export const DEMOLISH_REFUND = 0.5;
+
+export const START_RESOURCES: Record<ResourceId, number> = {
+  wood: 50,
+  stone: 0,
+  wheat: 0,
+  flour: 0,
+  bread: 0,
+};
+
+// --- Persistence ---------------------------------------------------------------
+
+export const SAVE_KEY = 'burgspiel.save';
+export const SAVE_VERSION = 1;
+export const AUTOSAVE_INTERVAL_MS = 30_000;
