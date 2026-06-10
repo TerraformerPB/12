@@ -80,6 +80,13 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   bread: 0,
 };
 
+// --- Roads (phase 4) -------------------------------------------------------------
+
+/** Pathfinding cost of a road tile for own units (grass = 1). */
+export const ROAD_MOVE_COST = 0.6;
+/** Walking speed multiplier while standing on a road tile. */
+export const ROAD_SPEED_FACTOR = 1.4;
+
 // --- Military (phase 2) --------------------------------------------------------
 
 /** Soldier walking speed in tiles per second. */
@@ -105,11 +112,6 @@ export const TOWER_DAMAGE = 3;
 /** Seconds between tower shots. */
 export const TOWER_ATTACK_INTERVAL = 0.9;
 
-export const ENEMY_HP = 20;
-export const ENEMY_SPEED = 1.5;
-export const ENEMY_DAMAGE = 2;
-/** Seconds between enemy strikes (vs buildings and soldiers). */
-export const ENEMY_ATTACK_INTERVAL = 1.0;
 /**
  * Virtual path cost of a building tile for enemies: they prefer open
  * routes but will breach (attack) blocking walls when walled out.
@@ -135,5 +137,5 @@ export const BUILDING_DEFAULT_HP = 50;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

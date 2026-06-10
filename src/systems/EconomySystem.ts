@@ -1,6 +1,7 @@
 import { events } from '../core/EventBus';
 import {
   RESOURCE_IDS,
+  ROAD_SPEED_FACTOR,
   START_WORKERS,
   TICK_RATE,
   WORKER_SPEED,
@@ -84,6 +85,8 @@ export interface EconomyContext {
   nextEntityId(): number;
   /** Soldiers occupy population slots that carriers can no longer use. */
   getSoldierCount(): number;
+  /** Global carrier speed multiplier (research). */
+  getSpeedFactor(): number;
 }
 
 const SPEED_PER_TICK = WORKER_SPEED / TICK_RATE;
@@ -254,7 +257,9 @@ export class EconomySystem {
         worker.rest();
         continue;
       }
-      const arrived = worker.step(SPEED_PER_TICK);
+      const tile = worker.tile;
+      const roadBonus = this.ctx.grid.isRoadAt(tile.x, tile.y) ? ROAD_SPEED_FACTOR : 1;
+      const arrived = worker.step(SPEED_PER_TICK * roadBonus * this.ctx.getSpeedFactor());
       if (!arrived) continue;
       this.onArrival(worker);
     }

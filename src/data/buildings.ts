@@ -43,6 +43,8 @@ export interface BuildingDef {
   isWarehouse?: boolean;
   /** Own units may walk through this building's tiles (gates). */
   passable?: boolean;
+  /** Walkable by everyone; own units move faster (roads). */
+  isRoad?: boolean;
   /** Soldiers can be recruited here (barracks). */
   recruitsSoldiers?: boolean;
   /** Hit points; BUILDING_DEFAULT_HP when omitted. */
@@ -133,6 +135,18 @@ export const BUILDING_DEFS = {
     maxHp: 30,
     art: { color: 0x9c7b5a, height: 20 },
   },
+  road: {
+    id: 'road',
+    category: 'economy',
+    name: 'Straße',
+    footprint: { w: 1, h: 1 },
+    cost: { wood: 2 },
+    placement: PlacementRule.Grass,
+    isRoad: true,
+    description: 'Träger und Soldaten laufen auf Straßen 40% schneller.',
+    maxHp: 40,
+    art: { color: 0x77705f, height: 0 },
+  },
   wall: {
     id: 'wall',
     category: 'defense',
@@ -190,7 +204,7 @@ export function getDef(id: BuildingDefId): BuildingDef {
 export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
   {
     title: 'Wirtschaft',
-    ids: ['lumberjack', 'quarry', 'farm', 'mill', 'bakery', 'hut'],
+    ids: ['lumberjack', 'quarry', 'farm', 'mill', 'bakery', 'hut', 'road'],
   },
   {
     title: 'Verteidigung',

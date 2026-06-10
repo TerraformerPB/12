@@ -25,6 +25,7 @@ import { Camera } from '../world/Camera';
 import {
   IsoGrid,
   NO_OCCUPANT,
+  PassMode,
   gridToScreen,
   screenToGrid,
   screenToTile,
@@ -41,6 +42,18 @@ import { createToast } from '../ui/Toast';
 import { createInfoPanel } from '../ui/InfoPanel';
 import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
+import type { BuildingDef } from '../data/buildings';
+import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
+import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
+import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
+import { createTutorialBanner } from '../ui/TutorialBanner';
+
+/** How a building's tiles treat walking units. */
+function passModeOf(def: BuildingDef): PassMode {
+  if (def.isRoad) return PassMode.Road;
+  if (def.passable) return PassMode.Gate;
+  return PassMode.None;
+}
 
 /**
  * Central game class: owns world state, systems, renderer and UI, and runs
@@ -67,6 +80,12 @@ export class Game {
   readonly workers: Worker[] = [];
   readonly soldiers: Soldier[] = [];
   readonly enemies: Enemy[] = [];
+  readonly techs = new Set<TechId>();
+  tutorialStep = 0;
+  /** Swapped for an AdMob-backed provider in the store build (phase 6). */
+  ads!: RewardedAdProvider;
+  private reviveUsed = false;
+  private lostWarehouseSpot: { x: number; y: number; rotated: boolean } | null = null;
   seed = 0;
   private nextId = 1;
   private warehouseId = 0;
@@ -86,7 +105,9 @@ export class Game {
     createInfoPanel(uiRoot, this);
     createPauseMenu(uiRoot, this);
     createGameOverMenu(uiRoot, this);
+    createTutorialBanner(uiRoot, this);
     createToast(uiRoot);
+    this.ads = new DevRewardedAdProvider(uiRoot);
 
     const data = this.saveManager.load();
     if (data) {
@@ -118,6 +139,10 @@ export class Game {
     this.workers.length = 0;
     this.soldiers.length = 0;
     this.enemies.length = 0;
+    this.techs.clear();
+    this.tutorialStep = 0;
+    this.reviveUsed = false;
+    this.lostWarehouseSpot = null;
     this.grid = new IsoGrid(MAP_W, MAP_H);
     generateTerrain(this.grid, seed);
 
@@ -138,6 +163,7 @@ export class Game {
       getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
       nextEntityId: () => this.nextId++,
       getSoldierCount: () => this.soldiers.length,
+      getSpeedFactor: () => (this.techs.has('fastCarriers') ? TECH_EFFECTS.fastCarriersSpeed : 1),
     });
     this.soldierSystem = new SoldierSystem(this.grid, this.soldiers);
     this.waveSystem = new WaveSystem({
@@ -155,6 +181,9 @@ export class Game {
       onEnemyKilled: () => this.waveSystem.onEnemyKilled(),
       onSoldierKilled: (soldier) => this.onSoldierKilled(soldier),
       playSound: (id) => this.sound.play(id),
+      towerDamageFactor: () => (this.techs.has('steelArrows') ? TECH_EFFECTS.steelArrowsDamage : 1),
+      soldierDamageFactor: () =>
+        this.techs.has('combatTraining') ? TECH_EFFECTS.combatTrainingDamage : 1,
     });
     this.buildSystem = new BuildSystem({
       grid: this.grid,
@@ -180,17 +209,74 @@ export class Game {
 
     const center = gridToScreen(wx + warehouseDef.footprint.w / 2, wy + warehouseDef.footprint.h / 2);
     this.camera.centerOn(center.x, center.y);
+    events.emit('techs:changed', { researched: [] });
+    this.checkTutorial(true);
     events.emit('game:loaded', undefined);
   }
 
   // --- Loop ------------------------------------------------------------------
 
+  private tickCount = 0;
+
   tick(): void {
     if (this.phase !== 'playing') return;
+    this.tickCount++;
     this.economy.tick();
     this.soldierSystem.tick();
     this.waveSystem.tick();
     this.combatSystem.tick();
+    // Tutorial conditions are cheap but need no per-tick precision.
+    if (this.tickCount % 20 === 0) this.checkTutorial();
+  }
+
+  // --- Tutorial ----------------------------------------------------------------
+
+  private tutorialView(): TutorialView {
+    return {
+      countBuildings: (defId) =>
+        [...this.buildings.values()].filter((b) => b.defId === defId).length,
+      soldierCount: this.soldiers.length,
+      wavesSurvived:
+        this.enemies.length === 0 ? this.waveSystem.waveNumber : this.waveSystem.waveNumber - 1,
+    };
+  }
+
+  private checkTutorial(emitAlways = false): void {
+    const before = this.tutorialStep;
+    const view = this.tutorialView();
+    while (this.tutorialStep < TUTORIAL_STEPS.length && TUTORIAL_STEPS[this.tutorialStep].isDone(view)) {
+      this.tutorialStep++;
+    }
+    if (this.tutorialStep !== before || emitAlways) {
+      if (this.tutorialStep !== before && this.tutorialStep <= TUTORIAL_STEPS.length) {
+        this.sound.play('ui');
+      }
+      events.emit('tutorial:changed', {
+        text: this.tutorialStep < TUTORIAL_STEPS.length ? TUTORIAL_STEPS[this.tutorialStep].text : null,
+      });
+    }
+  }
+
+  skipTutorial(): void {
+    this.tutorialStep = TUTORIAL_STEPS.length;
+    events.emit('tutorial:changed', { text: null });
+  }
+
+  // --- Research ------------------------------------------------------------------
+
+  buyTech(id: TechId): void {
+    if (this.techs.has(id)) return;
+    const def = getTechDef(id);
+    const missing = missingResourcesMessage(this.store, def.cost);
+    if (missing) {
+      events.emit('toast:show', { message: missing });
+      return;
+    }
+    this.store.pay(def.cost);
+    this.techs.add(id);
+    this.sound.play('place');
+    events.emit('toast:show', { message: `Erforscht: ${def.name}` });
+    events.emit('techs:changed', { researched: [...this.techs] });
   }
 
   renderFrame(alpha: number): void {
@@ -334,7 +420,7 @@ export class Game {
   private addBuilding(defId: BuildingDefId, gx: number, gy: number, rotated: boolean): Building {
     const b = new Building(this.nextId++, defId, gx, gy, rotated);
     this.buildings.set(b.id, b);
-    this.grid.setOccupantRect(gx, gy, b.w, b.h, b.id, b.def.passable === true);
+    this.grid.setOccupantRect(gx, gy, b.w, b.h, b.id, passModeOf(b.def));
     return b;
   }
 
@@ -363,7 +449,10 @@ export class Game {
     if (this.selectedId === id) this.select(null);
     this.sound.play('demolish');
     events.emit('toast:show', { message: `${b.def.name} zerstört!` });
-    if (b.def.isWarehouse) this.gameOver();
+    if (b.def.isWarehouse) {
+      this.lostWarehouseSpot = { x: b.x, y: b.y, rotated: b.rotated };
+      this.gameOver();
+    }
   }
 
   private onSoldierKilled(soldier: Soldier): void {
@@ -386,6 +475,35 @@ export class Game {
     });
   }
 
+  /** One revive per run, paid with a rewarded ad (dev stub on the web). */
+  canRevive(): boolean {
+    return (
+      this.phase === 'gameover' &&
+      !this.reviveUsed &&
+      this.lostWarehouseSpot !== null &&
+      this.ads.isAvailable()
+    );
+  }
+
+  async reviveViaAd(): Promise<boolean> {
+    if (!this.canRevive()) return false;
+    const rewarded = await this.ads.show();
+    if (!rewarded) return false;
+    const spot = this.lostWarehouseSpot!;
+    this.reviveUsed = true;
+    this.lostWarehouseSpot = null;
+    // The attackers withdraw; the warehouse is rebuilt at half strength.
+    this.enemies.length = 0;
+    const warehouse = this.addBuilding('warehouse', spot.x, spot.y, spot.rotated);
+    warehouse.hp = Math.ceil(warehouse.maxHp / 2);
+    this.warehouseId = warehouse.id;
+    this.setPhase('playing');
+    this.saveNow();
+    this.sound.play('horn');
+    events.emit('toast:show', { message: 'Die Burg lebt weiter!' });
+    return true;
+  }
+
   // --- Persistence -----------------------------------------------------------------
 
   toSaveData(): SaveData {
@@ -399,6 +517,8 @@ export class Game {
       soldiers: this.soldiers.map((s) => s.toSave()),
       enemies: this.enemies.map((e) => e.toSave()),
       wave: this.waveSystem.toSave(),
+      techs: [...this.techs],
+      tutorialStep: this.tutorialStep,
     };
   }
 
@@ -414,7 +534,7 @@ export class Game {
     for (const bs of data.buildings) {
       const b = Building.fromSave(bs);
       this.buildings.set(b.id, b);
-      this.grid.setOccupantRect(b.x, b.y, b.w, b.h, b.id, b.def.passable === true);
+      this.grid.setOccupantRect(b.x, b.y, b.w, b.h, b.id, passModeOf(b.def));
       if (b.def.isWarehouse) this.warehouseId = b.id;
     }
     for (const ws of data.workers) {
@@ -435,6 +555,10 @@ export class Game {
       this.enemies.push(Enemy.fromSave(es));
     }
     this.waveSystem.restore(data.wave);
+    for (const t of data.techs) this.techs.add(t);
+    this.tutorialStep = Math.min(data.tutorialStep, TUTORIAL_STEPS.length);
+    events.emit('techs:changed', { researched: [...this.techs] });
+    this.checkTutorial(true);
 
     const warehouse = this.buildings.get(this.warehouseId);
     if (warehouse) {

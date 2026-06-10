@@ -12,6 +12,12 @@ export interface PathGrid {
   readonly width: number;
   readonly height: number;
   moveCost(gx: number, gy: number): number;
+  /**
+   * Cheapest possible tile cost (default 1). Must be set when any tile
+   * costs less than 1 (roads), otherwise the heuristic overestimates
+   * and A* returns suboptimal paths.
+   */
+  readonly minMoveCost?: number;
 }
 
 const SQRT2 = Math.SQRT2;
@@ -84,13 +90,14 @@ export function findPath(grid: PathGrid, start: Point, goals: Point[]): Point[] 
   const goalKeys = new Set(goals.map((g) => g.y * grid.width + g.x));
   if (goalKeys.has(start.y * grid.width + start.x)) return [start];
 
+  const minCost = grid.minMoveCost ?? 1;
   const heuristic = (x: number, y: number): number => {
     let min = Infinity;
     for (const g of goals) {
       const h = octile(g.x - x, g.y - y);
       if (h < min) min = h;
     }
-    return min;
+    return min * minCost;
   };
 
   const open = new Heap();

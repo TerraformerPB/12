@@ -1,4 +1,4 @@
-import { MAP_H, MAP_W, TILE_H, TILE_W } from '../data/config';
+import { MAP_H, MAP_W, ROAD_MOVE_COST, TILE_H, TILE_W } from '../data/config';
 
 /**
  * Coordinate conventions
@@ -59,6 +59,17 @@ export type Terrain = (typeof Terrain)[keyof typeof Terrain];
 
 export const NO_OCCUPANT = 0;
 
+/** How an occupied tile treats walking units. */
+export const PassMode = {
+  /** Solid building: nobody walks through. */
+  None: 0,
+  /** Gate: own units pass, enemies must breach. */
+  Gate: 1,
+  /** Road: everyone passes; own units move cheaper/faster. */
+  Road: 2,
+} as const;
+export type PassMode = (typeof PassMode)[keyof typeof PassMode];
+
 /**
  * Tile data for the whole map: terrain plus building occupancy.
  * Pure data + queries; rendering lives elsewhere.
@@ -66,10 +77,12 @@ export const NO_OCCUPANT = 0;
 export class IsoGrid {
   readonly width: number;
   readonly height: number;
+  /** Cheapest tile cost (roads) — keeps the A* heuristic admissible. */
+  readonly minMoveCost = ROAD_MOVE_COST;
   private terrain: Uint8Array;
   /** Building id occupying each tile, NO_OCCUPANT (0) if free. */
   private occupant: Int32Array;
-  /** 1 where an occupant lets own units pass through (gates). */
+  /** PassMode of the occupant on each tile. */
   private passable: Uint8Array;
 
   constructor(width: number = MAP_W, height: number = MAP_H) {
@@ -106,14 +119,18 @@ export class IsoGrid {
     w: number,
     h: number,
     id: number,
-    isPassable = false,
+    pass: PassMode = PassMode.None,
   ): void {
     for (let y = gy; y < gy + h; y++) {
       for (let x = gx; x < gx + w; x++) {
         this.occupant[this.idx(x, y)] = id;
-        this.passable[this.idx(x, y)] = id !== NO_OCCUPANT && isPassable ? 1 : 0;
+        this.passable[this.idx(x, y)] = id !== NO_OCCUPANT ? pass : PassMode.None;
       }
     }
+  }
+
+  isRoadAt(gx: number, gy: number): boolean {
+    return this.inBounds(gx, gy) && this.passable[this.idx(gx, gy)] === PassMode.Road;
   }
 
   /** Buildable: in bounds, grass, no building. */
@@ -126,28 +143,33 @@ export class IsoGrid {
   }
 
   /**
-   * Movement cost of entering a tile; Infinity = not walkable.
-   * Gates are occupied but passable for own units.
-   * Extension point: roads will return < 1 here later; enemies in phase 3
-   * get their own cost function that treats gates as blocked.
+   * Movement cost for OWN units entering a tile; Infinity = not walkable.
+   * Gates cost like open ground, roads are cheaper (ROAD_MOVE_COST).
    */
   moveCost(gx: number, gy: number): number {
     if (!this.inBounds(gx, gy) || this.terrainAt(gx, gy) !== Terrain.Grass) return Infinity;
-    const occupant = this.occupant[this.idx(gx, gy)];
-    if (occupant === NO_OCCUPANT) return 1;
-    return this.passable[this.idx(gx, gy)] === 1 ? 1 : Infinity;
+    if (this.occupant[this.idx(gx, gy)] === NO_OCCUPANT) return 1;
+    switch (this.passable[this.idx(gx, gy)] as PassMode) {
+      case PassMode.Road:
+        return ROAD_MOVE_COST;
+      case PassMode.Gate:
+        return 1;
+      case PassMode.None:
+        return Infinity;
+    }
   }
 
   /**
-   * Movement cost for ENEMIES: gates do not let them through, but any
-   * building tile is "walkable" at a high virtual cost — the resulting
-   * path runs through the cheapest breach point, and the enemy attacks
-   * the blocking building when it reaches it.
+   * Movement cost for ENEMIES: roads are open ground, gates do NOT let
+   * them through, and any other building tile is "walkable" at a high
+   * virtual cost — the resulting path runs through the cheapest breach
+   * point, and the enemy attacks the blocking building when it gets there.
    */
   enemyMoveCost(breachCost: number): (gx: number, gy: number) => number {
     return (gx, gy) => {
       if (!this.inBounds(gx, gy) || this.terrainAt(gx, gy) !== Terrain.Grass) return Infinity;
-      return this.occupant[this.idx(gx, gy)] === NO_OCCUPANT ? 1 : breachCost;
+      if (this.occupant[this.idx(gx, gy)] === NO_OCCUPANT) return 1;
+      return this.passable[this.idx(gx, gy)] === PassMode.Road ? 1 : breachCost;
     };
   }
 }

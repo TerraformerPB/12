@@ -1,6 +1,7 @@
 import { Graphics } from 'pixi.js';
 import { TILE_H, TILE_W } from '../data/config';
 import type { BuildingDef } from '../data/buildings';
+import type { EnemyDef } from '../data/enemies';
 import { Terrain } from '../world/IsoGrid';
 
 /**
@@ -153,6 +154,18 @@ export function drawBuildingView(
   hpRatio: number,
 ): void {
   g.clear();
+  if (def.isRoad) {
+    // Flat paving instead of an extruded block.
+    const [rn, re, rs, rw] = footprintCorners(w, h);
+    g.poly([...rn, ...re, ...rs, ...rw])
+      .fill(def.art.color)
+      .stroke({ color: shade(def.art.color, 0.75), width: 1.5, alpha: 0.8 });
+    g.poly([rn[0], rn[1] + 5, re[0] - 10, re[1], rs[0], rs[1] - 5, rw[0] + 10, rw[1]]).fill({
+      color: shade(def.art.color, 1.15),
+      alpha: 0.5,
+    });
+    return;
+  }
   drawBuildingBlock(g, w, h, def.art);
   // Bar floats above the roof, centered over the footprint.
   const [n, , s] = footprintCorners(w, h);
@@ -194,17 +207,16 @@ export function drawSoldier(g: Graphics, selected: boolean, hpRatio = 1): void {
   drawHpBar(g, 0, -20, 18, hpRatio);
 }
 
-/** Draw a raider placeholder (dark body, horns). */
-export function drawEnemy(g: Graphics, hpRatio = 1): void {
+/** Draw an enemy placeholder (dark body, horns); size/color from its def. */
+export function drawEnemy(g: Graphics, art: EnemyDef['art'], hpRatio = 1): void {
+  const r = art.radius;
   g.clear();
-  g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
-  g.circle(0, -7, 6.5)
-    .fill(PALETTE.enemyBody)
-    .stroke({ color: PALETTE.enemyHorns, width: 1.5 });
+  g.ellipse(0, 2, r + 0.5, (r + 0.5) / 2).fill({ color: 0x000000, alpha: 0.3 });
+  g.circle(0, -r, r).fill(art.color).stroke({ color: PALETTE.enemyHorns, width: 1.5 });
   // Horns.
-  g.poly([-5, -11, -8, -17, -3, -13]).fill(PALETTE.enemyHorns);
-  g.poly([5, -11, 8, -17, 3, -13]).fill(PALETTE.enemyHorns);
-  drawHpBar(g, 0, -22, 18, hpRatio);
+  g.poly([-r + 1, -r - 4, -r - 2, -r - 10, -r + 3, -r - 6]).fill(PALETTE.enemyHorns);
+  g.poly([r - 1, -r - 4, r + 2, -r - 10, r - 3, -r - 6]).fill(PALETTE.enemyHorns);
+  drawHpBar(g, 0, -r * 2 - 9, 18, hpRatio);
 }
 
 /** Create the display object for a carrier. Redrawn when cargo changes. */
