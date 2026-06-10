@@ -3,18 +3,30 @@ import {
   DEMOLISH_REFUND,
   MAP_H,
   MAP_W,
+  MIN_WORKERS,
   RESOURCE_IDS,
   SAVE_VERSION,
+  SOLDIER_RECRUIT_COST,
   START_RESOURCES,
 } from '../data/config';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import { Building } from '../entities/Building';
+import { Soldier } from '../entities/Soldier';
 import { Worker } from '../entities/Worker';
 import { WorldRenderer } from '../render/WorldRenderer';
 import { BuildSystem } from '../systems/BuildSystem';
+import { missingResourcesMessage } from '../systems/BuildSystem';
 import { EconomySystem, ResourceStore } from '../systems/EconomySystem';
+import { SoldierSystem } from '../systems/SoldierSystem';
 import { Camera } from '../world/Camera';
-import { IsoGrid, NO_OCCUPANT, gridToScreen, screenToTile } from '../world/IsoGrid';
+import {
+  IsoGrid,
+  NO_OCCUPANT,
+  gridToScreen,
+  screenToGrid,
+  screenToTile,
+  type Point,
+} from '../world/IsoGrid';
 import { generateTerrain } from '../world/TerrainGenerator';
 import { events, type GamePhase } from './EventBus';
 import { InputController } from './Input';
@@ -43,13 +55,16 @@ export class Game {
   store!: ResourceStore;
   economy!: EconomySystem;
   buildSystem!: BuildSystem;
+  soldierSystem!: SoldierSystem;
 
   readonly buildings = new Map<number, Building>();
   readonly workers: Worker[] = [];
+  readonly soldiers: Soldier[] = [];
   seed = 0;
   private nextId = 1;
   private warehouseId = 0;
   selectedId: number | null = null;
+  selectedSoldierId: number | null = null;
 
   async init(root: HTMLElement, uiRoot: HTMLElement): Promise<void> {
     await this.renderer.init(root);
@@ -85,8 +100,10 @@ export class Game {
     this.seed = seed;
     this.nextId = 1;
     this.selectedId = null;
+    this.selectedSoldierId = null;
     this.buildings.clear();
     this.workers.length = 0;
+    this.soldiers.length = 0;
     this.grid = new IsoGrid(MAP_W, MAP_H);
     generateTerrain(this.grid, seed);
 
@@ -94,6 +111,7 @@ export class Game {
     this.renderer.buildTerrain(this.grid);
     this.camera.setMapBounds(MAP_W, MAP_H);
     events.emit('building:selected', { building: null });
+    events.emit('soldier:selected', { soldier: null });
   }
 
   private setupSystems(store: ResourceStore): void {
@@ -105,7 +123,9 @@ export class Game {
       workers: this.workers,
       getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
       nextEntityId: () => this.nextId++,
+      getSoldierCount: () => this.soldiers.length,
     });
+    this.soldierSystem = new SoldierSystem(this.grid, this.soldiers);
     this.buildSystem = new BuildSystem({
       grid: this.grid,
       store,
@@ -138,6 +158,7 @@ export class Game {
   tick(): void {
     if (this.phase !== 'playing') return;
     this.economy.tick();
+    this.soldierSystem.tick();
   }
 
   renderFrame(alpha: number): void {
@@ -147,8 +168,10 @@ export class Game {
         grid: this.grid,
         buildings: this.buildings,
         workers: this.workers,
+        soldiers: this.soldiers,
         ghost: this.buildSystem?.ghost ?? null,
         selectedId: this.selectedId,
+        selectedSoldierId: this.selectedSoldierId,
       },
       alpha,
     );
@@ -184,10 +207,29 @@ export class Game {
       this.buildSystem.tryPlaceAt(world.x, world.y);
       return;
     }
+
+    // Priority: soldier under the finger > move order > building > deselect.
+    const g = screenToGrid(world.x, world.y);
+    const hitSoldier = this.soldierSystem.soldierAt(g.x, g.y, 0.6);
+    if (hitSoldier) {
+      this.selectSoldier(hitSoldier.id);
+      return;
+    }
+
     const tile = screenToTile(world.x, world.y);
     const occupant = this.grid.inBounds(tile.x, tile.y)
       ? this.grid.occupantAt(tile.x, tile.y)
       : NO_OCCUPANT;
+
+    if (this.selectedSoldierId !== null && occupant === NO_OCCUPANT) {
+      const soldier = this.soldiers.find((s) => s.id === this.selectedSoldierId);
+      if (soldier && this.grid.inBounds(tile.x, tile.y)) {
+        this.soldierSystem.command(soldier, tile);
+        return; // keep the soldier selected for follow-up orders
+      }
+    }
+
+    this.selectSoldier(null);
     this.select(occupant === NO_OCCUPANT ? null : occupant);
   }
 
@@ -199,9 +241,54 @@ export class Game {
 
   select(id: number | null): void {
     this.selectedId = id;
+    if (id !== null) this.selectSoldier(null);
     events.emit('building:selected', {
       building: id !== null ? (this.buildings.get(id) ?? null) : null,
     });
+  }
+
+  selectSoldier(id: number | null): void {
+    if (this.selectedSoldierId === id) return;
+    this.selectedSoldierId = id;
+    if (id !== null && this.selectedId !== null) this.select(null);
+    events.emit('soldier:selected', {
+      soldier: id !== null ? (this.soldiers.find((s) => s.id === id) ?? null) : null,
+    });
+  }
+
+  // --- Soldiers ----------------------------------------------------------------
+
+  /** Recruit one soldier at a barracks (info panel action). */
+  recruitSoldier(barracksId: number): void {
+    const barracks = this.buildings.get(barracksId);
+    if (!barracks || !barracks.def.recruitsSoldiers) return;
+    if (this.economy.workerTarget() <= MIN_WORKERS) {
+      events.emit('toast:show', { message: 'Nicht genug Bevölkerung — baue Hütten' });
+      return;
+    }
+    const missing = missingResourcesMessage(this.store, SOLDIER_RECRUIT_COST);
+    if (missing) {
+      events.emit('toast:show', { message: missing });
+      return;
+    }
+    const spawn = barracks.accessTiles(this.grid)[0];
+    if (!spawn) {
+      events.emit('toast:show', { message: 'Kaserne ist eingebaut — kein Platz' });
+      return;
+    }
+    this.store.pay(SOLDIER_RECRUIT_COST);
+    this.soldiers.push(new Soldier(this.nextId++, spawn.x, spawn.y));
+    this.sound.play('place');
+    events.emit('toast:show', { message: 'Soldat rekrutiert' });
+  }
+
+  /** Dismiss a soldier; the population slot returns to the carrier pool. */
+  dismissSoldier(id: number): void {
+    const idx = this.soldiers.findIndex((s) => s.id === id);
+    if (idx === -1) return;
+    this.soldiers.splice(idx, 1);
+    if (this.selectedSoldierId === id) this.selectSoldier(null);
+    events.emit('toast:show', { message: 'Soldat entlassen' });
   }
 
   // --- Building management -------------------------------------------------------
@@ -209,7 +296,7 @@ export class Game {
   private addBuilding(defId: BuildingDefId, gx: number, gy: number, rotated: boolean): Building {
     const b = new Building(this.nextId++, defId, gx, gy, rotated);
     this.buildings.set(b.id, b);
-    this.grid.setOccupantRect(gx, gy, b.w, b.h, b.id);
+    this.grid.setOccupantRect(gx, gy, b.w, b.h, b.id, b.def.passable === true);
     return b;
   }
 
@@ -238,6 +325,7 @@ export class Game {
       resources: this.store.snapshot(),
       buildings: [...this.buildings.values()].map((b) => b.toSave()),
       workers: this.workers.map((w) => w.toSave()),
+      soldiers: this.soldiers.map((s) => s.toSave()),
     };
   }
 
@@ -253,13 +341,21 @@ export class Game {
     for (const bs of data.buildings) {
       const b = Building.fromSave(bs);
       this.buildings.set(b.id, b);
-      this.grid.setOccupantRect(b.x, b.y, b.w, b.h, b.id);
+      this.grid.setOccupantRect(b.x, b.y, b.w, b.h, b.id, b.def.passable === true);
       if (b.def.isWarehouse) this.warehouseId = b.id;
     }
     for (const ws of data.workers) {
       this.workers.push(Worker.fromSave(ws));
     }
     this.economy.restoreAfterLoad();
+
+    const soldierTargets = new Map<number, Point>();
+    for (const ss of data.soldiers) {
+      const { soldier, target } = Soldier.fromSave(ss);
+      this.soldiers.push(soldier);
+      if (target) soldierTargets.set(soldier.id, target);
+    }
+    this.soldierSystem.restoreAfterLoad(soldierTargets);
 
     const warehouse = this.buildings.get(this.warehouseId);
     if (warehouse) {

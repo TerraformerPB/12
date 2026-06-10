@@ -1,6 +1,7 @@
 import type { ResourceId } from '../data/config';
 import type { BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
+import type { Soldier } from '../entities/Soldier';
 
 export type GamePhase = 'loading' | 'playing' | 'paused';
 
@@ -14,6 +15,7 @@ export interface GameEvents {
   'population:changed': { used: number; total: number };
   'toast:show': { message: string };
   'building:selected': { building: Building | null };
+  'soldier:selected': { soldier: Soldier | null };
   'build:modeChanged': { defId: BuildingDefId | null; rotated: boolean };
   'game:phaseChanged': { phase: GamePhase };
   'game:loaded': void;
