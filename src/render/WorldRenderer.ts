@@ -1,6 +1,5 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import {
-  ENEMY_HP,
   RESOURCE_INFO,
   SOLDIER_HP,
   TERRAIN_CHUNK_SIZE,
@@ -207,13 +206,13 @@ export class WorldRenderer {
       let entry = this.enemyViews.get(e.id);
       if (!entry) {
         const view = new Graphics();
-        drawEnemy(view, e.hp / ENEMY_HP);
+        drawEnemy(view, e.def.art, e.hp / e.def.hp);
         this.objectLayer.addChild(view);
         entry = { view, lastHp: e.hp };
         this.enemyViews.set(e.id, entry);
       }
       if (entry.lastHp !== e.hp) {
-        drawEnemy(entry.view, e.hp / ENEMY_HP);
+        drawEnemy(entry.view, e.def.art, e.hp / e.def.hp);
         entry.lastHp = e.hp;
       }
       const fx = e.prevX + (e.x - e.prevX) * alpha;

@@ -7,6 +7,7 @@ import {
   WAVE_INTERVAL,
   WAVE_MAX_COUNT,
 } from '../data/config';
+import { waveComposition } from '../data/enemies';
 import { Enemy } from '../entities/Enemy';
 import { IsoGrid, Terrain, type Point } from '../world/IsoGrid';
 
@@ -65,16 +66,20 @@ export class WaveSystem {
   private spawnWave(n: number): void {
     const spawnPoints = this.pickSpawnPoints(Math.min(3, 1 + Math.floor(n / 3)));
     if (spawnPoints.length === 0) return; // map edge fully blocked — skip wave
-    const count = waveSize(n);
-    for (let i = 0; i < count; i++) {
-      const base = spawnPoints[i % spawnPoints.length];
-      // Slight scatter so groups don't stack on one tile.
-      const e = new Enemy(
-        this.ctx.nextEntityId(),
-        base.x + (Math.random() - 0.5) * 0.8,
-        base.y + (Math.random() - 0.5) * 0.8,
-      );
-      this.ctx.enemies.push(e);
+    let i = 0;
+    for (const part of waveComposition(n, waveSize(n))) {
+      for (let k = 0; k < part.count; k++, i++) {
+        const base = spawnPoints[i % spawnPoints.length];
+        // Slight scatter so groups don't stack on one tile.
+        this.ctx.enemies.push(
+          new Enemy(
+            this.ctx.nextEntityId(),
+            base.x + (Math.random() - 0.5) * 0.8,
+            base.y + (Math.random() - 0.5) * 0.8,
+            part.defId,
+          ),
+        );
+      }
     }
   }
 

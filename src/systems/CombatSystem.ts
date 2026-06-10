@@ -1,9 +1,6 @@
 import {
-  ENEMY_ATTACK_INTERVAL,
   ENEMY_BREACH_COST,
-  ENEMY_DAMAGE,
   ENEMY_REPATH_INTERVAL,
-  ENEMY_SPEED,
   MELEE_RANGE,
   SOLDIER_AGGRO_RANGE,
   SOLDIER_ATTACK_INTERVAL,
@@ -20,8 +17,6 @@ import { NO_OCCUPANT, type IsoGrid } from '../world/IsoGrid';
 import { findPath } from '../world/Pathfinding';
 import type { SoundId } from '../core/SoundManager';
 
-const ENEMY_SPEED_PER_TICK = ENEMY_SPEED / TICK_RATE;
-const ENEMY_ATTACK_TICKS = Math.round(ENEMY_ATTACK_INTERVAL * TICK_RATE);
 const SOLDIER_ATTACK_TICKS = Math.round(SOLDIER_ATTACK_INTERVAL * TICK_RATE);
 const TOWER_ATTACK_TICKS = Math.round(TOWER_ATTACK_INTERVAL * TICK_RATE);
 const ENEMY_REPATH_TICKS = Math.round(ENEMY_REPATH_INTERVAL * TICK_RATE);
@@ -49,6 +44,9 @@ export interface CombatContext {
   onEnemyKilled(): void;
   onSoldierKilled(soldier: Soldier): void;
   playSound(id: SoundId): void;
+  /** Research multipliers. */
+  towerDamageFactor(): number;
+  soldierDamageFactor(): number;
 }
 
 /**
@@ -93,8 +91,8 @@ export class CombatSystem {
       if (soldier) {
         enemy.rest();
         if (enemy.attackCooldown <= 0) {
-          enemy.attackCooldown = ENEMY_ATTACK_TICKS;
-          this.damageSoldier(soldier, ENEMY_DAMAGE);
+          enemy.attackCooldown = Math.round(enemy.def.attackInterval * TICK_RATE);
+          this.damageSoldier(soldier, enemy.def.damage);
         }
         continue;
       }
@@ -107,8 +105,8 @@ export class CombatSystem {
         } else {
           enemy.rest();
           if (enemy.attackCooldown <= 0) {
-            enemy.attackCooldown = ENEMY_ATTACK_TICKS;
-            this.damageBuilding(target, ENEMY_DAMAGE);
+            enemy.attackCooldown = Math.round(enemy.def.attackInterval * TICK_RATE);
+            this.damageBuilding(target, enemy.def.damage);
           }
           continue;
         }
@@ -126,7 +124,7 @@ export class CombatSystem {
         enemy.attackTargetId = occupant;
         continue;
       }
-      enemy.step(ENEMY_SPEED_PER_TICK);
+      enemy.step(enemy.def.speed / TICK_RATE);
     }
   }
 
@@ -171,7 +169,7 @@ export class CombatSystem {
         s.clearPath();
         if (s.attackCooldown <= 0) {
           s.attackCooldown = SOLDIER_ATTACK_TICKS;
-          this.damageEnemy(target, SOLDIER_DAMAGE);
+          this.damageEnemy(target, SOLDIER_DAMAGE * this.ctx.soldierDamageFactor());
         }
       } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
         s.lastRepath = this.tickCount;
@@ -235,7 +233,7 @@ export class CombatSystem {
       this.towerCooldowns.set(b.id, TOWER_ATTACK_TICKS);
       this.projectiles.push({ x0: center.x, y0: center.y, x1: target.x, y1: target.y, age: 0 });
       this.ctx.playSound('arrow');
-      this.damageEnemy(target, TOWER_DAMAGE);
+      this.damageEnemy(target, TOWER_DAMAGE * this.ctx.towerDamageFactor());
     }
   }
 
