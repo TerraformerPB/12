@@ -82,6 +82,8 @@ export interface EconomyContext {
   workers: Worker[];
   getWarehouse(): Building | null;
   nextEntityId(): number;
+  /** Soldiers occupy population slots that carriers can no longer use. */
+  getSoldierCount(): number;
 }
 
 const SPEED_PER_TICK = WORKER_SPEED / TICK_RATE;
@@ -119,7 +121,12 @@ export class EconomySystem {
   }
 
   populationUsed(): number {
-    return this.ctx.workers.filter((w) => w.job !== null).length;
+    return this.ctx.workers.filter((w) => w.job !== null).length + this.ctx.getSoldierCount();
+  }
+
+  /** Carrier head count target: total population minus soldier slots. */
+  workerTarget(): number {
+    return Math.max(0, this.populationTotal() - this.ctx.getSoldierCount());
   }
 
   tick(): void {
@@ -135,7 +142,7 @@ export class EconomySystem {
   /** Spawn/despawn carriers to match the hut-based population total. */
   private syncWorkerCount(): void {
     const { workers } = this.ctx;
-    const total = this.populationTotal();
+    const total = this.workerTarget();
     const warehouse = this.ctx.getWarehouse();
     while (workers.length < total && warehouse) {
       // Spawn on the front-most access tiles so idle carriers stay visible.
@@ -244,8 +251,7 @@ export class EconomySystem {
   private advanceWorkers(): void {
     for (const worker of this.ctx.workers) {
       if (worker.phase === 'idle') {
-        worker.prevX = worker.x;
-        worker.prevY = worker.y;
+        worker.rest();
         continue;
       }
       const arrived = worker.step(SPEED_PER_TICK);

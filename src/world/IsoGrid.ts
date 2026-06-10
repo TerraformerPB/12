@@ -69,12 +69,15 @@ export class IsoGrid {
   private terrain: Uint8Array;
   /** Building id occupying each tile, NO_OCCUPANT (0) if free. */
   private occupant: Int32Array;
+  /** 1 where an occupant lets own units pass through (gates). */
+  private passable: Uint8Array;
 
   constructor(width: number = MAP_W, height: number = MAP_H) {
     this.width = width;
     this.height = height;
     this.terrain = new Uint8Array(width * height); // all grass
     this.occupant = new Int32Array(width * height);
+    this.passable = new Uint8Array(width * height);
   }
 
   inBounds(gx: number, gy: number): boolean {
@@ -97,10 +100,18 @@ export class IsoGrid {
     return this.occupant[this.idx(gx, gy)];
   }
 
-  setOccupantRect(gx: number, gy: number, w: number, h: number, id: number): void {
+  setOccupantRect(
+    gx: number,
+    gy: number,
+    w: number,
+    h: number,
+    id: number,
+    isPassable = false,
+  ): void {
     for (let y = gy; y < gy + h; y++) {
       for (let x = gx; x < gx + w; x++) {
         this.occupant[this.idx(x, y)] = id;
+        this.passable[this.idx(x, y)] = id !== NO_OCCUPANT && isPassable ? 1 : 0;
       }
     }
   }
@@ -116,9 +127,14 @@ export class IsoGrid {
 
   /**
    * Movement cost of entering a tile; Infinity = not walkable.
-   * Extension point: roads will return < 1 here later, walls Infinity.
+   * Gates are occupied but passable for own units.
+   * Extension point: roads will return < 1 here later; enemies in phase 3
+   * get their own cost function that treats gates as blocked.
    */
   moveCost(gx: number, gy: number): number {
-    return this.isFree(gx, gy) ? 1 : Infinity;
+    if (!this.inBounds(gx, gy) || this.terrainAt(gx, gy) !== Terrain.Grass) return Infinity;
+    const occupant = this.occupant[this.idx(gx, gy)];
+    if (occupant === NO_OCCUPANT) return 1;
+    return this.passable[this.idx(gx, gy)] === 1 ? 1 : Infinity;
   }
 }

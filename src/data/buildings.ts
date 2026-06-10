@@ -25,9 +25,13 @@ export interface Recipe {
   duration: number;
 }
 
+/** Build menu grouping. */
+export type BuildingCategory = 'economy' | 'defense';
+
 export interface BuildingDef {
   id: BuildingDefId;
   name: string;
+  category: BuildingCategory;
   /** Footprint in tiles before rotation. */
   footprint: { w: number; h: number };
   cost: Partial<Record<ResourceId, number>>;
@@ -37,6 +41,10 @@ export interface BuildingDef {
   population?: number;
   /** Central storage / carrier hub. Not buildable, exactly one per game. */
   isWarehouse?: boolean;
+  /** Own units may walk through this building's tiles (gates). */
+  passable?: boolean;
+  /** Soldiers can be recruited here (barracks). */
+  recruitsSoldiers?: boolean;
   /** Short German description for the info panel. */
   description: string;
   /** Placeholder art parameters; replaced by sprite atlas entries later. */
@@ -46,6 +54,7 @@ export interface BuildingDef {
 export const BUILDING_DEFS = {
   warehouse: {
     id: 'warehouse',
+    category: 'economy',
     name: 'Lagerhaus',
     footprint: { w: 2, h: 2 },
     cost: {},
@@ -56,6 +65,7 @@ export const BUILDING_DEFS = {
   },
   lumberjack: {
     id: 'lumberjack',
+    category: 'economy',
     name: 'Holzfällerhütte',
     footprint: { w: 2, h: 2 },
     cost: { wood: 20 },
@@ -66,6 +76,7 @@ export const BUILDING_DEFS = {
   },
   quarry: {
     id: 'quarry',
+    category: 'economy',
     name: 'Steinbruch',
     footprint: { w: 2, h: 2 },
     cost: { wood: 30 },
@@ -76,6 +87,7 @@ export const BUILDING_DEFS = {
   },
   farm: {
     id: 'farm',
+    category: 'economy',
     name: 'Weizenfarm',
     footprint: { w: 3, h: 3 },
     cost: { wood: 25 },
@@ -86,6 +98,7 @@ export const BUILDING_DEFS = {
   },
   mill: {
     id: 'mill',
+    category: 'economy',
     name: 'Mühle',
     footprint: { w: 2, h: 2 },
     cost: { wood: 40, stone: 10 },
@@ -96,6 +109,7 @@ export const BUILDING_DEFS = {
   },
   bakery: {
     id: 'bakery',
+    category: 'economy',
     name: 'Bäckerei',
     footprint: { w: 2, h: 2 },
     cost: { wood: 40, stone: 20 },
@@ -106,6 +120,7 @@ export const BUILDING_DEFS = {
   },
   hut: {
     id: 'hut',
+    category: 'economy',
     name: 'Hütte',
     footprint: { w: 1, h: 1 },
     cost: { wood: 15 },
@@ -113,6 +128,48 @@ export const BUILDING_DEFS = {
     population: 2,
     description: 'Bietet Platz für 2 weitere Träger.',
     art: { color: 0x9c7b5a, height: 20 },
+  },
+  wall: {
+    id: 'wall',
+    category: 'defense',
+    name: 'Mauer',
+    footprint: { w: 1, h: 1 },
+    cost: { stone: 2 },
+    placement: PlacementRule.Grass,
+    description: 'Blockiert den Weg. Baue Linien, um die Burg zu schützen.',
+    art: { color: 0x8a8f99, height: 34 },
+  },
+  gate: {
+    id: 'gate',
+    category: 'defense',
+    name: 'Tor',
+    footprint: { w: 1, h: 1 },
+    cost: { stone: 5 },
+    placement: PlacementRule.Grass,
+    passable: true,
+    description: 'Durchgang in der Mauer — eigene Einheiten können passieren.',
+    art: { color: 0xa08252, height: 30 },
+  },
+  tower: {
+    id: 'tower',
+    category: 'defense',
+    name: 'Wachturm',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 10, stone: 30 },
+    placement: PlacementRule.Grass,
+    description: 'Erhöhter Posten. Verteidigt gegen Wellen (ab Phase 3).',
+    art: { color: 0x6f7682, height: 58 },
+  },
+  barracks: {
+    id: 'barracks',
+    category: 'defense',
+    name: 'Kaserne',
+    footprint: { w: 3, h: 3 },
+    cost: { wood: 50, stone: 20 },
+    placement: PlacementRule.Grass,
+    recruitsSoldiers: true,
+    description: 'Rekrutiert Soldaten gegen Brot. Soldaten belegen Bevölkerung.',
+    art: { color: 0x7d5a66, height: 32 },
   },
 } as const satisfies Record<string, Omit<BuildingDef, 'id'> & { id: string }>;
 
@@ -122,12 +179,14 @@ export function getDef(id: BuildingDefId): BuildingDef {
   return BUILDING_DEFS[id] as BuildingDef;
 }
 
-/** Definitions shown in the build menu, in display order. */
-export const BUILD_MENU_ORDER: BuildingDefId[] = [
-  'lumberjack',
-  'quarry',
-  'farm',
-  'mill',
-  'bakery',
-  'hut',
+/** Build menu sections, in display order. */
+export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
+  {
+    title: 'Wirtschaft',
+    ids: ['lumberjack', 'quarry', 'farm', 'mill', 'bakery', 'hut'],
+  },
+  {
+    title: 'Verteidigung',
+    ids: ['wall', 'gate', 'tower', 'barracks'],
+  },
 ];

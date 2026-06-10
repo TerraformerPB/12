@@ -80,8 +80,17 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   bread: 0,
 };
 
+// --- Military (phase 2) --------------------------------------------------------
+
+/** Soldier walking speed in tiles per second. */
+export const SOLDIER_SPEED = 1.8;
+/** Cost of recruiting one soldier at the barracks. */
+export const SOLDIER_RECRUIT_COST: Partial<Record<ResourceId, number>> = { bread: 2 };
+/** Carriers that must always remain — soldiers cannot use the last slots. */
+export const MIN_WORKERS = 1;
+
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

@@ -1,5 +1,5 @@
 import type { ResourceId } from '../data/config';
-import type { Point } from '../world/IsoGrid';
+import { Unit } from './Unit';
 
 /**
  * Carrier jobs.
@@ -30,75 +30,15 @@ export interface WorkerSave {
 }
 
 /**
- * A carrier unit. Holds position (fractional grid coordinates) and movement
- * state; job orchestration lives in EconomySystem. Rendering interpolates
- * between prevX/prevY and x/y.
+ * A carrier unit. Movement comes from `Unit`; job orchestration lives in
+ * EconomySystem.
  */
-export class Worker {
-  readonly id: number;
-  /** Position in fractional grid coordinates. */
-  x: number;
-  y: number;
-  /** Position at the previous logic tick (render interpolation). */
-  prevX: number;
-  prevY: number;
-
+export class Worker extends Unit {
   phase: WorkerPhase = 'idle';
   job: Job | null = null;
   carrying: ResourceId | null = null;
   /** Set when population shrinks; despawn once the current job finishes. */
   pendingDespawn = false;
-
-  private path: Point[] = [];
-  private pathIndex = 0;
-
-  constructor(id: number, x: number, y: number) {
-    this.id = id;
-    this.x = x;
-    this.y = y;
-    this.prevX = x;
-    this.prevY = y;
-  }
-
-  get tile(): Point {
-    return { x: Math.round(this.x), y: Math.round(this.y) };
-  }
-
-  setPath(path: Point[]): void {
-    this.path = path;
-    this.pathIndex = 0;
-  }
-
-  hasPath(): boolean {
-    return this.pathIndex < this.path.length;
-  }
-
-  /**
-   * Move along the current path. `speed` is tiles per tick.
-   * Returns true when the path is finished after this step.
-   */
-  step(speed: number): boolean {
-    this.prevX = this.x;
-    this.prevY = this.y;
-    let budget = speed;
-    while (budget > 0 && this.pathIndex < this.path.length) {
-      const target = this.path[this.pathIndex];
-      const dx = target.x - this.x;
-      const dy = target.y - this.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist <= budget) {
-        this.x = target.x;
-        this.y = target.y;
-        budget -= dist;
-        this.pathIndex++;
-      } else {
-        this.x += (dx / dist) * budget;
-        this.y += (dy / dist) * budget;
-        budget = 0;
-      }
-    }
-    return this.pathIndex >= this.path.length;
-  }
 
   toSave(): WorkerSave {
     return {
