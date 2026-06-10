@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Self-made placeholder app icon: tower on an iso tile -->
+  <rect width="128" height="128" rx="24" fill="#1a1d24"/>
+  <polygon points="64,78 112,102 64,126 16,102" fill="#5d9c47"/>
+  <polygon points="40,46 64,58 64,102 40,90" fill="#565c66"/>
+  <polygon points="88,46 64,58 64,102 88,90" fill="#3e434c"/>
+  <polygon points="64,34 88,46 64,58 40,46" fill="#7b828e"/>
+  <rect x="46" y="26" width="8" height="12" fill="#7b828e"/>
+  <rect x="60" y="22" width="8" height="16" fill="#7b828e"/>
+  <rect x="74" y="26" width="8" height="12" fill="#7b828e"/>
+  <polygon points="60,22 68,22 64,8" fill="#d8a548"/>
+</svg>

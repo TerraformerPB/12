@@ -1,0 +1,19 @@
+{
+  "name": "Burgspiel",
+  "short_name": "Burgspiel",
+  "description": "Wirtschaftsaufbau und Burgverteidigung in isometrischer Ansicht.",
+  "lang": "de",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#141821",
+  "theme_color": "#1a1d24",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
