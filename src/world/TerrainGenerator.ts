@@ -1,0 +1,66 @@
+import {
+  TERRAIN_RIVER_WIDTH,
+  TERRAIN_ROCK_CLUSTERS,
+  TERRAIN_ROCK_CLUSTER_MAX,
+  TERRAIN_ROCK_CLUSTER_MIN,
+  TERRAIN_SAFE_RADIUS,
+} from '../data/config';
+import { IsoGrid, Terrain } from './IsoGrid';
+
+/** Deterministic PRNG (mulberry32). The seed fully defines the terrain. */
+export function createRng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function inSafeZone(grid: IsoGrid, x: number, y: number): boolean {
+  const cx = Math.floor(grid.width / 2);
+  const cy = Math.floor(grid.height / 2);
+  return Math.abs(x - cx) <= TERRAIN_SAFE_RADIUS && Math.abs(y - cy) <= TERRAIN_SAFE_RADIUS;
+}
+
+/**
+ * Fills the grid terrain from a seed: one winding river band plus a few
+ * rock clusters. The area around the map center stays clear so the starting
+ * warehouse always fits.
+ */
+export function generateTerrain(grid: IsoGrid, seed: number): void {
+  const rng = createRng(seed);
+
+  // River: vertical band winding along gy via two sine waves.
+  const riverBaseX = Math.floor(grid.width * (0.15 + rng() * 0.2));
+  const amp = 3 + rng() * 4;
+  const freq = 0.08 + rng() * 0.08;
+  const phase = rng() * Math.PI * 2;
+  for (let gy = 0; gy < grid.height; gy++) {
+    const center = riverBaseX + Math.sin(gy * freq + phase) * amp;
+    for (let dx = 0; dx < TERRAIN_RIVER_WIDTH + 1; dx++) {
+      const gx = Math.round(center) + dx;
+      if (grid.inBounds(gx, gy) && !inSafeZone(grid, gx, gy)) {
+        grid.setTerrain(gx, gy, Terrain.Water);
+      }
+    }
+  }
+
+  // Rock clusters: random-walk blobs.
+  for (let c = 0; c < TERRAIN_ROCK_CLUSTERS; c++) {
+    let x = Math.floor(rng() * grid.width);
+    let y = Math.floor(rng() * grid.height);
+    const size =
+      TERRAIN_ROCK_CLUSTER_MIN +
+      Math.floor(rng() * (TERRAIN_ROCK_CLUSTER_MAX - TERRAIN_ROCK_CLUSTER_MIN + 1));
+    for (let i = 0; i < size; i++) {
+      if (grid.inBounds(x, y) && !inSafeZone(grid, x, y) && grid.terrainAt(x, y) === Terrain.Grass) {
+        grid.setTerrain(x, y, Terrain.Rock);
+      }
+      x += Math.floor(rng() * 3) - 1;
+      y += Math.floor(rng() * 3) - 1;
+    }
+  }
+}
