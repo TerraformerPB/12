@@ -28,19 +28,27 @@ export function checkPlacement(
   rotated: boolean,
 ): PlacementCheck {
   const { w, h } = rotatedFootprint(def, rotated);
+  // Bridges stand on water; everything else needs grass.
+  const requiredTerrain = def.placement === PlacementRule.Water ? Terrain.Water : Terrain.Grass;
   for (let dy = 0; dy < h; dy++) {
     for (let dx = 0; dx < w; dx++) {
       const x = gx + dx;
       const y = gy + dy;
       if (!grid.inBounds(x, y)) return { ok: false, reason: 'Außerhalb der Karte' };
-      if (grid.terrainAt(x, y) !== Terrain.Grass) return { ok: false, reason: 'Gelände blockiert' };
+      if (grid.terrainAt(x, y) !== requiredTerrain) {
+        return {
+          ok: false,
+          reason: requiredTerrain === Terrain.Water ? 'Nur auf Wasser baubar' : 'Gelände blockiert',
+        };
+      }
       if (grid.occupantAt(x, y) !== NO_OCCUPANT) return { ok: false, reason: 'Bereits bebaut' };
     }
   }
-  if (def.placement === PlacementRule.AdjacentRock) {
-    let touchesRock = false;
+
+  const requireAdjacent = (terrain: Terrain, reason: string): PlacementCheck => {
+    let touches = false;
     const checkTile = (x: number, y: number): void => {
-      if (grid.inBounds(x, y) && grid.terrainAt(x, y) === Terrain.Rock) touchesRock = true;
+      if (grid.inBounds(x, y) && grid.terrainAt(x, y) === terrain) touches = true;
     };
     for (let dx = 0; dx < w; dx++) {
       checkTile(gx + dx, gy - 1);
@@ -50,7 +58,14 @@ export function checkPlacement(
       checkTile(gx - 1, gy + dy);
       checkTile(gx + w, gy + dy);
     }
-    if (!touchesRock) return { ok: false, reason: 'Muss an Fels grenzen' };
+    return touches ? { ok: true } : { ok: false, reason };
+  };
+
+  if (def.placement === PlacementRule.AdjacentRock) {
+    return requireAdjacent(Terrain.Rock, 'Muss an Fels grenzen');
+  }
+  if (def.placement === PlacementRule.AdjacentForest) {
+    return requireAdjacent(Terrain.Forest, 'Muss an Wald grenzen');
   }
   return { ok: true };
 }

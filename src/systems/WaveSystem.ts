@@ -7,6 +7,7 @@ import {
   WAVE_INTERVAL,
   WAVE_MAX_COUNT,
 } from '../data/config';
+import { ENEMY_BREACH_COST } from '../data/config';
 import { waveComposition } from '../data/enemies';
 import { Enemy } from '../entities/Enemy';
 import { IsoGrid, Terrain, type Point } from '../world/IsoGrid';
@@ -29,6 +30,8 @@ export interface WaveContext {
   grid: IsoGrid;
   enemies: Enemy[];
   nextEntityId(): number;
+  /** Spawn points must be able to reach the warehouse. */
+  getWarehouse(): { footprintTiles(): Point[] } | null;
 }
 
 /**
@@ -83,17 +86,45 @@ export class WaveSystem {
     }
   }
 
-  /** Random walkable tiles on the map border. */
+  /**
+   * Random border tiles from which the warehouse is reachable. Without
+   * this check, raiders spawning across the river would idle forever and
+   * waves would feel arbitrarily easy or unbeatable.
+   */
   private pickSpawnPoints(groups: number): Point[] {
     const grid = this.ctx.grid;
+    const warehouse = this.ctx.getWarehouse();
+    const reachable = new Set<number>();
+    if (warehouse) {
+      // Flood fill with the enemy cost function (buildings are breachable,
+      // water is not — bridges connect the banks).
+      const cost = grid.enemyMoveCost(ENEMY_BREACH_COST);
+      const queue: Point[] = [...warehouse.footprintTiles()];
+      for (const t of queue) reachable.add(t.y * grid.width + t.x);
+      while (queue.length > 0) {
+        const cur = queue.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = cur.x + dx;
+          const ny = cur.y + dy;
+          const key = ny * grid.width + nx;
+          if (reachable.has(key) || !isFinite(cost(nx, ny))) continue;
+          reachable.add(key);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+    }
+    const onBorderAndReachable = (x: number, y: number): boolean =>
+      grid.terrainAt(x, y) === Terrain.Grass &&
+      (reachable.size === 0 || reachable.has(y * grid.width + x));
+
     const border: Point[] = [];
     for (let x = 0; x < grid.width; x++) {
-      if (grid.terrainAt(x, 0) === Terrain.Grass) border.push({ x, y: 0 });
-      if (grid.terrainAt(x, grid.height - 1) === Terrain.Grass) border.push({ x, y: grid.height - 1 });
+      if (onBorderAndReachable(x, 0)) border.push({ x, y: 0 });
+      if (onBorderAndReachable(x, grid.height - 1)) border.push({ x, y: grid.height - 1 });
     }
     for (let y = 1; y < grid.height - 1; y++) {
-      if (grid.terrainAt(0, y) === Terrain.Grass) border.push({ x: 0, y });
-      if (grid.terrainAt(grid.width - 1, y) === Terrain.Grass) border.push({ x: grid.width - 1, y });
+      if (onBorderAndReachable(0, y)) border.push({ x: 0, y });
+      if (onBorderAndReachable(grid.width - 1, y)) border.push({ x: grid.width - 1, y });
     }
     const points: Point[] = [];
     for (let i = 0; i < groups && border.length > 0; i++) {

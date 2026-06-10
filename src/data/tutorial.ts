@@ -21,7 +21,7 @@ export interface TutorialStep {
 export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 'lumberjack',
-    text: 'Baue eine Holzfällerhütte — Menü „Bauen“ unten öffnen.',
+    text: 'Baue eine Holzfällerhütte neben einem Wald (Menü „Bauen“).',
     isDone: (v) => v.countBuildings('lumberjack') > 0,
   },
   {
@@ -46,8 +46,13 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     isDone: (v) => v.countBuildings('tower') > 0,
   },
   {
+    id: 'weapons',
+    text: 'Baue Erzmine (an Fels) und Schmiede — Soldaten brauchen Waffen.',
+    isDone: (v) => v.countBuildings('mine') > 0 && v.countBuildings('smithy') > 0,
+  },
+  {
     id: 'soldier',
-    text: 'Baue eine Kaserne und rekrutiere einen Soldaten (kostet Brot).',
+    text: 'Baue eine Kaserne und rekrutiere einen Soldaten (Brot + Waffe).',
     isDone: (v) => v.soldierCount > 0,
   },
   {

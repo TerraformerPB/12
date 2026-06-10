@@ -15,6 +15,8 @@ export interface BuildingSave {
   outputStore: number;
   /** Since save version 3. */
   hp: number;
+  /** Since save version 5. */
+  assignedWorkers: number;
 }
 
 /**
@@ -41,6 +43,8 @@ export class Building {
   outputStore = 0;
   /** Current hit points; the building is destroyed at 0 (phase 3). */
   hp: number;
+  /** Population assigned to operate this building (phase 7). */
+  assignedWorkers = 0;
 
   // Transient reservation counters (recomputed from worker jobs on load).
   /** Output units already promised to a pickup job. */
@@ -90,10 +94,24 @@ export class Building {
     return recipe ? Math.round(recipe.duration * TICK_RATE) : 0;
   }
 
-  /** Advance production by one logic tick. */
+  /** Required staff; 0 = runs unmanned (no recipe or legacy building). */
+  get workersRequired(): number {
+    return this.def.workersRequired ?? 0;
+  }
+
+  /** Production speed factor from staffing (0 → stands still). */
+  get staffingFactor(): number {
+    const required = this.workersRequired;
+    if (required === 0) return 1;
+    return Math.min(1, this.assignedWorkers / required);
+  }
+
+  /** Advance production by one logic tick, scaled by assigned workers. */
   tickProduction(): void {
     const recipe = this.def.recipe;
     if (!recipe) return;
+    const speed = this.staffingFactor;
+    if (speed <= 0) return;
 
     if (!this.active) {
       if (this.outputStore >= LOCAL_STORE_CAP) return;
@@ -105,7 +123,7 @@ export class Building {
       this.progress = 0;
     }
 
-    this.progress++;
+    this.progress += speed;
     if (this.progress >= this.durationTicks) {
       this.outputStore++;
       this.active = false;
@@ -173,6 +191,7 @@ export class Building {
       inputStore: this.inputStore,
       outputStore: this.outputStore,
       hp: this.hp,
+      assignedWorkers: this.assignedWorkers,
     };
   }
 
@@ -183,6 +202,7 @@ export class Building {
     b.inputStore = s.inputStore;
     b.outputStore = s.outputStore;
     b.hp = Math.min(s.hp, b.maxHp);
+    b.assignedWorkers = s.assignedWorkers;
     return b;
   }
 }

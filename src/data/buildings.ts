@@ -13,6 +13,10 @@ export const PlacementRule = {
   Grass: 'grass',
   /** Free grass tiles with at least one rock tile orthogonally adjacent. */
   AdjacentRock: 'adjacentRock',
+  /** Free grass tiles with at least one forest tile orthogonally adjacent. */
+  AdjacentForest: 'adjacentForest',
+  /** Free water tiles (bridges). */
+  Water: 'water',
 } as const;
 export type PlacementRule = (typeof PlacementRule)[keyof typeof PlacementRule];
 
@@ -43,8 +47,16 @@ export interface BuildingDef {
   isWarehouse?: boolean;
   /** Own units may walk through this building's tiles (gates). */
   passable?: boolean;
-  /** Walkable by everyone; own units move faster (roads). */
-  isRoad?: boolean;
+  /** Walkable by everyone; own units move faster. 1 = road/bridge, 2 = paved. */
+  roadTier?: 1 | 2;
+  /**
+   * Id of the def this building can be upgraded into (info panel action).
+   * Typed as string to avoid a circular type with BUILDING_DEFS; resolved
+   * via getDef at runtime.
+   */
+  upgradesTo?: string;
+  /** Workers that must be assigned before the building produces. */
+  workersRequired?: number;
   /** Soldiers can be recruited here (barracks). */
   recruitsSoldiers?: boolean;
   /** Hit points; BUILDING_DEFAULT_HP when omitted. */
@@ -74,9 +86,10 @@ export const BUILDING_DEFS = {
     name: 'Holzfällerhütte',
     footprint: { w: 2, h: 2 },
     cost: { wood: 20 },
-    placement: PlacementRule.Grass,
+    placement: PlacementRule.AdjacentForest,
     recipe: { output: 'wood', duration: 4 },
-    description: 'Produziert 1 Holz alle 4 Sekunden.',
+    workersRequired: 1,
+    description: 'Produziert 1 Holz alle 4 Sekunden. Muss an Wald grenzen.',
     art: { color: 0x7a5230, height: 26 },
   },
   quarry: {
@@ -87,8 +100,33 @@ export const BUILDING_DEFS = {
     cost: { wood: 30 },
     placement: PlacementRule.AdjacentRock,
     recipe: { output: 'stone', duration: 6 },
+    workersRequired: 1,
     description: 'Produziert 1 Stein alle 6 Sekunden. Muss an Fels grenzen.',
     art: { color: 0x8d939e, height: 22 },
+  },
+  mine: {
+    id: 'mine',
+    category: 'economy',
+    name: 'Erzmine',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 30, stone: 10 },
+    placement: PlacementRule.AdjacentRock,
+    recipe: { output: 'ore', duration: 7 },
+    workersRequired: 1,
+    description: 'Fördert 1 Erz alle 7 Sekunden. Muss an Fels grenzen.',
+    art: { color: 0x6b5d52, height: 24 },
+  },
+  smithy: {
+    id: 'smithy',
+    category: 'economy',
+    name: 'Schmiede',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 50, stone: 30 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'ore', output: 'weapons', duration: 5 },
+    workersRequired: 1,
+    description: 'Schmiedet 1 Erz zu 1 Waffe (5 Sekunden). Nötig für Soldaten.',
+    art: { color: 0x55504e, height: 28 },
   },
   farm: {
     id: 'farm',
@@ -98,6 +136,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 25 },
     placement: PlacementRule.Grass,
     recipe: { output: 'wheat', duration: 5 },
+    workersRequired: 2,
     description: 'Produziert 1 Weizen alle 5 Sekunden.',
     art: { color: 0xc9a83c, height: 18 },
   },
@@ -109,6 +148,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 40, stone: 10 },
     placement: PlacementRule.Grass,
     recipe: { input: 'wheat', output: 'flour', duration: 3 },
+    workersRequired: 1,
     description: 'Mahlt 1 Weizen zu 1 Mehl (3 Sekunden).',
     art: { color: 0xd8cfb8, height: 44 },
   },
@@ -120,6 +160,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 40, stone: 20 },
     placement: PlacementRule.Grass,
     recipe: { input: 'flour', output: 'bread', duration: 3 },
+    workersRequired: 1,
     description: 'Backt 1 Mehl zu 1 Brot (3 Sekunden).',
     art: { color: 0xb5663c, height: 30 },
   },
@@ -142,10 +183,35 @@ export const BUILDING_DEFS = {
     footprint: { w: 1, h: 1 },
     cost: { wood: 2 },
     placement: PlacementRule.Grass,
-    isRoad: true,
+    roadTier: 1,
+    upgradesTo: 'roadStone',
     description: 'Träger und Soldaten laufen auf Straßen 40% schneller.',
     maxHp: 40,
     art: { color: 0x77705f, height: 0 },
+  },
+  roadStone: {
+    id: 'roadStone',
+    category: 'economy',
+    name: 'Pflasterstraße',
+    footprint: { w: 1, h: 1 },
+    cost: { stone: 3 },
+    placement: PlacementRule.Grass,
+    roadTier: 2,
+    description: 'Ausgebaute Route: 80% schneller. Straßen sind aufrüstbar.',
+    maxHp: 60,
+    art: { color: 0x9a958a, height: 0 },
+  },
+  bridge: {
+    id: 'bridge',
+    category: 'economy',
+    name: 'Brücke',
+    footprint: { w: 1, h: 1 },
+    cost: { wood: 10 },
+    placement: PlacementRule.Water,
+    roadTier: 1,
+    description: 'Überquert den Fluss. Achtung: auch Angreifer nutzen sie.',
+    maxHp: 60,
+    art: { color: 0x8a6b42, height: 0 },
   },
   wall: {
     id: 'wall',
@@ -189,7 +255,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 50, stone: 20 },
     placement: PlacementRule.Grass,
     recruitsSoldiers: true,
-    description: 'Rekrutiert Soldaten gegen Brot. Soldaten belegen Bevölkerung.',
+    description: 'Rekrutiert Soldaten gegen Brot und Waffen. Soldaten belegen Bevölkerung.',
     art: { color: 0x7d5a66, height: 32 },
   },
 } as const satisfies Record<string, Omit<BuildingDef, 'id'> & { id: string }>;
@@ -204,7 +270,19 @@ export function getDef(id: BuildingDefId): BuildingDef {
 export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
   {
     title: 'Wirtschaft',
-    ids: ['lumberjack', 'quarry', 'farm', 'mill', 'bakery', 'hut', 'road'],
+    ids: [
+      'lumberjack',
+      'quarry',
+      'mine',
+      'farm',
+      'mill',
+      'bakery',
+      'smithy',
+      'hut',
+      'road',
+      'roadStone',
+      'bridge',
+    ],
   },
   {
     title: 'Verteidigung',

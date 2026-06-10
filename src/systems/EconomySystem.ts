@@ -1,7 +1,6 @@
 import { events } from '../core/EventBus';
 import {
   RESOURCE_IDS,
-  ROAD_SPEED_FACTOR,
   START_WORKERS,
   TICK_RATE,
   WORKER_SPEED,
@@ -124,12 +123,23 @@ export class EconomySystem {
   }
 
   populationUsed(): number {
-    return this.ctx.workers.filter((w) => w.job !== null).length + this.ctx.getSoldierCount();
+    return (
+      this.ctx.workers.filter((w) => w.job !== null).length +
+      this.ctx.getSoldierCount() +
+      this.assignedTotal()
+    );
   }
 
-  /** Carrier head count target: total population minus soldier slots. */
+  /** Population assigned as building staff. */
+  assignedTotal(): number {
+    let total = 0;
+    for (const b of this.ctx.buildings.values()) total += b.assignedWorkers;
+    return total;
+  }
+
+  /** Carrier head count: population minus soldiers and building staff. */
   workerTarget(): number {
-    return Math.max(0, this.populationTotal() - this.ctx.getSoldierCount());
+    return Math.max(0, this.populationTotal() - this.ctx.getSoldierCount() - this.assignedTotal());
   }
 
   tick(): void {
@@ -258,7 +268,7 @@ export class EconomySystem {
         continue;
       }
       const tile = worker.tile;
-      const roadBonus = this.ctx.grid.isRoadAt(tile.x, tile.y) ? ROAD_SPEED_FACTOR : 1;
+      const roadBonus = this.ctx.grid.speedFactorAt(tile.x, tile.y);
       const arrived = worker.step(SPEED_PER_TICK * roadBonus * this.ctx.getSpeedFactor());
       if (!arrived) continue;
       this.onArrival(worker);

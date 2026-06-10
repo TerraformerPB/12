@@ -1,5 +1,5 @@
 import { events } from '../core/EventBus';
-import { ROAD_SPEED_FACTOR, SOLDIER_SPEED, TICK_RATE } from '../data/config';
+import { SOLDIER_SPEED, TICK_RATE } from '../data/config';
 import type { Soldier } from '../entities/Soldier';
 import type { IsoGrid, Point } from '../world/IsoGrid';
 import { findPath } from '../world/Pathfinding';
@@ -25,7 +25,7 @@ export class SoldierSystem {
         s.rest();
         continue;
       }
-      const roadBonus = this.grid.isRoadAt(s.tile.x, s.tile.y) ? ROAD_SPEED_FACTOR : 1;
+      const roadBonus = this.grid.speedFactorAt(s.tile.x, s.tile.y);
       if (s.step(SPEED_PER_TICK * roadBonus) && s.mode === 'command') {
         // Order completed: take up guard duty here.
         s.mode = 'guard';
