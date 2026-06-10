@@ -16,6 +16,14 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
   const stats = document.createElement('p');
   stats.className = 'gameover-stats';
 
+  const reviveBtn = document.createElement('button');
+  reviveBtn.textContent = '📺 Weiterspielen (Werbung)';
+  reviveBtn.addEventListener('click', async () => {
+    overlay.hidden = true;
+    const revived = await game.reviveViaAd();
+    if (!revived) overlay.hidden = false;
+  });
+
   const newGameBtn = document.createElement('button');
   newGameBtn.textContent = 'Neues Spiel';
   newGameBtn.addEventListener('click', () => {
@@ -23,12 +31,13 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
     game.restartNewGame();
   });
 
-  card.append(heading, stats, newGameBtn);
+  card.append(heading, stats, reviveBtn, newGameBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 
   events.on('game:over', ({ wavesSurvived, kills }) => {
     stats.textContent = `Überstandene Wellen: ${wavesSurvived} · Besiegte Gegner: ${kills}`;
+    reviveBtn.hidden = !game.canRevive();
     overlay.hidden = false;
   });
 }

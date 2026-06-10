@@ -20,6 +20,8 @@ export interface GameEvents {
   'game:phaseChanged': { phase: GamePhase };
   'game:loaded': void;
   'wave:started': { wave: number; count: number };
+  'techs:changed': { researched: string[] };
+  'tutorial:changed': { text: string | null };
   'wave:status': { wave: number; nextInSeconds: number; enemiesAlive: number; kills: number };
   'game:over': { wavesSurvived: number; kills: number };
 }

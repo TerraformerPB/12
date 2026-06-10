@@ -318,12 +318,48 @@ button:active {
   color: #ff9d96;
 }
 
+/* --- Tutorial banner --- */
+
+.tutorial-banner {
+  position: absolute;
+  top: calc(52px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(92vw, 480px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ui-bg);
+  border: 1px solid rgba(216, 165, 72, 0.5);
+  border-radius: 999px;
+  padding: 7px 8px 7px 14px;
+  font-size: 13px;
+}
+
+.tutorial-banner[hidden] {
+  display: none;
+}
+
+.tutorial-skip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.build-card.researched {
+  opacity: 0.55;
+}
+
+.build-card:disabled {
+  cursor: default;
+}
+
 /* --- Toast --- */
 
 .toast {
   position: absolute;
   left: 50%;
-  top: calc(64px + var(--safe-top));
+  top: calc(98px + var(--safe-top));
   transform: translateX(-50%);
   background: var(--ui-bg);
   border: 1px solid var(--ui-border);
@@ -380,6 +416,31 @@ button:active {
   margin: 0 0 10px;
   color: var(--ui-text-dim);
   font-size: 14px;
+}
+
+/* --- Dev rewarded-ad placeholder --- */
+
+.ad-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 6, 8, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.ad-box {
+  text-align: center;
+  color: var(--ui-text-dim);
+  font-size: 15px;
+}
+
+.ad-count {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--ui-text);
+  margin-top: 12px;
 }
 
 .fatal-error {

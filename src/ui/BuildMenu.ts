@@ -1,6 +1,7 @@
 import { events } from '../core/EventBus';
 import { BUILD_MENU_SECTIONS, getDef } from '../data/buildings';
 import { RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
+import { TECH_IDS, getTechDef, type TechId } from '../data/techs';
 import type { Game } from '../core/Game';
 
 /**
@@ -64,6 +65,52 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
     }
   }
 
+  // --- Research section ---
+  const techHeader = document.createElement('div');
+  techHeader.className = 'build-section-title';
+  techHeader.textContent = 'Forschung';
+  content.appendChild(techHeader);
+
+  const techGrid = document.createElement('div');
+  techGrid.className = 'build-grid';
+  content.appendChild(techGrid);
+
+  const techCards = new Map<TechId, HTMLButtonElement>();
+  for (const techId of TECH_IDS) {
+    const def = getTechDef(techId);
+    const card = document.createElement('button');
+    card.className = 'build-card';
+
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = `🧪 ${def.name}`;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = def.description;
+    const cost = document.createElement('span');
+    cost.className = 'cost';
+    cost.textContent = RESOURCE_IDS.filter((r) => (def.cost[r] ?? 0) > 0)
+      .map((r) => `${RESOURCE_INFO[r].icon} ${def.cost[r]}`)
+      .join('  ');
+
+    card.append(title, meta, cost);
+    card.addEventListener('click', () => game.buyTech(techId));
+    techGrid.appendChild(card);
+    techCards.set(techId, card);
+  }
+
+  events.on('techs:changed', ({ researched }) => {
+    for (const [techId, card] of techCards) {
+      const done = researched.includes(techId);
+      card.disabled = done;
+      card.classList.toggle('researched', done);
+      if (done) {
+        const costEl = card.querySelector('.cost');
+        if (costEl) costEl.textContent = '✓ Erforscht';
+      }
+    }
+  });
+
   uiRoot.appendChild(sheet);
 
   // Mark cards the player currently cannot afford.
@@ -71,6 +118,11 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
     for (const [defId, card] of cards) {
       const def = getDef(defId as Parameters<typeof getDef>[0]);
       card.classList.toggle('unaffordable', !game.store.canAfford(def.cost));
+    }
+    for (const [techId, card] of techCards) {
+      if (!card.disabled) {
+        card.classList.toggle('unaffordable', !game.store.canAfford(getTechDef(techId).cost));
+      }
     }
   });
 
