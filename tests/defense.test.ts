@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDef } from '../src/data/buildings';
 import { checkPlacement } from '../src/systems/BuildSystem';
-import { IsoGrid } from '../src/world/IsoGrid';
+import { IsoGrid, PassMode } from '../src/world/IsoGrid';
 import { findPath } from '../src/world/Pathfinding';
 
 /** A wall line across x=0..w-1 at row y, with an optional gate. */
@@ -9,7 +9,7 @@ function buildWallLine(grid: IsoGrid, y: number, gateX: number | null): void {
   let id = 100;
   for (let x = 0; x < grid.width; x++) {
     const isGate = x === gateX;
-    grid.setOccupantRect(x, y, 1, 1, id++, isGate);
+    grid.setOccupantRect(x, y, 1, 1, id++, isGate ? PassMode.Gate : PassMode.None);
   }
 }
 
@@ -31,7 +31,7 @@ describe('walls and gates', () => {
 
   it('gate tiles stay unbuildable even though they are walkable', () => {
     const grid = new IsoGrid(9, 9);
-    grid.setOccupantRect(3, 3, 1, 1, 55, true); // a gate
+    grid.setOccupantRect(3, 3, 1, 1, 55, PassMode.Gate);
     expect(isFinite(grid.moveCost(3, 3))).toBe(true);
     expect(grid.isFree(3, 3)).toBe(false);
     expect(checkPlacement(grid, getDef('wall'), 3, 3, false).ok).toBe(false);
@@ -39,8 +39,8 @@ describe('walls and gates', () => {
 
   it('demolishing a gate clears the passable flag', () => {
     const grid = new IsoGrid(9, 9);
-    grid.setOccupantRect(3, 3, 1, 1, 55, true);
-    grid.setOccupantRect(3, 3, 1, 1, 0, false);
+    grid.setOccupantRect(3, 3, 1, 1, 55, PassMode.Gate);
+    grid.setOccupantRect(3, 3, 1, 1, 0, PassMode.None);
     expect(grid.isFree(3, 3)).toBe(true);
     expect(grid.moveCost(3, 3)).toBe(1);
   });

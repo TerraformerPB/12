@@ -47,6 +47,8 @@ function sampleData(): SaveData {
     soldiers: [soldier.toSave()],
     enemies: [enemy.toSave()],
     wave: { number: 4, nextInSeconds: 87, kills: 23 },
+    techs: ['fastCarriers'],
+    tutorialStep: 3,
   };
 }
 
@@ -87,7 +89,7 @@ describe('save/load roundtrip', () => {
 
   it('migrates v1 savegames all the way to the current version', () => {
     // Build a v1 save: no soldiers/enemies/wave fields, version 1.
-    const { soldiers: _s, enemies: _e, wave: _w, ...rest } = sampleData();
+    const { soldiers: _s, enemies: _e, wave: _w, techs: _t, tutorialStep: _ts, ...rest } = sampleData();
     const v1 = { ...rest, saveVersion: 1 };
     const migrated = migrateSave(v1 as SaveData);
     expect(migrated).not.toBeNull();
@@ -95,11 +97,13 @@ describe('save/load roundtrip', () => {
     expect(migrated!.soldiers).toEqual([]);
     expect(migrated!.enemies).toEqual([]);
     expect(migrated!.wave.number).toBe(0);
+    expect(migrated!.techs).toEqual([]);
+    expect(migrated!.tutorialStep).toBe(0);
     expect(migrated!.buildings).toHaveLength(2);
   });
 
   it('migrates v2 savegames: buildings and soldiers gain full hp', () => {
-    const { enemies: _e, wave: _w, ...rest } = sampleData();
+    const { enemies: _e, wave: _w, techs: _t, tutorialStep: _ts, ...rest } = sampleData();
     const v2 = JSON.parse(JSON.stringify({ ...rest, saveVersion: 2 })) as SaveData;
     for (const b of v2.buildings) delete (b as Partial<typeof b>).hp;
     for (const s of v2.soldiers) {
@@ -113,6 +117,19 @@ describe('save/load roundtrip', () => {
     expect(migrated!.soldiers[0].hp).toBeGreaterThan(0);
     expect(migrated!.soldiers[0].anchor).toEqual({ x: 20, y: 21 });
     expect(migrated!.enemies).toEqual([]);
+  });
+
+  it('migrates v3 savegames: enemies default to the raider type', () => {
+    const v3 = JSON.parse(JSON.stringify(sampleData())) as SaveData;
+    v3.saveVersion = 3;
+    delete (v3.enemies[0] as Partial<(typeof v3.enemies)[0]>).defId;
+    delete (v3 as Partial<SaveData>).techs;
+    delete (v3 as Partial<SaveData>).tutorialStep;
+    const migrated = migrateSave(v3);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.enemies[0].defId).toBe('raider');
+    expect(migrated!.techs).toEqual([]);
   });
 
   it('round-trips enemies and wave state', () => {

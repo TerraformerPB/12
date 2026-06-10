@@ -11,6 +11,7 @@ import type { BuildingSave } from '../entities/Building';
 import type { EnemySave } from '../entities/Enemy';
 import type { SoldierSave } from '../entities/Soldier';
 import type { WorkerSave } from '../entities/Worker';
+import type { TechId } from '../data/techs';
 import type { WaveSave } from '../systems/WaveSystem';
 
 /** Complete serialized game state. Versioned for future migrations. */
@@ -27,6 +28,9 @@ export interface SaveData {
   /** Since save version 3. */
   enemies: EnemySave[];
   wave: WaveSave;
+  /** Since save version 4. */
+  techs: TechId[];
+  tutorialStep: number;
 }
 
 /**
@@ -51,6 +55,13 @@ export function migrateSave(data: SaveData): SaveData | null {
     data.enemies = [];
     data.wave = { number: 0, nextInSeconds: WAVE_FIRST_DELAY, kills: 0 };
     data.saveVersion = 3;
+  }
+  if (data.saveVersion === 3) {
+    // v3 → v4: roads/research/tutorial; enemies gain a type id.
+    for (const e of data.enemies) e.defId = e.defId ?? 'raider';
+    data.techs = [];
+    data.tutorialStep = 0;
+    data.saveVersion = 4;
   }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }
