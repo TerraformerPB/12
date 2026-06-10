@@ -2,9 +2,10 @@
 
 Mobile-first Browser-Aufbauspiel im Stil von Stronghold: Wirtschaftsaufbau jetzt,
 wellenbasierte Burgverteidigung später. Isometrische 2D-Ansicht, Touch-only bedienbar,
-läuft ebenso mit Maus auf dem Desktop. **Aktueller Stand: Phase 4
-(Wirtschaft, Verteidigung, Wellen, Straßen/Forschung/Tutorial) — Capacitor
-und Monetarisierung sind vorbereitet.**
+läuft ebenso mit Maus auf dem Desktop. **Alle Roadmap-Phasen sind umgesetzt:
+Wirtschaft, Verteidigung, Wellen, Straßen/Forschung/Tutorial, natives
+Android-Projekt (Capacitor) und AdMob-Rewarded-Ads. Für den Store-Release
+fehlen nur noch AdMob-/Play-Console-Konten und der signierte Build.**
 
 ## Setup
 
@@ -86,30 +87,39 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   geführtes Tutorial mit Skip, zweiter Gegnertyp „Brecher" (ab Welle 3,
   datengetrieben in `data/enemies.ts`). Savegame v4. Sprite-Atlanten stehen
   weiter aus — der Austauschpunkt bleibt `render/placeholders.ts`.
-- **Phase 5 (vorbereitet) — Capacitor:** `capacitor.config.ts`, Pakete und
-  Web-Manifest/Icon sind eingerichtet; der native Build läuft auf einem
-  Rechner mit Android Studio (siehe unten). Safe-Areas/Lifecycle sind im
-  Web-Build bereits berücksichtigt.
-- **Phase 6 (Architektur) — Monetarisierung:** `monetization/Ads.ts` und
-  `Iap.ts` definieren die Provider-Schnittstellen; der Dev-Stub zeigt einen
-  Platzhalter-Countdown. Erster echter Use-Case ist eingebaut: einmal pro
-  Run „Weiterspielen (Werbung)" nach Game Over. Für den Store-Build wird nur
-  der Provider gegen AdMob/RevenueCat-Implementierungen getauscht.
+- **Phase 5 (✓) — Capacitor:** Das native `android/`-Projekt ist generiert
+  und eingecheckt, `@capacitor/app` ist verdrahtet (Speichern beim
+  Backgrounden, Android-Zurück-Taste: Baumodus abbrechen → Pause →
+  App minimieren). Der APK-Build selbst braucht Android Studio (siehe unten).
+- **Phase 6 (✓ bis auf Store-Konten) — Monetarisierung:**
+  `@capacitor-community/admob` ist integriert: Auf dem Gerät lädt
+  `AdmobRewardedAdProvider` echte Rewarded Ads (aktuell Googles Test-Ads),
+  im Browser bleibt der Dev-Platzhalter. Use-Case: einmal pro Run
+  „Weiterspielen (Werbung)" nach Game Over. IAP bleibt als Interface
+  (`monetization/Iap.ts`) vorbereitet.
 
 ## Play-Store-Build (Capacitor)
 
-Auf einem Rechner mit Android Studio + JDK:
+Auf einem Rechner mit Android Studio (inkl. Android SDK):
 
 ```bash
+npm install
 npm run build          # erzeugt dist/
-npx cap add android    # einmalig: erstellt das native android/-Projekt
-npx cap sync android   # kopiert dist/ + Plugins
-npx cap open android   # in Android Studio bauen/signieren
+npx cap sync android   # kopiert dist/ + Plugins ins native Projekt
+npx cap open android   # in Android Studio öffnen → auf Gerät/Emulator starten
 ```
 
-Für Rewarded Ads/IAP im Store-Build: `@capacitor-community/admob` bzw. ein
-IAP-Plugin installieren und in `Game.init` den `DevRewardedAdProvider` durch
-die native Implementierung ersetzen — die Spiellogik bleibt unberührt.
+Release-Checkliste vor dem Store-Upload:
+
+1. **AdMob-Konto anlegen**, App registrieren und ersetzen:
+   - App-ID in `android/app/src/main/AndroidManifest.xml`
+     (`com.google.android.gms.ads.APPLICATION_ID`, aktuell Googles Test-ID),
+   - Ad-Unit-ID + `ADMOB_USE_TEST_ADS = false` in `src/data/config.ts`.
+2. **Signieren:** In Android Studio einen Upload-Key erzeugen
+   (Build → Generate Signed App Bundle), `.aab` für die Play Console bauen.
+3. `versionCode`/`versionName` in `android/app/build.gradle` pflegen.
+4. Optional IAP: Plugin (z. B. RevenueCat) installieren und gegen
+   `IapProvider` in `monetization/Iap.ts` implementieren.
 
 ## Spielhinweise
 

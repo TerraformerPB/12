@@ -134,6 +134,17 @@ export const WAVE_MAX_COUNT = 30;
 /** Default hit points for buildings without an explicit maxHp. */
 export const BUILDING_DEFAULT_HP = 50;
 
+// --- Monetization (phase 6) -------------------------------------------------------
+
+/**
+ * Google's official TEST rewarded ad unit — replace with the real ad unit
+ * id from the AdMob console before the store release. The AdMob APP id
+ * lives in android/app/src/main/AndroidManifest.xml.
+ */
+export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
+/** Must be false in the store release. */
+export const ADMOB_USE_TEST_ADS = true;
+
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';

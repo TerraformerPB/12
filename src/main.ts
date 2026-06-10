@@ -1,4 +1,6 @@
 import './ui/styles.css';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { Game } from './core/Game';
 import { MAX_FRAME_DELTA_MS, TICK_MS } from './data/config';
 
@@ -54,6 +56,28 @@ async function main(): Promise<void> {
   });
   // iOS Safari does not always fire visibilitychange on navigation.
   window.addEventListener('pagehide', () => game.onHidden());
+
+  // Native (Capacitor) lifecycle: save when the app goes to background,
+  // Android back button cancels build mode before minimizing the app.
+  if (Capacitor.isNativePlatform()) {
+    void App.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) {
+        game.onHidden();
+      } else {
+        last = performance.now();
+        accumulator = 0;
+      }
+    });
+    void App.addListener('backButton', () => {
+      if (game.buildSystem.active) {
+        game.buildSystem.cancel();
+      } else if (game.phase === 'playing') {
+        game.setPhase('paused');
+      } else {
+        void App.minimizeApp();
+      }
+    });
+  }
 }
 
 main().catch((err) => {

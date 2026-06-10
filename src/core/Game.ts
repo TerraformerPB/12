@@ -45,7 +45,9 @@ import { createGameOverMenu } from '../ui/GameOverMenu';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
+import { Capacitor } from '@capacitor/core';
 import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
+import { AdmobRewardedAdProvider } from '../monetization/AdmobAds';
 import { createTutorialBanner } from '../ui/TutorialBanner';
 
 /** How a building's tiles treat walking units. */
@@ -107,7 +109,13 @@ export class Game {
     createGameOverMenu(uiRoot, this);
     createTutorialBanner(uiRoot, this);
     createToast(uiRoot);
-    this.ads = new DevRewardedAdProvider(uiRoot);
+    if (Capacitor.isNativePlatform()) {
+      const admob = new AdmobRewardedAdProvider();
+      void admob.init(); // preloads in the background; isAvailable() gates use
+      this.ads = admob;
+    } else {
+      this.ads = new DevRewardedAdProvider(uiRoot);
+    }
 
     const data = this.saveManager.load();
     if (data) {
