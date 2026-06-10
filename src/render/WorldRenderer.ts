@@ -335,6 +335,7 @@ export class WorldRenderer {
           const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
           existing.sprite.texture = tex.texture;
           existing.sprite.position.set(tex.offsetX, tex.offsetY);
+          existing.sprite.scale.set(tex.scale);
           existing.lastLevel = b.level;
         }
         if (existing.lastHp !== b.hp) {
@@ -346,6 +347,7 @@ export class WorldRenderer {
       const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
       const sprite = new Sprite(tex.texture);
       sprite.position.set(tex.offsetX, tex.offsetY);
+      sprite.scale.set(tex.scale);
       const hpBar = new Graphics();
       const view = new Container();
       view.addChild(sprite, hpBar);

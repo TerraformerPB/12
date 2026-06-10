@@ -35,12 +35,21 @@ Bodenfläche liegt. Im Manifest gibst du an, wo dieser Punkt im Bild liegt
 (`anchorX`/`anchorY` in Pixeln des Bildes). Faustregel: horizontal mittig
 über der hinteren Bodenraute, vertikal = Bildhöhe minus `(w+h-1) × 16` px.
 
+## Mitgelieferte Sprites & Generator
+
+`public/sprites/` enthält bereits ein komplettes, selbst generiertes
+Vektor-Art-Set (15 Gebäude, 2×-Auflösung) samt Manifest — erzeugt durch
+`node scripts/generate-sprites.mjs` (braucht Playwright + Chromium).
+Eigene/bessere Grafiken ersetzen einfach die jeweilige PNG-Datei oder den
+Manifest-Eintrag. Rotierte Gebäude (z. B. gedrehte Fischerhütte) fallen
+automatisch auf den eingebauten Platzhalter zurück.
+
 ## Manifest-Format
 
 ```json
 {
   "buildings": {
-    "lumberjack": { "file": "lumberjack.png", "anchorX": 64, "anchorY": 62 },
+    "lumberjack": { "file": "lumberjack.png", "anchorX": 128, "anchorY": 124, "scale": 0.5 },
     "tower": {
       "file": "tower.png", "anchorX": 64, "anchorY": 96,
       "levels": ["tower.png", "tower_l2.png", "tower_l3.png"]
@@ -49,6 +58,8 @@ Bodenfläche liegt. Im Manifest gibst du an, wo dieser Punkt im Bild liegt
 }
 ```
 
+- `scale`: 0.5 für Grafiken in 2×-Auflösung (empfohlen); `anchorX/Y` sind
+  dann ebenfalls in 2×-Bildpixeln anzugeben.
 - `levels` ist optional: ein Eintrag pro Ausbaustufe (1–3). Fehlt es,
   wird dieselbe Grafik für alle Stufen verwendet.
 - Gültige Ids: `warehouse, lumberjack, quarry, mine, smithy, fishery, farm,

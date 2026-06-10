@@ -18,6 +18,8 @@ interface SpriteEntry {
   /** Offset of the texture's top-left from the anchor tile center, world px. */
   offsetX: number;
   offsetY: number;
+  /** Display scale (0.5 for art delivered at 2× resolution). */
+  scale: number;
 }
 
 interface ManifestSprite {
@@ -29,6 +31,8 @@ interface ManifestSprite {
    */
   anchorX: number;
   anchorY: number;
+  /** Display scale; 0.5 when the art is delivered at 2× resolution. */
+  scale?: number;
   /** Optional per-level variants: file name per level (1-based index). */
   levels?: string[];
 }
@@ -58,10 +62,12 @@ export class BuildingSprites {
       for (let level = 1; level <= files.length; level++) {
         try {
           const texture = await Assets.load<Texture>(`sprites/${files[level - 1]}`);
+          const scale = entry.scale ?? 1;
           this.external.set(`${defId}:L${level}`, {
             texture,
-            offsetX: -entry.anchorX,
-            offsetY: -entry.anchorY,
+            offsetX: -entry.anchorX * scale,
+            offsetY: -entry.anchorY * scale,
+            scale,
           });
         } catch (err) {
           console.warn(`Sprite ${files[level - 1]} konnte nicht geladen werden:`, err);
@@ -72,9 +78,12 @@ export class BuildingSprites {
 
   /** Texture for a building type at a given size/level. */
   get(renderer: Renderer, def: BuildingDef, w: number, h: number, level: number): SpriteEntry {
-    // Real art first: exact level, then the base sprite.
-    const ext = this.external.get(`${def.id}:L${level}`) ?? this.external.get(`${def.id}:L1`);
-    if (ext) return ext;
+    // Real art first (exact level, then base) — but only in the default
+    // orientation; rotated footprints fall back to the baked placeholder.
+    if (w === def.footprint.w && h === def.footprint.h) {
+      const ext = this.external.get(`${def.id}:L${level}`) ?? this.external.get(`${def.id}:L1`);
+      if (ext) return ext;
+    }
 
     const key = `${def.id}:${w}x${h}:L${level}`;
     let entry = this.baked.get(key);
@@ -84,7 +93,7 @@ export class BuildingSprites {
       const bounds = g.getLocalBounds();
       const texture = renderer.generateTexture({ target: g, resolution: BAKE_RESOLUTION });
       g.destroy();
-      entry = { texture, offsetX: bounds.minX, offsetY: bounds.minY };
+      entry = { texture, offsetX: bounds.minX, offsetY: bounds.minY, scale: 1 };
       this.baked.set(key, entry);
     }
     return entry;
