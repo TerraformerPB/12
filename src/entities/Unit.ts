@@ -48,6 +48,11 @@ export abstract class Unit {
     return this.path.length > 0 ? this.path[this.path.length - 1] : null;
   }
 
+  /** The waypoint the unit is currently heading for, or null. */
+  nextWaypoint(): Point | null {
+    return this.pathIndex < this.path.length ? this.path[this.pathIndex] : null;
+  }
+
   /** Freeze interpolation when standing still. */
   rest(): void {
     this.prevX = this.x;

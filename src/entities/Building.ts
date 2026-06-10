@@ -1,4 +1,4 @@
-import { LOCAL_STORE_CAP, TICK_RATE, type ResourceId } from '../data/config';
+import { BUILDING_DEFAULT_HP, LOCAL_STORE_CAP, TICK_RATE, type ResourceId } from '../data/config';
 import { getDef, type BuildingDef, type BuildingDefId } from '../data/buildings';
 import type { IsoGrid, Point } from '../world/IsoGrid';
 
@@ -13,6 +13,8 @@ export interface BuildingSave {
   progress: number;
   inputStore: number;
   outputStore: number;
+  /** Since save version 3. */
+  hp: number;
 }
 
 /**
@@ -37,6 +39,8 @@ export class Building {
   inputStore = 0;
   /** Locally stored output units waiting for pickup. */
   outputStore = 0;
+  /** Current hit points; the building is destroyed at 0 (phase 3). */
+  hp: number;
 
   // Transient reservation counters (recomputed from worker jobs on load).
   /** Output units already promised to a pickup job. */
@@ -50,6 +54,16 @@ export class Building {
     this.x = x;
     this.y = y;
     this.rotated = rotated;
+    this.hp = this.maxHp;
+  }
+
+  get maxHp(): number {
+    return getDef(this.defId).maxHp ?? BUILDING_DEFAULT_HP;
+  }
+
+  /** Center of the footprint in grid coordinates (tower range checks). */
+  get center(): Point {
+    return { x: this.x + (this.w - 1) / 2, y: this.y + (this.h - 1) / 2 };
   }
 
   get def(): BuildingDef {
@@ -158,6 +172,7 @@ export class Building {
       progress: this.progress,
       inputStore: this.inputStore,
       outputStore: this.outputStore,
+      hp: this.hp,
     };
   }
 
@@ -167,6 +182,7 @@ export class Building {
     b.progress = s.progress;
     b.inputStore = s.inputStore;
     b.outputStore = s.outputStore;
+    b.hp = Math.min(s.hp, b.maxHp);
     return b;
   }
 }

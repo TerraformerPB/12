@@ -89,8 +89,51 @@ export const SOLDIER_RECRUIT_COST: Partial<Record<ResourceId, number>> = { bread
 /** Carriers that must always remain — soldiers cannot use the last slots. */
 export const MIN_WORKERS = 1;
 
+// --- Combat (phase 3) ------------------------------------------------------------
+
+export const SOLDIER_HP = 35;
+export const SOLDIER_DAMAGE = 4;
+/** Seconds between soldier melee strikes. */
+export const SOLDIER_ATTACK_INTERVAL = 0.8;
+/** Soldiers engage enemies within this radius (tiles) around their guard post. */
+export const SOLDIER_AGGRO_RANGE = 5;
+/** Melee reach in tiles (soldiers and enemies). */
+export const MELEE_RANGE = 1.3;
+
+export const TOWER_RANGE = 5.5;
+export const TOWER_DAMAGE = 3;
+/** Seconds between tower shots. */
+export const TOWER_ATTACK_INTERVAL = 0.9;
+
+export const ENEMY_HP = 20;
+export const ENEMY_SPEED = 1.5;
+export const ENEMY_DAMAGE = 2;
+/** Seconds between enemy strikes (vs buildings and soldiers). */
+export const ENEMY_ATTACK_INTERVAL = 1.0;
+/**
+ * Virtual path cost of a building tile for enemies: they prefer open
+ * routes but will breach (attack) blocking walls when walled out.
+ */
+export const ENEMY_BREACH_COST = 25;
+/** Enemies recompute their route at most every N seconds. */
+export const ENEMY_REPATH_INTERVAL = 4;
+
+// --- Waves (phase 3) ---------------------------------------------------------------
+
+/** Seconds of peace before the first wave. */
+export const WAVE_FIRST_DELAY = 240;
+/** Seconds between waves. */
+export const WAVE_INTERVAL = 120;
+/** Enemies in wave n: BASE + GROWTH × (n − 1), capped. */
+export const WAVE_BASE_COUNT = 3;
+export const WAVE_COUNT_GROWTH = 2;
+export const WAVE_MAX_COUNT = 30;
+
+/** Default hit points for buildings without an explicit maxHp. */
+export const BUILDING_DEFAULT_HP = 50;
+
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

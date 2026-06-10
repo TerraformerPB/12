@@ -137,4 +137,17 @@ export class IsoGrid {
     if (occupant === NO_OCCUPANT) return 1;
     return this.passable[this.idx(gx, gy)] === 1 ? 1 : Infinity;
   }
+
+  /**
+   * Movement cost for ENEMIES: gates do not let them through, but any
+   * building tile is "walkable" at a high virtual cost — the resulting
+   * path runs through the cheapest breach point, and the enemy attacks
+   * the blocking building when it reaches it.
+   */
+  enemyMoveCost(breachCost: number): (gx: number, gy: number) => number {
+    return (gx, gy) => {
+      if (!this.inBounds(gx, gy) || this.terrainAt(gx, gy) !== Terrain.Grass) return Infinity;
+      return this.occupant[this.idx(gx, gy)] === NO_OCCUPANT ? 1 : breachCost;
+    };
+  }
 }

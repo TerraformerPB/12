@@ -45,6 +45,8 @@ export interface BuildingDef {
   passable?: boolean;
   /** Soldiers can be recruited here (barracks). */
   recruitsSoldiers?: boolean;
+  /** Hit points; BUILDING_DEFAULT_HP when omitted. */
+  maxHp?: number;
   /** Short German description for the info panel. */
   description: string;
   /** Placeholder art parameters; replaced by sprite atlas entries later. */
@@ -61,6 +63,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.Grass,
     isWarehouse: true,
     description: 'Zentrales Lager. Träger liefern hier alle Waren ab.',
+    maxHp: 150,
     art: { color: 0xb08a4f, height: 40 },
   },
   lumberjack: {
@@ -127,6 +130,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.Grass,
     population: 2,
     description: 'Bietet Platz für 2 weitere Träger.',
+    maxHp: 30,
     art: { color: 0x9c7b5a, height: 20 },
   },
   wall: {
@@ -137,6 +141,7 @@ export const BUILDING_DEFS = {
     cost: { stone: 2 },
     placement: PlacementRule.Grass,
     description: 'Blockiert den Weg. Baue Linien, um die Burg zu schützen.',
+    maxHp: 80,
     art: { color: 0x8a8f99, height: 34 },
   },
   gate: {
@@ -148,6 +153,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.Grass,
     passable: true,
     description: 'Durchgang in der Mauer — eigene Einheiten können passieren.',
+    maxHp: 60,
     art: { color: 0xa08252, height: 30 },
   },
   tower: {
@@ -157,7 +163,8 @@ export const BUILDING_DEFS = {
     footprint: { w: 2, h: 2 },
     cost: { wood: 10, stone: 30 },
     placement: PlacementRule.Grass,
-    description: 'Erhöhter Posten. Verteidigt gegen Wellen (ab Phase 3).',
+    description: 'Beschießt Angreifer in Reichweite automatisch.',
+    maxHp: 100,
     art: { color: 0x6f7682, height: 58 },
   },
   barracks: {
