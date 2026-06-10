@@ -2,7 +2,9 @@
 
 Mobile-first Browser-Aufbauspiel im Stil von Stronghold: Wirtschaftsaufbau jetzt,
 wellenbasierte Burgverteidigung später. Isometrische 2D-Ansicht, Touch-only bedienbar,
-läuft ebenso mit Maus auf dem Desktop. **Aktueller Stand: Phase 1 (Wirtschaft).**
+läuft ebenso mit Maus auf dem Desktop. **Aktueller Stand: Phase 4
+(Wirtschaft, Verteidigung, Wellen, Straßen/Forschung/Tutorial) — Capacitor
+und Monetarisierung sind vorbereitet.**
 
 ## Setup
 
@@ -60,7 +62,7 @@ smokehouse: {
 },
 ```
 
-Danach die Id in `BUILD_MENU_ORDER` eintragen — Kosten, Ghost-Preview,
+Danach die Id in `BUILD_MENU_SECTIONS` eintragen — Kosten, Ghost-Preview,
 Validierung, Produktion, Träger-Logistik, Info-Panel und Savegame funktionieren
 ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
 (`RESOURCE_IDS` + `RESOURCE_INFO`) ergänzt.
@@ -79,13 +81,35 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   über `enemyMoveCost`: Tore blockiert, Mauern als teurer "Breach"-Pfad — sie
   greifen die günstigste Bresche an. Sounds werden zur Laufzeit synthetisiert
   (keine Fremd-Assets) und über den `SoundManager`/Howler abgespielt. Savegame v3.
-- **Phase 4 — Inhalt & Komfort:** Straßen (billigere Pfadkosten), Tech-Tree,
-  Tutorial, Sprite-Atlanten statt Platzhalter, weitere Gegner-/Soldatentypen,
-  Balancing-Pass.
-- **Phase 5 — Capacitor:** Play-Store-Build, Safe-Areas/Lifecycle sind
-  vorbereitet (DOM-UI, `visibilitychange`/`pagehide`-Persistenz).
-- **Phase 6 — Monetarisierung:** Rewarded Ads + IAP über Capacitor-Plugins;
-  Savegame-Migrationen über das `saveVersion`-Feld.
+- **Phase 4 (✓) — Inhalt & Komfort:** Straßen (billigere Pfadkosten + 40%
+  Tempo, Gegner laufen sie kostenlos), Forschung (3 Techs im Bau-Menü),
+  geführtes Tutorial mit Skip, zweiter Gegnertyp „Brecher" (ab Welle 3,
+  datengetrieben in `data/enemies.ts`). Savegame v4. Sprite-Atlanten stehen
+  weiter aus — der Austauschpunkt bleibt `render/placeholders.ts`.
+- **Phase 5 (vorbereitet) — Capacitor:** `capacitor.config.ts`, Pakete und
+  Web-Manifest/Icon sind eingerichtet; der native Build läuft auf einem
+  Rechner mit Android Studio (siehe unten). Safe-Areas/Lifecycle sind im
+  Web-Build bereits berücksichtigt.
+- **Phase 6 (Architektur) — Monetarisierung:** `monetization/Ads.ts` und
+  `Iap.ts` definieren die Provider-Schnittstellen; der Dev-Stub zeigt einen
+  Platzhalter-Countdown. Erster echter Use-Case ist eingebaut: einmal pro
+  Run „Weiterspielen (Werbung)" nach Game Over. Für den Store-Build wird nur
+  der Provider gegen AdMob/RevenueCat-Implementierungen getauscht.
+
+## Play-Store-Build (Capacitor)
+
+Auf einem Rechner mit Android Studio + JDK:
+
+```bash
+npm run build          # erzeugt dist/
+npx cap add android    # einmalig: erstellt das native android/-Projekt
+npx cap sync android   # kopiert dist/ + Plugins
+npx cap open android   # in Android Studio bauen/signieren
+```
+
+Für Rewarded Ads/IAP im Store-Build: `@capacitor-community/admob` bzw. ein
+IAP-Plugin installieren und in `Game.init` den `DevRewardedAdProvider` durch
+die native Implementierung ersetzen — die Spiellogik bleibt unberührt.
 
 ## Spielhinweise
 
@@ -97,5 +121,9 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Ziel auf der Karte antippen. Tore lassen eigene Einheiten durch, Mauern nicht.
 - Wellen: Die HUD-Anzeige ⚔️ zählt zur nächsten Welle herunter. Gegner
   marschieren aufs Lagerhaus zu; ist es eingemauert, brechen sie die
-  günstigste Stelle auf. Fällt das Lagerhaus, ist das Spiel verloren.
+  günstigste Stelle auf. Ab Welle 3 kommen langsame, harte „Brecher" dazu.
+  Fällt das Lagerhaus, ist das Spiel verloren — einmal pro Run kann per
+  Werbe-Platzhalter weitergespielt werden.
+- Straßen beschleunigen Träger und Soldaten; Forschung (im Bau-Menü unter
+  „Forschung") verbessert Träger-Tempo, Turm- und Soldatenschaden.
 - `window.__game` steht in der Browser-Konsole als Debug-Handle bereit.
