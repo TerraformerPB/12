@@ -1,0 +1,172 @@
+import { LOCAL_STORE_CAP, TICK_RATE, type ResourceId } from '../data/config';
+import { getDef, type BuildingDef, type BuildingDefId } from '../data/buildings';
+import type { IsoGrid, Point } from '../world/IsoGrid';
+
+/** Serialized building state inside a savegame. */
+export interface BuildingSave {
+  id: number;
+  defId: BuildingDefId;
+  x: number;
+  y: number;
+  rotated: boolean;
+  active: boolean;
+  progress: number;
+  inputStore: number;
+  outputStore: number;
+}
+
+/**
+ * A placed building: pure state + production logic, no rendering.
+ * (Extension point: soldiers/towers in later phases get their own entity
+ * classes; shared needs like ids/footprints can be lifted into a base then.)
+ */
+export class Building {
+  readonly id: number;
+  readonly defId: BuildingDefId;
+  /** Top-left tile of the footprint. */
+  readonly x: number;
+  readonly y: number;
+  /** Rotation swaps footprint width/height. */
+  readonly rotated: boolean;
+
+  /** Production cycle currently running. */
+  active = false;
+  /** Elapsed ticks of the current cycle. */
+  progress = 0;
+  /** Locally stored input units (processors only). */
+  inputStore = 0;
+  /** Locally stored output units waiting for pickup. */
+  outputStore = 0;
+
+  // Transient reservation counters (recomputed from worker jobs on load).
+  /** Output units already promised to a pickup job. */
+  reservedOutput = 0;
+  /** Input units on their way via delivery jobs. */
+  incomingInput = 0;
+
+  constructor(id: number, defId: BuildingDefId, x: number, y: number, rotated = false) {
+    this.id = id;
+    this.defId = defId;
+    this.x = x;
+    this.y = y;
+    this.rotated = rotated;
+  }
+
+  get def(): BuildingDef {
+    return getDef(this.defId);
+  }
+
+  get w(): number {
+    const f = this.def.footprint;
+    return this.rotated ? f.h : f.w;
+  }
+
+  get h(): number {
+    const f = this.def.footprint;
+    return this.rotated ? f.w : f.h;
+  }
+
+  /** Depth-sort key: the footprint's front (south) corner tile. */
+  get zIndex(): number {
+    return this.x + this.w - 1 + this.y + this.h - 1;
+  }
+
+  get durationTicks(): number {
+    const recipe = this.def.recipe;
+    return recipe ? Math.round(recipe.duration * TICK_RATE) : 0;
+  }
+
+  /** Advance production by one logic tick. */
+  tickProduction(): void {
+    const recipe = this.def.recipe;
+    if (!recipe) return;
+
+    if (!this.active) {
+      if (this.outputStore >= LOCAL_STORE_CAP) return;
+      if (recipe.input) {
+        if (this.inputStore <= 0) return;
+        this.inputStore--;
+      }
+      this.active = true;
+      this.progress = 0;
+    }
+
+    this.progress++;
+    if (this.progress >= this.durationTicks) {
+      this.outputStore++;
+      this.active = false;
+      this.progress = 0;
+    }
+  }
+
+  /** How many input units may still be requested from the warehouse. */
+  inputDemand(): number {
+    const recipe = this.def.recipe;
+    if (!recipe?.input) return 0;
+    return Math.max(0, LOCAL_STORE_CAP - this.inputStore - this.incomingInput);
+  }
+
+  /** Output units not yet promised to a carrier. */
+  unclaimedOutput(): number {
+    return this.outputStore - this.reservedOutput;
+  }
+
+  inputResource(): ResourceId | null {
+    return this.def.recipe?.input ?? null;
+  }
+
+  /** All tiles covered by the footprint. */
+  footprintTiles(): Point[] {
+    const tiles: Point[] = [];
+    for (let dy = 0; dy < this.h; dy++) {
+      for (let dx = 0; dx < this.w; dx++) {
+        tiles.push({ x: this.x + dx, y: this.y + dy });
+      }
+    }
+    return tiles;
+  }
+
+  /** Walkable tiles orthogonally adjacent to the footprint (carrier targets). */
+  accessTiles(grid: IsoGrid): Point[] {
+    const tiles: Point[] = [];
+    const seen = new Set<number>();
+    const tryAdd = (x: number, y: number): void => {
+      const key = y * grid.width + x;
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (isFinite(grid.moveCost(x, y))) tiles.push({ x, y });
+    };
+    for (let dx = 0; dx < this.w; dx++) {
+      tryAdd(this.x + dx, this.y - 1);
+      tryAdd(this.x + dx, this.y + this.h);
+    }
+    for (let dy = 0; dy < this.h; dy++) {
+      tryAdd(this.x - 1, this.y + dy);
+      tryAdd(this.x + this.w, this.y + dy);
+    }
+    return tiles;
+  }
+
+  toSave(): BuildingSave {
+    return {
+      id: this.id,
+      defId: this.defId,
+      x: this.x,
+      y: this.y,
+      rotated: this.rotated,
+      active: this.active,
+      progress: this.progress,
+      inputStore: this.inputStore,
+      outputStore: this.outputStore,
+    };
+  }
+
+  static fromSave(s: BuildingSave): Building {
+    const b = new Building(s.id, s.defId, s.x, s.y, s.rotated);
+    b.active = s.active;
+    b.progress = s.progress;
+    b.inputStore = s.inputStore;
+    b.outputStore = s.outputStore;
+    return b;
+  }
+}
