@@ -354,6 +354,34 @@ button:active {
   cursor: default;
 }
 
+/* --- Staff assignment row --- */
+
+.staff-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.staff-row[hidden] {
+  display: none;
+}
+
+.staff-row span {
+  flex: 1;
+}
+
+.staff-btn {
+  padding: 4px 14px;
+  font-size: 16px;
+  border-radius: 999px;
+}
+
+.staff-btn:disabled {
+  opacity: 0.4;
+}
+
 /* --- Toast --- */
 
 .toast {

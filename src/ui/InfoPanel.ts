@@ -5,6 +5,7 @@ import {
   RESOURCE_INFO,
   SOLDIER_RECRUIT_COST,
 } from '../data/config';
+import { getDef, type BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Soldier } from '../entities/Soldier';
 import type { Game } from '../core/Game';
@@ -33,6 +34,21 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   closeBtn.textContent = 'Schließen';
   closeBtn.addEventListener('click', () => game.select(null));
 
+  // Staff assignment row (Settlers-style worker allocation).
+  const staffRow = document.createElement('div');
+  staffRow.className = 'staff-row';
+  const staffLabel = document.createElement('span');
+  const staffMinus = document.createElement('button');
+  staffMinus.textContent = '−';
+  staffMinus.className = 'staff-btn';
+  const staffPlus = document.createElement('button');
+  staffPlus.textContent = '+';
+  staffPlus.className = 'staff-btn';
+  staffRow.append(staffLabel, staffMinus, staffPlus);
+
+  const upgradeBtn = document.createElement('button');
+  const repairBtn = document.createElement('button');
+
   const demolishBtn = document.createElement('button');
   demolishBtn.className = 'demolish';
   demolishBtn.textContent = 'Abreißen (50% zurück)';
@@ -47,8 +63,8 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   dismissBtn.className = 'demolish';
   dismissBtn.textContent = 'Entlassen';
 
-  buttons.append(closeBtn, recruitBtn, dismissBtn, demolishBtn);
-  panel.append(title, desc, stats, buttons);
+  buttons.append(closeBtn, recruitBtn, dismissBtn, repairBtn, upgradeBtn, demolishBtn);
+  panel.append(title, desc, stats, staffRow, buttons);
   uiRoot.appendChild(panel);
 
   let current: Building | null = null;
@@ -58,6 +74,63 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   demolishBtn.addEventListener('click', () => {
     if (current) game.demolish(current.id);
   });
+  staffMinus.addEventListener('click', () => {
+    if (current) {
+      game.assignWorker(current.id, -1);
+      updateStaffRow(current);
+    }
+  });
+  staffPlus.addEventListener('click', () => {
+    if (current) {
+      game.assignWorker(current.id, 1);
+      updateStaffRow(current);
+    }
+  });
+  upgradeBtn.addEventListener('click', () => {
+    if (current) game.upgradeBuilding(current.id);
+  });
+  repairBtn.addEventListener('click', () => {
+    if (current) {
+      game.repairBuilding(current.id);
+      if (current) updateActions(current);
+    }
+  });
+
+  /** Refresh the action buttons that depend on live building state. */
+  const updateActions = (b: Building): void => {
+    updateStaffRow(b);
+    const upgradeTarget = b.def.upgradesTo ? getDef(b.def.upgradesTo as BuildingDefId) : null;
+    if (upgradeTarget) {
+      const costText = RESOURCE_IDS.filter((r) => (upgradeTarget.cost[r] ?? 0) > 0)
+        .map((r) => `${RESOURCE_INFO[r].icon} ${upgradeTarget.cost[r]}`)
+        .join(' ');
+      upgradeBtn.textContent = `Ausbauen: ${upgradeTarget.name} (${costText})`;
+      upgradeBtn.hidden = false;
+    } else {
+      upgradeBtn.hidden = true;
+    }
+    if (b.hp < b.maxHp) {
+      const repairCost = game.repairCost(b);
+      const costText = RESOURCE_IDS.filter((r) => (repairCost[r] ?? 0) > 0)
+        .map((r) => `${RESOURCE_INFO[r].icon} ${repairCost[r]}`)
+        .join(' ');
+      repairBtn.textContent = costText ? `Reparieren (${costText})` : 'Reparieren (gratis)';
+      repairBtn.hidden = false;
+    } else {
+      repairBtn.hidden = true;
+    }
+  };
+
+  const updateStaffRow = (b: Building): void => {
+    if (b.workersRequired === 0) {
+      staffRow.hidden = true;
+      return;
+    }
+    staffRow.hidden = false;
+    staffLabel.textContent = `👷 Arbeiter: ${b.assignedWorkers}/${b.workersRequired}`;
+    staffMinus.disabled = b.assignedWorkers === 0;
+    staffPlus.disabled = b.assignedWorkers >= b.workersRequired;
+  };
   recruitBtn.addEventListener('click', () => {
     if (current) game.recruitSoldier(current.id);
   });
@@ -128,10 +201,14 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     demolishBtn.hidden = building.def.isWarehouse === true;
     recruitBtn.hidden = building.def.recruitsSoldiers !== true;
     dismissBtn.hidden = true;
+    updateActions(building);
     renderStats(building);
     panel.hidden = false;
     timer = window.setInterval(() => {
-      if (current) renderStats(current);
+      if (current) {
+        renderStats(current);
+        updateActions(current);
+      }
     }, REFRESH_MS);
   });
 
@@ -148,6 +225,9 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     stats.replaceChildren();
     demolishBtn.hidden = true;
     recruitBtn.hidden = true;
+    upgradeBtn.hidden = true;
+    repairBtn.hidden = true;
+    staffRow.hidden = true;
     dismissBtn.hidden = false;
     panel.hidden = false;
   });

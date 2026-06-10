@@ -1,12 +1,4 @@
-import {
-  BUILDING_DEFAULT_HP,
-  SAVE_KEY,
-  SAVE_VERSION,
-  SOLDIER_HP,
-  WAVE_FIRST_DELAY,
-  type ResourceId,
-} from '../data/config';
-import { getDef } from '../data/buildings';
+import { SAVE_KEY, SAVE_VERSION, type ResourceId } from '../data/config';
 import type { BuildingSave } from '../entities/Building';
 import type { EnemySave } from '../entities/Enemy';
 import type { SoldierSave } from '../entities/Soldier';
@@ -38,30 +30,12 @@ export interface SaveData {
  * Returns null when the version is unknown (newer than this build).
  */
 export function migrateSave(data: SaveData): SaveData | null {
-  if (data.saveVersion === 1) {
-    // v1 → v2: soldiers introduced in phase 2.
-    data.soldiers = [];
-    data.saveVersion = 2;
-  }
-  if (data.saveVersion === 2) {
-    // v2 → v3: combat. Buildings/soldiers gain hp, waves start fresh.
-    for (const b of data.buildings) {
-      b.hp = getDef(b.defId).maxHp ?? BUILDING_DEFAULT_HP;
-    }
-    for (const s of data.soldiers) {
-      s.hp = SOLDIER_HP;
-      s.anchor = { x: Math.round(s.x), y: Math.round(s.y) };
-    }
-    data.enemies = [];
-    data.wave = { number: 0, nextInSeconds: WAVE_FIRST_DELAY, kills: 0 };
-    data.saveVersion = 3;
-  }
-  if (data.saveVersion === 3) {
-    // v3 → v4: roads/research/tutorial; enemies gain a type id.
-    for (const e of data.enemies) e.defId = e.defId ?? 'raider';
-    data.techs = [];
-    data.tutorialStep = 0;
-    data.saveVersion = 4;
+  // v5 changed the terrain generator (forests, guaranteed start resources):
+  // older worlds cannot be reproduced from their seed, so anything below
+  // v5 starts a fresh game. Future versions migrate step by step from here.
+  if (data.saveVersion < 5) {
+    console.warn('Savegame vor Version 5 — Terrain hat sich geändert, starte neu.');
+    return null;
   }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }

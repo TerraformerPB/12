@@ -10,6 +10,7 @@ import {
   START_RESOURCES,
 } from '../data/config';
 import { getDef, type BuildingDefId } from '../data/buildings';
+import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
 import { Enemy } from '../entities/Enemy';
 import { Soldier } from '../entities/Soldier';
@@ -52,7 +53,8 @@ import { createTutorialBanner } from '../ui/TutorialBanner';
 
 /** How a building's tiles treat walking units. */
 function passModeOf(def: BuildingDef): PassMode {
-  if (def.isRoad) return PassMode.Road;
+  if (def.roadTier === 2) return PassMode.RoadStone;
+  if (def.roadTier === 1) return PassMode.Road;
   if (def.passable) return PassMode.Gate;
   return PassMode.None;
 }
@@ -178,6 +180,7 @@ export class Game {
       grid: this.grid,
       enemies: this.enemies,
       nextEntityId: () => this.nextId++,
+      getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
     });
     this.combatSystem = new CombatSystem({
       grid: this.grid,
@@ -429,7 +432,82 @@ export class Game {
     const b = new Building(this.nextId++, defId, gx, gy, rotated);
     this.buildings.set(b.id, b);
     this.grid.setOccupantRect(gx, gy, b.w, b.h, b.id, passModeOf(b.def));
+    // Staff new workplaces automatically from the free population.
+    if (b.workersRequired > 0) {
+      b.assignedWorkers = Math.min(b.workersRequired, this.freePopulation());
+      if (b.assignedWorkers < b.workersRequired) {
+        events.emit('toast:show', { message: 'Zu wenig freie Bevölkerung — baue Hütten' });
+      }
+    }
     return b;
+  }
+
+  /** Population not bound as carrier minimum, soldier or building staff. */
+  freePopulation(): number {
+    return Math.max(0, this.economy.workerTarget() - MIN_WORKERS);
+  }
+
+  /** Info-panel action: change a building's staff by ±1. */
+  assignWorker(buildingId: number, delta: 1 | -1): void {
+    const b = this.buildings.get(buildingId);
+    if (!b || b.workersRequired === 0) return;
+    if (delta > 0) {
+      if (b.assignedWorkers >= b.workersRequired) return;
+      if (this.freePopulation() <= 0) {
+        events.emit('toast:show', { message: 'Keine freie Bevölkerung — baue Hütten' });
+        return;
+      }
+      b.assignedWorkers++;
+    } else if (b.assignedWorkers > 0) {
+      b.assignedWorkers--;
+    }
+  }
+
+  /** Repair price: half the build cost, scaled by missing hp. */
+  repairCost(b: Building): Partial<Record<ResourceId, number>> {
+    const fraction = 1 - b.hp / b.maxHp;
+    const cost: Partial<Record<ResourceId, number>> = {};
+    for (const r of RESOURCE_IDS) {
+      const c = Math.ceil((b.def.cost[r] ?? 0) * DEMOLISH_REFUND * fraction);
+      if (c > 0) cost[r] = c;
+    }
+    return cost;
+  }
+
+  /** Info-panel action: restore a damaged building to full hp. */
+  repairBuilding(id: number): void {
+    const b = this.buildings.get(id);
+    if (!b || b.hp >= b.maxHp) return;
+    const cost = this.repairCost(b);
+    const missing = missingResourcesMessage(this.store, cost);
+    if (missing) {
+      events.emit('toast:show', { message: missing });
+      return;
+    }
+    this.store.pay(cost);
+    b.hp = b.maxHp;
+    this.sound.play('place');
+    events.emit('toast:show', { message: `${b.def.name} repariert` });
+  }
+
+  /** Info-panel action: upgrade e.g. a road into a paved road. */
+  upgradeBuilding(id: number): void {
+    const b = this.buildings.get(id);
+    const targetId = b?.def.upgradesTo as BuildingDefId | undefined;
+    if (!b || !targetId) return;
+    const target = getDef(targetId);
+    const missing = missingResourcesMessage(this.store, target.cost);
+    if (missing) {
+      events.emit('toast:show', { message: missing });
+      return;
+    }
+    this.store.pay(target.cost);
+    this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
+    this.buildings.delete(b.id);
+    this.economy.onBuildingRemoved(b.id);
+    const upgraded = this.addBuilding(targetId, b.x, b.y, b.rotated);
+    this.sound.play('place');
+    this.select(upgraded.id);
   }
 
   demolish(id: number): void {
