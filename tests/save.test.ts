@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SaveManager, migrateSave, type SaveData } from '../src/core/SaveManager';
 import { SAVE_VERSION } from '../src/data/config';
 import { Building } from '../src/entities/Building';
+import { Enemy } from '../src/entities/Enemy';
 import { Soldier } from '../src/entities/Soldier';
 import { Worker } from '../src/entities/Worker';
 import { IsoGrid } from '../src/world/IsoGrid';
@@ -29,17 +30,23 @@ function sampleData(): SaveData {
   worker.job = { kind: 'deliver', buildingId: 2, resource: 'wheat' };
 
   const soldier = new Soldier(7, 20, 21);
-  soldier.state = 'moving';
+  soldier.mode = 'command';
+  soldier.hp = 17;
   soldier.setPath([{ x: 19, y: 21 }, { x: 18, y: 21 }]);
+
+  const enemy = new Enemy(9, 1.5, 40);
+  enemy.hp = 11;
 
   return {
     saveVersion: SAVE_VERSION,
     seed: 1234567,
-    nextEntityId: 8,
+    nextEntityId: 10,
     resources: { wood: 12, stone: 3, wheat: 0, flour: 4, bread: 9 },
     buildings: [new Building(1, 'warehouse', 23, 23, false).toSave(), mill.toSave()],
     workers: [worker.toSave()],
     soldiers: [soldier.toSave()],
+    enemies: [enemy.toSave()],
+    wave: { number: 4, nextInSeconds: 87, kills: 23 },
   };
 }
 
@@ -78,15 +85,42 @@ describe('save/load roundtrip', () => {
     expect(target).toEqual({ x: 18, y: 21 });
   });
 
-  it('migrates v1 savegames by adding an empty soldier list', () => {
-    // Build a v1 save: no soldiers field, version 1.
-    const { soldiers: _soldiers, ...rest } = sampleData();
+  it('migrates v1 savegames all the way to the current version', () => {
+    // Build a v1 save: no soldiers/enemies/wave fields, version 1.
+    const { soldiers: _s, enemies: _e, wave: _w, ...rest } = sampleData();
     const v1 = { ...rest, saveVersion: 1 };
     const migrated = migrateSave(v1 as SaveData);
     expect(migrated).not.toBeNull();
     expect(migrated!.saveVersion).toBe(SAVE_VERSION);
     expect(migrated!.soldiers).toEqual([]);
+    expect(migrated!.enemies).toEqual([]);
+    expect(migrated!.wave.number).toBe(0);
     expect(migrated!.buildings).toHaveLength(2);
+  });
+
+  it('migrates v2 savegames: buildings and soldiers gain full hp', () => {
+    const { enemies: _e, wave: _w, ...rest } = sampleData();
+    const v2 = JSON.parse(JSON.stringify({ ...rest, saveVersion: 2 })) as SaveData;
+    for (const b of v2.buildings) delete (b as Partial<typeof b>).hp;
+    for (const s of v2.soldiers) {
+      delete (s as Partial<typeof s>).hp;
+      delete (s as Partial<typeof s>).anchor;
+    }
+    const migrated = migrateSave(v2);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.buildings[0].hp).toBe(150); // warehouse maxHp
+    expect(migrated!.soldiers[0].hp).toBeGreaterThan(0);
+    expect(migrated!.soldiers[0].anchor).toEqual({ x: 20, y: 21 });
+    expect(migrated!.enemies).toEqual([]);
+  });
+
+  it('round-trips enemies and wave state', () => {
+    const data = sampleData();
+    const restored = Enemy.fromSave(data.enemies[0]);
+    expect(restored.hp).toBe(11);
+    expect(restored.tile).toEqual({ x: 2, y: 40 });
+    expect(data.wave).toEqual({ number: 4, nextInSeconds: 87, kills: 23 });
   });
 
   it('round-trips worker position, cargo and job', () => {

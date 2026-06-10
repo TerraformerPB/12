@@ -1,7 +1,17 @@
-import { SAVE_KEY, SAVE_VERSION, type ResourceId } from '../data/config';
+import {
+  BUILDING_DEFAULT_HP,
+  SAVE_KEY,
+  SAVE_VERSION,
+  SOLDIER_HP,
+  WAVE_FIRST_DELAY,
+  type ResourceId,
+} from '../data/config';
+import { getDef } from '../data/buildings';
 import type { BuildingSave } from '../entities/Building';
+import type { EnemySave } from '../entities/Enemy';
 import type { SoldierSave } from '../entities/Soldier';
 import type { WorkerSave } from '../entities/Worker';
+import type { WaveSave } from '../systems/WaveSystem';
 
 /** Complete serialized game state. Versioned for future migrations. */
 export interface SaveData {
@@ -14,6 +24,9 @@ export interface SaveData {
   workers: WorkerSave[];
   /** Since save version 2. */
   soldiers: SoldierSave[];
+  /** Since save version 3. */
+  enemies: EnemySave[];
+  wave: WaveSave;
 }
 
 /**
@@ -25,6 +38,19 @@ export function migrateSave(data: SaveData): SaveData | null {
     // v1 → v2: soldiers introduced in phase 2.
     data.soldiers = [];
     data.saveVersion = 2;
+  }
+  if (data.saveVersion === 2) {
+    // v2 → v3: combat. Buildings/soldiers gain hp, waves start fresh.
+    for (const b of data.buildings) {
+      b.hp = getDef(b.defId).maxHp ?? BUILDING_DEFAULT_HP;
+    }
+    for (const s of data.soldiers) {
+      s.hp = SOLDIER_HP;
+      s.anchor = { x: Math.round(s.x), y: Math.round(s.y) };
+    }
+    data.enemies = [];
+    data.wave = { number: 0, nextInSeconds: WAVE_FIRST_DELAY, kills: 0 };
+    data.saveVersion = 3;
   }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }

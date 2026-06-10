@@ -73,18 +73,21 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Einheiten passierbar), Wachturm, Kaserne; Soldaten rekrutieren (kosten Brot
   und Bevölkerung), per Tap selektieren und kommandieren. Savegame v2 mit
   v1-Migration.
-- **Phase 3 — Wellen & Gegner:** Wellen-Spawner, Kampfsystem (Türme schießen,
-  Soldaten kämpfen), Gebäudeschaden, Game-Over/Score; Sound-Assets über den
-  vorhandenen `SoundManager`. Gegner-Pathfinding behandelt Tore als blockiert
-  (eigene Kostenfunktion auf dem `moveCost`-Hook).
+- **Phase 3 (✓) — Wellen & Gegner:** Wellen-Spawner mit Skalierung, Kampfsystem
+  (Türme schießen mit Projektil-Visuals, Soldaten kämpfen mit Aggro um ihren
+  Wachposten), Gebäudeschaden mit HP-Balken, Game Over + Score. Gegner-Routing
+  über `enemyMoveCost`: Tore blockiert, Mauern als teurer "Breach"-Pfad — sie
+  greifen die günstigste Bresche an. Sounds werden zur Laufzeit synthetisiert
+  (keine Fremd-Assets) und über den `SoundManager`/Howler abgespielt. Savegame v3.
 - **Phase 4 — Inhalt & Komfort:** Straßen (billigere Pfadkosten), Tech-Tree,
-  Tutorial, Sprite-Atlanten statt Platzhalter, Balancing-Pass.
+  Tutorial, Sprite-Atlanten statt Platzhalter, weitere Gegner-/Soldatentypen,
+  Balancing-Pass.
 - **Phase 5 — Capacitor:** Play-Store-Build, Safe-Areas/Lifecycle sind
   vorbereitet (DOM-UI, `visibilitychange`/`pagehide`-Persistenz).
 - **Phase 6 — Monetarisierung:** Rewarded Ads + IAP über Capacitor-Plugins;
   Savegame-Migrationen über das `saveVersion`-Feld.
 
-## Phase-1/2-Hinweise
+## Spielhinweise
 
 - Steinbruch ist nur direkt angrenzend an Fels platzierbar.
 - Träger holen Output bei Produzenten ab; Mühle/Bäckerei bekommen Input vom
@@ -92,4 +95,7 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
 - Soldaten: Kaserne bauen → im Info-Panel rekrutieren (kostet Brot und einen
   Bevölkerungs-Slot, der dem Träger-Pool fehlt). Soldat antippen, dann ein
   Ziel auf der Karte antippen. Tore lassen eigene Einheiten durch, Mauern nicht.
+- Wellen: Die HUD-Anzeige ⚔️ zählt zur nächsten Welle herunter. Gegner
+  marschieren aufs Lagerhaus zu; ist es eingemauert, brechen sie die
+  günstigste Stelle auf. Fällt das Lagerhaus, ist das Spiel verloren.
 - `window.__game` steht in der Browser-Konsole als Debug-Handle bereit.
