@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { SaveManager, type SaveData } from '../src/core/SaveManager';
+import { SaveManager, migrateSave, type SaveData } from '../src/core/SaveManager';
 import { SAVE_VERSION } from '../src/data/config';
 import { Building } from '../src/entities/Building';
+import { Soldier } from '../src/entities/Soldier';
 import { Worker } from '../src/entities/Worker';
 import { IsoGrid } from '../src/world/IsoGrid';
 import { generateTerrain } from '../src/world/TerrainGenerator';
@@ -27,13 +28,18 @@ function sampleData(): SaveData {
   worker.carrying = 'wheat';
   worker.job = { kind: 'deliver', buildingId: 2, resource: 'wheat' };
 
+  const soldier = new Soldier(7, 20, 21);
+  soldier.state = 'moving';
+  soldier.setPath([{ x: 19, y: 21 }, { x: 18, y: 21 }]);
+
   return {
     saveVersion: SAVE_VERSION,
     seed: 1234567,
-    nextEntityId: 6,
+    nextEntityId: 8,
     resources: { wood: 12, stone: 3, wheat: 0, flour: 4, bread: 9 },
     buildings: [new Building(1, 'warehouse', 23, 23, false).toSave(), mill.toSave()],
     workers: [worker.toSave()],
+    soldiers: [soldier.toSave()],
   };
 }
 
@@ -62,6 +68,25 @@ describe('save/load roundtrip', () => {
     expect(restored.toSave()).toEqual(original);
     expect(restored.active).toBe(true);
     expect(restored.progress).toBe(33);
+  });
+
+  it('round-trips a soldier including its movement order', () => {
+    const original = sampleData().soldiers[0];
+    expect(original.target).toEqual({ x: 18, y: 21 });
+    const { soldier, target } = Soldier.fromSave(original);
+    expect(soldier.tile).toEqual({ x: 20, y: 21 });
+    expect(target).toEqual({ x: 18, y: 21 });
+  });
+
+  it('migrates v1 savegames by adding an empty soldier list', () => {
+    // Build a v1 save: no soldiers field, version 1.
+    const { soldiers: _soldiers, ...rest } = sampleData();
+    const v1 = { ...rest, saveVersion: 1 };
+    const migrated = migrateSave(v1 as SaveData);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.soldiers).toEqual([]);
+    expect(migrated!.buildings).toHaveLength(2);
   });
 
   it('round-trips worker position, cargo and job', () => {

@@ -1,5 +1,6 @@
 import { SAVE_KEY, SAVE_VERSION, type ResourceId } from '../data/config';
 import type { BuildingSave } from '../entities/Building';
+import type { SoldierSave } from '../entities/Soldier';
 import type { WorkerSave } from '../entities/Worker';
 
 /** Complete serialized game state. Versioned for future migrations. */
@@ -11,6 +12,21 @@ export interface SaveData {
   resources: Record<ResourceId, number>;
   buildings: BuildingSave[];
   workers: WorkerSave[];
+  /** Since save version 2. */
+  soldiers: SoldierSave[];
+}
+
+/**
+ * Upgrade older savegames in place, one version step at a time.
+ * Returns null when the version is unknown (newer than this build).
+ */
+export function migrateSave(data: SaveData): SaveData | null {
+  if (data.saveVersion === 1) {
+    // v1 → v2: soldiers introduced in phase 2.
+    data.soldiers = [];
+    data.saveVersion = 2;
+  }
+  return data.saveVersion === SAVE_VERSION ? data : null;
 }
 
 /** Minimal storage interface so tests can inject a fake. */
@@ -43,13 +59,12 @@ export class SaveManager {
     try {
       const raw = this.storage.getItem(this.key);
       if (!raw) return null;
-      const data = JSON.parse(raw) as SaveData;
-      if (data.saveVersion !== SAVE_VERSION) {
-        // Extension point: run migrations here once SAVE_VERSION > 1.
-        console.warn(`Unbekannte Savegame-Version ${data.saveVersion}, starte neu.`);
+      const migrated = migrateSave(JSON.parse(raw) as SaveData);
+      if (!migrated) {
+        console.warn('Unbekannte Savegame-Version, starte neu.');
         return null;
       }
-      return data;
+      return migrated;
     } catch (err) {
       console.warn('Savegame konnte nicht geladen werden:', err);
       return null;

@@ -69,10 +69,14 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
 
 - **Phase 1 (✓):** Iso-Grid, Kamera/Touch, Bausystem, Wirtschaft mit Trägern,
   Brot-Kette, Save/Load, Tests.
-- **Phase 2 — Verteidigung:** Mauern, Türme, Tore; Soldaten-Entities;
-  Pathfinding-Kosten für Mauern sind im `moveCost`-Hook bereits vorgesehen.
-- **Phase 3 — Wellen & Gegner:** Wellen-Spawner, Kampfsystem, Gebäudeschaden,
-  Game-Over/Score; Sound-Assets über den vorhandenen `SoundManager`.
+- **Phase 2 (✓) — Verteidigung:** Mauern (blockieren Pfade), Tore (für eigene
+  Einheiten passierbar), Wachturm, Kaserne; Soldaten rekrutieren (kosten Brot
+  und Bevölkerung), per Tap selektieren und kommandieren. Savegame v2 mit
+  v1-Migration.
+- **Phase 3 — Wellen & Gegner:** Wellen-Spawner, Kampfsystem (Türme schießen,
+  Soldaten kämpfen), Gebäudeschaden, Game-Over/Score; Sound-Assets über den
+  vorhandenen `SoundManager`. Gegner-Pathfinding behandelt Tore als blockiert
+  (eigene Kostenfunktion auf dem `moveCost`-Hook).
 - **Phase 4 — Inhalt & Komfort:** Straßen (billigere Pfadkosten), Tech-Tree,
   Tutorial, Sprite-Atlanten statt Platzhalter, Balancing-Pass.
 - **Phase 5 — Capacitor:** Play-Store-Build, Safe-Areas/Lifecycle sind
@@ -80,9 +84,12 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
 - **Phase 6 — Monetarisierung:** Rewarded Ads + IAP über Capacitor-Plugins;
   Savegame-Migrationen über das `saveVersion`-Feld.
 
-## Phase-1-Hinweise
+## Phase-1/2-Hinweise
 
 - Steinbruch ist nur direkt angrenzend an Fels platzierbar.
 - Träger holen Output bei Produzenten ab; Mühle/Bäckerei bekommen Input vom
   Lagerhaus geliefert (Lieferungen haben Priorität).
+- Soldaten: Kaserne bauen → im Info-Panel rekrutieren (kostet Brot und einen
+  Bevölkerungs-Slot, der dem Träger-Pool fehlt). Soldat antippen, dann ein
+  Ziel auf der Karte antippen. Tore lassen eigene Einheiten durch, Mauern nicht.
 - `window.__game` steht in der Browser-Konsole als Debug-Handle bereit.
