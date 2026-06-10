@@ -52,7 +52,7 @@ describe('roads', () => {
     const grid = new IsoGrid(5, 5);
     grid.setOccupantRect(2, 2, 1, 1, 7, PassMode.Road);
     expect(grid.moveCost(2, 2)).toBeLessThan(1);
-    expect(grid.isRoadAt(2, 2)).toBe(true);
+    expect(grid.speedFactorAt(2, 2)).toBeGreaterThan(1);
     expect(grid.enemyMoveCost(ENEMY_BREACH_COST)(2, 2)).toBe(1);
     expect(grid.isFree(2, 2)).toBe(false); // still not buildable
   });

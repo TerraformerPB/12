@@ -98,6 +98,27 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   „Weiterspielen (Werbung)" nach Game Over. IAP bleibt als Interface
   (`monetization/Iap.ts`) vorbereitet.
 
+- **Phase 7 (✓) — Spieltiefe:** Wälder als Terrain (Holzfäller nur daneben,
+  Wald bremst Fußwege), Brücken über den Fluss (auch für Angreifer!),
+  Erz→Waffen-Kette (Erzmine an Fels, Schmiede; Soldaten kosten Brot+Waffe),
+  Arbeiter-Zuteilung pro Betrieb (Siedler-Stil, Produktion skaliert mit
+  Besetzung; Auto-Zuteilung beim Bau, ± im Info-Panel), Straßen-Ausbau zur
+  Pflasterstraße, Gebäude-Reparatur, mehr Startressourcen und spätere erste
+  Welle, faire Spawns (Gegner starten nur dort, wo sie das Lagerhaus
+  erreichen können — kein Glücksspiel mehr am Fluss), Atmosphäre-Details
+  (Blumen, Büsche, Wasser-Strömung) und überarbeitete Gebäude-/Einheiten-
+  Platzhalter mit Lauf-Animation. Savegame v5 (ältere Stände starten neu,
+  da sich die Kartengenerierung geändert hat).
+- **Phase 8 (Konzept) — Burg-Duell (PvP):** Asynchroner 1-gegen-1-Modus im
+  Clash-of-Clans-Stil: Man greift den Burg-Schnappschuss eines anderen
+  Spielers an, aber statt Karten/Truppen direkt zu steuern, schickt das
+  eigene Wirtschaftssystem automatisch Angriffswellen — wer seine Produktion
+  (Waffen, Brot, Bevölkerung) besser managt, stellt die stärkeren Wellen.
+  Benötigt erstmals ein Backend (Matchmaking, Burg-Snapshots, Replays);
+  die deterministische Simulation (fixe Tickrate, Seed-Terrain) ist dafür
+  die richtige Grundlage, weil Kämpfe server- wie clientseitig identisch
+  nachgerechnet werden können.
+
 ## Play-Store-Build (Capacitor)
 
 Auf einem Rechner mit Android Studio (inkl. Android SDK):
@@ -123,7 +144,11 @@ Release-Checkliste vor dem Store-Upload:
 
 ## Spielhinweise
 
-- Steinbruch ist nur direkt angrenzend an Fels platzierbar.
+- Steinbruch/Erzmine nur an Fels, Holzfällerhütte nur an Wald platzierbar.
+- Betriebe brauchen zugeteilte Arbeiter (Info-Panel ±). Arbeiter fehlen dann
+  dem Träger-Pool — Hütten bauen!
+- Brücken verbinden die Flussufer — für beide Seiten. Beschädigte Gebäude
+  lassen sich im Info-Panel reparieren, Straßen zu Pflasterstraßen ausbauen.
 - Träger holen Output bei Produzenten ab; Mühle/Bäckerei bekommen Input vom
   Lagerhaus geliefert (Lieferungen haben Priorität).
 - Soldaten: Kaserne bauen → im Info-Panel rekrutieren (kostet Brot und einen

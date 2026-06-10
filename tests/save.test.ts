@@ -41,7 +41,7 @@ function sampleData(): SaveData {
     saveVersion: SAVE_VERSION,
     seed: 1234567,
     nextEntityId: 10,
-    resources: { wood: 12, stone: 3, wheat: 0, flour: 4, bread: 9 },
+    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9 },
     buildings: [new Building(1, 'warehouse', 23, 23, false).toSave(), mill.toSave()],
     workers: [worker.toSave()],
     soldiers: [soldier.toSave()],
@@ -87,49 +87,10 @@ describe('save/load roundtrip', () => {
     expect(target).toEqual({ x: 18, y: 21 });
   });
 
-  it('migrates v1 savegames all the way to the current version', () => {
-    // Build a v1 save: no soldiers/enemies/wave fields, version 1.
-    const { soldiers: _s, enemies: _e, wave: _w, techs: _t, tutorialStep: _ts, ...rest } = sampleData();
-    const v1 = { ...rest, saveVersion: 1 };
-    const migrated = migrateSave(v1 as SaveData);
-    expect(migrated).not.toBeNull();
-    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
-    expect(migrated!.soldiers).toEqual([]);
-    expect(migrated!.enemies).toEqual([]);
-    expect(migrated!.wave.number).toBe(0);
-    expect(migrated!.techs).toEqual([]);
-    expect(migrated!.tutorialStep).toBe(0);
-    expect(migrated!.buildings).toHaveLength(2);
-  });
-
-  it('migrates v2 savegames: buildings and soldiers gain full hp', () => {
-    const { enemies: _e, wave: _w, techs: _t, tutorialStep: _ts, ...rest } = sampleData();
-    const v2 = JSON.parse(JSON.stringify({ ...rest, saveVersion: 2 })) as SaveData;
-    for (const b of v2.buildings) delete (b as Partial<typeof b>).hp;
-    for (const s of v2.soldiers) {
-      delete (s as Partial<typeof s>).hp;
-      delete (s as Partial<typeof s>).anchor;
-    }
-    const migrated = migrateSave(v2);
-    expect(migrated).not.toBeNull();
-    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
-    expect(migrated!.buildings[0].hp).toBe(150); // warehouse maxHp
-    expect(migrated!.soldiers[0].hp).toBeGreaterThan(0);
-    expect(migrated!.soldiers[0].anchor).toEqual({ x: 20, y: 21 });
-    expect(migrated!.enemies).toEqual([]);
-  });
-
-  it('migrates v3 savegames: enemies default to the raider type', () => {
-    const v3 = JSON.parse(JSON.stringify(sampleData())) as SaveData;
-    v3.saveVersion = 3;
-    delete (v3.enemies[0] as Partial<(typeof v3.enemies)[0]>).defId;
-    delete (v3 as Partial<SaveData>).techs;
-    delete (v3 as Partial<SaveData>).tutorialStep;
-    const migrated = migrateSave(v3);
-    expect(migrated).not.toBeNull();
-    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
-    expect(migrated!.enemies[0].defId).toBe('raider');
-    expect(migrated!.techs).toEqual([]);
+  it('rejects pre-v5 savegames (terrain generator changed)', () => {
+    // Worlds from older versions cannot be reproduced from their seed.
+    expect(migrateSave({ ...sampleData(), saveVersion: 4 })).toBeNull();
+    expect(migrateSave({ ...sampleData(), saveVersion: 1 })).toBeNull();
   });
 
   it('round-trips enemies and wave state', () => {
