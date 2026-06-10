@@ -1,4 +1,7 @@
 import {
+  TERRAIN_FOREST_CLUSTERS,
+  TERRAIN_FOREST_CLUSTER_MAX,
+  TERRAIN_FOREST_CLUSTER_MIN,
   TERRAIN_RIVER_WIDTH,
   TERRAIN_ROCK_CLUSTERS,
   TERRAIN_ROCK_CLUSTER_MAX,
@@ -48,19 +51,46 @@ export function generateTerrain(grid: IsoGrid, seed: number): void {
     }
   }
 
-  // Rock clusters: random-walk blobs.
-  for (let c = 0; c < TERRAIN_ROCK_CLUSTERS; c++) {
-    let x = Math.floor(rng() * grid.width);
-    let y = Math.floor(rng() * grid.height);
-    const size =
-      TERRAIN_ROCK_CLUSTER_MIN +
-      Math.floor(rng() * (TERRAIN_ROCK_CLUSTER_MAX - TERRAIN_ROCK_CLUSTER_MIN + 1));
+  const blob = (startX: number, startY: number, size: number, terrain: Terrain): void => {
+    let x = startX;
+    let y = startY;
     for (let i = 0; i < size; i++) {
       if (grid.inBounds(x, y) && !inSafeZone(grid, x, y) && grid.terrainAt(x, y) === Terrain.Grass) {
-        grid.setTerrain(x, y, Terrain.Rock);
+        grid.setTerrain(x, y, terrain);
       }
       x += Math.floor(rng() * 3) - 1;
       y += Math.floor(rng() * 3) - 1;
     }
+  };
+
+  const clusterSize = (min: number, max: number): number =>
+    min + Math.floor(rng() * (max - min + 1));
+
+  // Rock clusters: random-walk blobs.
+  for (let c = 0; c < TERRAIN_ROCK_CLUSTERS; c++) {
+    blob(
+      Math.floor(rng() * grid.width),
+      Math.floor(rng() * grid.height),
+      clusterSize(TERRAIN_ROCK_CLUSTER_MIN, TERRAIN_ROCK_CLUSTER_MAX),
+      Terrain.Rock,
+    );
   }
+
+  // Forest clusters (lumberjacks must be built next to trees).
+  for (let c = 0; c < TERRAIN_FOREST_CLUSTERS; c++) {
+    blob(
+      Math.floor(rng() * grid.width),
+      Math.floor(rng() * grid.height),
+      clusterSize(TERRAIN_FOREST_CLUSTER_MIN, TERRAIN_FOREST_CLUSTER_MAX),
+      Terrain.Forest,
+    );
+  }
+
+  // Guaranteed starter resources just outside the safe zone, on the side
+  // away from the river, so the first lumberjack/quarry always have a spot.
+  const cx = Math.floor(grid.width / 2);
+  const cy = Math.floor(grid.height / 2);
+  const ring = TERRAIN_SAFE_RADIUS + 2;
+  blob(cx + ring, cy - 2, TERRAIN_FOREST_CLUSTER_MAX, Terrain.Forest);
+  blob(cx + 2, cy + ring, TERRAIN_ROCK_CLUSTER_MAX, Terrain.Rock);
 }

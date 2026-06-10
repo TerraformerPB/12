@@ -1,4 +1,14 @@
-import { MAP_H, MAP_W, ROAD_MOVE_COST, TILE_H, TILE_W } from '../data/config';
+import {
+  FOREST_MOVE_COST,
+  MAP_H,
+  MAP_W,
+  ROAD_MOVE_COST,
+  ROAD_SPEED_FACTOR,
+  STONE_ROAD_MOVE_COST,
+  STONE_ROAD_SPEED_FACTOR,
+  TILE_H,
+  TILE_W,
+} from '../data/config';
 
 /**
  * Coordinate conventions
@@ -54,6 +64,8 @@ export const Terrain = {
   Grass: 0,
   Rock: 1,
   Water: 2,
+  /** Trees: walkable but slow, not buildable; lumberjacks need adjacency. */
+  Forest: 3,
 } as const;
 export type Terrain = (typeof Terrain)[keyof typeof Terrain];
 
@@ -65,8 +77,10 @@ export const PassMode = {
   None: 0,
   /** Gate: own units pass, enemies must breach. */
   Gate: 1,
-  /** Road: everyone passes; own units move cheaper/faster. */
+  /** Road/bridge: everyone passes; own units move cheaper/faster. */
   Road: 2,
+  /** Paved road: even cheaper/faster. */
+  RoadStone: 3,
 } as const;
 export type PassMode = (typeof PassMode)[keyof typeof PassMode];
 
@@ -77,8 +91,8 @@ export type PassMode = (typeof PassMode)[keyof typeof PassMode];
 export class IsoGrid {
   readonly width: number;
   readonly height: number;
-  /** Cheapest tile cost (roads) — keeps the A* heuristic admissible. */
-  readonly minMoveCost = ROAD_MOVE_COST;
+  /** Cheapest tile cost (paved roads) — keeps the A* heuristic admissible. */
+  readonly minMoveCost = STONE_ROAD_MOVE_COST;
   private terrain: Uint8Array;
   /** Building id occupying each tile, NO_OCCUPANT (0) if free. */
   private occupant: Int32Array;
@@ -129,8 +143,17 @@ export class IsoGrid {
     }
   }
 
-  isRoadAt(gx: number, gy: number): boolean {
-    return this.inBounds(gx, gy) && this.passable[this.idx(gx, gy)] === PassMode.Road;
+  /** Walking speed multiplier of the tile a unit stands on (roads). */
+  speedFactorAt(gx: number, gy: number): number {
+    if (!this.inBounds(gx, gy)) return 1;
+    switch (this.passable[this.idx(gx, gy)] as PassMode) {
+      case PassMode.Road:
+        return ROAD_SPEED_FACTOR;
+      case PassMode.RoadStone:
+        return STONE_ROAD_SPEED_FACTOR;
+      default:
+        return 1;
+    }
   }
 
   /** Buildable: in bounds, grass, no building. */
@@ -144,32 +167,56 @@ export class IsoGrid {
 
   /**
    * Movement cost for OWN units entering a tile; Infinity = not walkable.
-   * Gates cost like open ground, roads are cheaper (ROAD_MOVE_COST).
+   * Occupants decide first (bridges make water walkable!), then terrain:
+   * grass = 1, forest slow, rock/water blocked.
    */
   moveCost(gx: number, gy: number): number {
-    if (!this.inBounds(gx, gy) || this.terrainAt(gx, gy) !== Terrain.Grass) return Infinity;
-    if (this.occupant[this.idx(gx, gy)] === NO_OCCUPANT) return 1;
-    switch (this.passable[this.idx(gx, gy)] as PassMode) {
-      case PassMode.Road:
-        return ROAD_MOVE_COST;
-      case PassMode.Gate:
+    if (!this.inBounds(gx, gy)) return Infinity;
+    const occupant = this.occupant[this.idx(gx, gy)];
+    if (occupant !== NO_OCCUPANT) {
+      switch (this.passable[this.idx(gx, gy)] as PassMode) {
+        case PassMode.Road:
+          return ROAD_MOVE_COST;
+        case PassMode.RoadStone:
+          return STONE_ROAD_MOVE_COST;
+        case PassMode.Gate:
+          return 1;
+        case PassMode.None:
+          return Infinity;
+      }
+    }
+    switch (this.terrainAt(gx, gy)) {
+      case Terrain.Grass:
         return 1;
-      case PassMode.None:
+      case Terrain.Forest:
+        return FOREST_MOVE_COST;
+      default:
         return Infinity;
     }
   }
 
   /**
-   * Movement cost for ENEMIES: roads are open ground, gates do NOT let
-   * them through, and any other building tile is "walkable" at a high
+   * Movement cost for ENEMIES: roads/bridges are open ground, gates do NOT
+   * let them through, and any other building tile is "walkable" at a high
    * virtual cost — the resulting path runs through the cheapest breach
    * point, and the enemy attacks the blocking building when it gets there.
    */
   enemyMoveCost(breachCost: number): (gx: number, gy: number) => number {
     return (gx, gy) => {
-      if (!this.inBounds(gx, gy) || this.terrainAt(gx, gy) !== Terrain.Grass) return Infinity;
-      if (this.occupant[this.idx(gx, gy)] === NO_OCCUPANT) return 1;
-      return this.passable[this.idx(gx, gy)] === PassMode.Road ? 1 : breachCost;
+      if (!this.inBounds(gx, gy)) return Infinity;
+      const occupant = this.occupant[this.idx(gx, gy)];
+      if (occupant !== NO_OCCUPANT) {
+        const pass = this.passable[this.idx(gx, gy)] as PassMode;
+        return pass === PassMode.Road || pass === PassMode.RoadStone ? 1 : breachCost;
+      }
+      switch (this.terrainAt(gx, gy)) {
+        case Terrain.Grass:
+          return 1;
+        case Terrain.Forest:
+          return FOREST_MOVE_COST;
+        default:
+          return Infinity;
+      }
     };
   }
 }

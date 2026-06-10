@@ -72,6 +72,11 @@ export interface RenderState {
 
 const CULL_MARGIN = TILE_W * 2;
 
+/** Tiny vertical hop while a unit moves (driven by its position). */
+function walkBob(fx: number, fy: number, moving: boolean): number {
+  return moving ? -Math.abs(Math.sin((fx + fy) * Math.PI * 2)) * 1.6 : 0;
+}
+
 /**
  * Owns the Pixi application and all display objects. Reads pure game state
  * each frame; game logic never touches Pixi. Placeholder art comes from
@@ -157,7 +162,7 @@ export class WorldRenderer {
         for (let gy = cy; gy < maxY; gy++) {
           for (let gx = cx; gx < maxX; gx++) {
             const p = gridToScreen(gx, gy);
-            drawTerrainTile(g, p.x, p.y, grid.terrainAt(gx, gy), (gx + gy) % 2 === 0);
+            drawTerrainTile(g, p.x, p.y, grid.terrainAt(gx, gy), (gx + gy) % 2 === 0, gx, gy);
             bounds.minX = Math.min(bounds.minX, p.x - TILE_W / 2);
             bounds.maxX = Math.max(bounds.maxX, p.x + TILE_W / 2);
             bounds.minY = Math.min(bounds.minY, p.y - TILE_H);
@@ -218,7 +223,7 @@ export class WorldRenderer {
       const fx = e.prevX + (e.x - e.prevX) * alpha;
       const fy = e.prevY + (e.y - e.prevY) * alpha;
       const p = gridToScreen(fx, fy);
-      entry.view.position.set(p.x, p.y);
+      entry.view.position.set(p.x, p.y + walkBob(fx, fy, e.prevX !== e.x || e.prevY !== e.y));
       entry.view.zIndex = fx + fy + 0.5;
     }
     for (const [id, entry] of this.enemyViews) {
@@ -265,7 +270,7 @@ export class WorldRenderer {
       const fx = s.prevX + (s.x - s.prevX) * alpha;
       const fy = s.prevY + (s.y - s.prevY) * alpha;
       const p = gridToScreen(fx, fy);
-      entry.view.position.set(p.x, p.y);
+      entry.view.position.set(p.x, p.y + walkBob(fx, fy, s.prevX !== s.x || s.prevY !== s.y));
       entry.view.zIndex = fx + fy + 0.5;
     }
     for (const [id, entry] of this.soldierViews) {
@@ -337,8 +342,9 @@ export class WorldRenderer {
       const fx = w.prevX + (w.x - w.prevX) * alpha;
       const fy = w.prevY + (w.y - w.prevY) * alpha;
       const p = gridToScreen(fx, fy);
+      const bob = walkBob(fx, fy, w.prevX !== w.x || w.prevY !== w.y);
       // Small per-id offset so idle carriers on the same tile don't stack.
-      entry.view.position.set(p.x + ((w.id * 37) % 13) - 6, p.y + ((w.id * 53) % 7) - 3);
+      entry.view.position.set(p.x + ((w.id * 37) % 13) - 6, p.y + ((w.id * 53) % 7) - 3 + bob);
       entry.view.zIndex = fx + fy + 0.5; // bias: in front of the tile they stand on
     }
     for (const [id, entry] of this.workerViews) {

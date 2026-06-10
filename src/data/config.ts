@@ -6,7 +6,7 @@
 
 // --- Resources -------------------------------------------------------------
 
-export const RESOURCE_IDS = ['wood', 'stone', 'wheat', 'flour', 'bread'] as const;
+export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
 
 export interface ResourceInfo {
@@ -19,6 +19,8 @@ export interface ResourceInfo {
 export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
   wood: { label: 'Holz', icon: '🪵', color: 0x9a6b3f },
   stone: { label: 'Stein', icon: '🪨', color: 0xa8adb8 },
+  ore: { label: 'Erz', icon: '⛏️', color: 0x7a6a58 },
+  weapons: { label: 'Waffen', icon: '🗡️', color: 0xc8ccd4 },
   wheat: { label: 'Weizen', icon: '🌾', color: 0xe3c558 },
   flour: { label: 'Mehl', icon: '⚪', color: 0xf1e9d6 },
   bread: { label: 'Brot', icon: '🥖', color: 0xc07a3a },
@@ -43,13 +45,18 @@ export const MAP_H = 48;
 /** Side length of square terrain render chunks, in tiles. */
 export const TERRAIN_CHUNK_SIZE = 12;
 
-// Terrain generation (phase 1: a river band plus a few rock clusters).
+// Terrain generation: river band, rock clusters, forest clusters.
 export const TERRAIN_ROCK_CLUSTERS = 6;
 export const TERRAIN_ROCK_CLUSTER_MIN = 4;
 export const TERRAIN_ROCK_CLUSTER_MAX = 10;
+export const TERRAIN_FOREST_CLUSTERS = 12;
+export const TERRAIN_FOREST_CLUSTER_MIN = 8;
+export const TERRAIN_FOREST_CLUSTER_MAX = 20;
 export const TERRAIN_RIVER_WIDTH = 2;
 /** Square around map center kept free of obstacles (start area), in tiles. */
 export const TERRAIN_SAFE_RADIUS = 6;
+/** Walking through forest is slow (units prefer paths around it). */
+export const FOREST_MOVE_COST = 1.6;
 
 // --- Camera / input ----------------------------------------------------------
 
@@ -73,26 +80,31 @@ export const START_WORKERS = 4;
 export const DEMOLISH_REFUND = 0.5;
 
 export const START_RESOURCES: Record<ResourceId, number> = {
-  wood: 50,
-  stone: 0,
+  wood: 90,
+  stone: 20,
+  ore: 0,
+  weapons: 0,
   wheat: 0,
   flour: 0,
-  bread: 0,
+  bread: 2,
 };
 
 // --- Roads (phase 4) -------------------------------------------------------------
 
 /** Pathfinding cost of a road tile for own units (grass = 1). */
 export const ROAD_MOVE_COST = 0.6;
-/** Walking speed multiplier while standing on a road tile. */
+/** Paved (upgraded) roads are even cheaper. */
+export const STONE_ROAD_MOVE_COST = 0.45;
+/** Walking speed multiplier while standing on a road / paved road tile. */
 export const ROAD_SPEED_FACTOR = 1.4;
+export const STONE_ROAD_SPEED_FACTOR = 1.8;
 
 // --- Military (phase 2) --------------------------------------------------------
 
 /** Soldier walking speed in tiles per second. */
 export const SOLDIER_SPEED = 1.8;
 /** Cost of recruiting one soldier at the barracks. */
-export const SOLDIER_RECRUIT_COST: Partial<Record<ResourceId, number>> = { bread: 2 };
+export const SOLDIER_RECRUIT_COST: Partial<Record<ResourceId, number>> = { bread: 2, weapons: 1 };
 /** Carriers that must always remain — soldiers cannot use the last slots. */
 export const MIN_WORKERS = 1;
 
@@ -108,7 +120,7 @@ export const SOLDIER_AGGRO_RANGE = 5;
 export const MELEE_RANGE = 1.3;
 
 export const TOWER_RANGE = 5.5;
-export const TOWER_DAMAGE = 3;
+export const TOWER_DAMAGE = 4;
 /** Seconds between tower shots. */
 export const TOWER_ATTACK_INTERVAL = 0.9;
 
@@ -122,12 +134,12 @@ export const ENEMY_REPATH_INTERVAL = 4;
 
 // --- Waves (phase 3) ---------------------------------------------------------------
 
-/** Seconds of peace before the first wave. */
-export const WAVE_FIRST_DELAY = 240;
+/** Seconds of peace before the first wave (time to build the bread chain). */
+export const WAVE_FIRST_DELAY = 480;
 /** Seconds between waves. */
-export const WAVE_INTERVAL = 120;
+export const WAVE_INTERVAL = 150;
 /** Enemies in wave n: BASE + GROWTH × (n − 1), capped. */
-export const WAVE_BASE_COUNT = 3;
+export const WAVE_BASE_COUNT = 2;
 export const WAVE_COUNT_GROWTH = 2;
 export const WAVE_MAX_COUNT = 30;
 
@@ -148,5 +160,5 @@ export const ADMOB_USE_TEST_ADS = true;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

@@ -35,6 +35,11 @@ export const PALETTE = {
   hpBack: 0x331111,
   hpFill: 0x57c454,
   projectile: 0xf5e9c8,
+  treeDark: 0x2e5d2a,
+  treeLight: 0x3f7a36,
+  trunk: 0x5a4026,
+  skin: 0xe8c39a,
+  flag: 0xc23b3b,
 } as const;
 
 /** Multiply an RGB color by a brightness factor. */
@@ -50,6 +55,11 @@ function diamond(cx: number, cy: number): number[] {
   return [cx, cy - HALF_H, cx + HALF_W, cy, cx, cy + HALF_H, cx - HALF_W, cy];
 }
 
+/** Cheap deterministic per-tile hash for scattering decorations. */
+function tileHash(gx: number, gy: number): number {
+  return (((gx * 73856093) ^ (gy * 19349663)) >>> 0) % 997;
+}
+
 /** Draw one terrain tile into a (chunk) graphics object. */
 export function drawTerrainTile(
   g: Graphics,
@@ -57,16 +67,64 @@ export function drawTerrainTile(
   cy: number,
   terrain: Terrain,
   checker: boolean,
+  gx = 0,
+  gy = 0,
 ): void {
+  const hash = tileHash(gx, gy);
   switch (terrain) {
-    case Terrain.Grass:
+    case Terrain.Grass: {
       g.poly(diamond(cx, cy))
         .fill(checker ? PALETTE.grassA : PALETTE.grassB)
         .stroke({ color: PALETTE.grassLine, width: 1, alpha: 0.35 });
+      // Atmosphere: scattered flowers, bushes and pebbles.
+      const ox = ((hash % 13) - 6) * 1.6;
+      const oy = ((hash % 7) - 3) * 1.4;
+      if (hash % 23 === 0) {
+        g.circle(cx + ox, cy + oy, 1.6).fill(0xf2e9b0);
+        g.circle(cx + ox + 4, cy + oy + 2, 1.3).fill(0xe8a8b8);
+      } else if (hash % 19 === 0) {
+        g.ellipse(cx + ox, cy + oy, 4.5, 3).fill(PALETTE.treeDark);
+        g.ellipse(cx + ox - 3, cy + oy + 1.5, 3, 2).fill(PALETTE.treeLight);
+      } else if (hash % 31 === 0) {
+        g.circle(cx + ox, cy + oy, 2).fill(shade(PALETTE.rock, 1.1));
+        g.circle(cx + ox + 3.5, cy + oy + 1.5, 1.4).fill(PALETTE.rock);
+      }
       break;
-    case Terrain.Water:
+    }
+    case Terrain.Water: {
       g.poly(diamond(cx, cy)).fill(checker ? PALETTE.water : PALETTE.waterDeep);
+      // Light streaks suggest current.
+      if (hash % 5 < 2) {
+        const sy = cy - 4 + (hash % 9);
+        g.moveTo(cx - 12 + (hash % 6), sy)
+          .lineTo(cx + 4 + (hash % 8), sy)
+          .stroke({ color: 0x7ba6e0, width: 1.2, alpha: 0.5 });
+      }
       break;
+    }
+    case Terrain.Forest: {
+      g.poly(diamond(cx, cy))
+        .fill(checker ? PALETTE.grassA : PALETTE.grassB)
+        .stroke({ color: PALETTE.grassLine, width: 1, alpha: 0.35 });
+      // Two stylized firs per tile (offset for variety via checker).
+      const tree = (tx: number, ty: number, s: number): void => {
+        g.rect(tx - 1.5 * s, ty - 2 * s, 3 * s, 4 * s).fill(PALETTE.trunk);
+        g.poly([tx, ty - 16 * s, tx + 7 * s, ty - 2 * s, tx - 7 * s, ty - 2 * s]).fill(
+          checker ? PALETTE.treeDark : PALETTE.treeLight,
+        );
+        g.poly([tx, ty - 20 * s, tx + 5 * s, ty - 9 * s, tx - 5 * s, ty - 9 * s]).fill(
+          checker ? PALETTE.treeLight : PALETTE.treeDark,
+        );
+      };
+      if (checker) {
+        tree(cx - 10, cy + 2, 0.9);
+        tree(cx + 8, cy + 6, 1.1);
+      } else {
+        tree(cx + 9, cy + 1, 1.0);
+        tree(cx - 7, cy + 7, 0.8);
+      }
+      break;
+    }
     case Terrain.Rock: {
       g.poly(diamond(cx, cy)).fill(shade(PALETTE.rock, 0.8));
       // Small lump so rock reads as elevated.
@@ -154,7 +212,7 @@ export function drawBuildingView(
   hpRatio: number,
 ): void {
   g.clear();
-  if (def.isRoad) {
+  if (def.roadTier !== undefined) {
     // Flat paving instead of an extruded block.
     const [rn, re, rs, rw] = footprintCorners(w, h);
     g.poly([...rn, ...re, ...rs, ...rw])
@@ -167,10 +225,108 @@ export function drawBuildingView(
     return;
   }
   drawBuildingBlock(g, w, h, def.art);
+  drawDecorations(g, def, w, h);
   // Bar floats above the roof, centered over the footprint.
   const [n, , s] = footprintCorners(w, h);
   const cx = (n[0] + s[0]) / 2;
   drawHpBar(g, cx, n[1] - def.art.height - 10, Math.max(28, w * 18), hpRatio);
+}
+
+/** Per-building placeholder details (roofs, blades, flags, crates …). */
+function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): void {
+  const lift = def.art.height;
+  const [n, e, s, wp] = footprintCorners(w, h);
+  // Roof-face corners.
+  const rn = [n[0], n[1] - lift];
+  const re = [e[0], e[1] - lift];
+  const rs = [s[0], s[1] - lift];
+  const rw = [wp[0], wp[1] - lift];
+  const roofCx = (rn[0] + rs[0]) / 2;
+  const roofCy = (rn[1] + rs[1]) / 2;
+
+  switch (def.id) {
+    case 'mill': {
+      // Windmill cross on a short mast.
+      const mx = roofCx;
+      const my = roofCy - 8;
+      g.moveTo(mx, roofCy).lineTo(mx, my).stroke({ color: 0x4a3b28, width: 2.5 });
+      for (const a of [0.5, 2.07, 3.64, 5.21]) {
+        g.moveTo(mx, my)
+          .lineTo(mx + Math.cos(a) * 16, my + Math.sin(a) * 16)
+          .stroke({ color: 0xf4eee0, width: 3.5 });
+      }
+      break;
+    }
+    case 'tower': {
+      // Crenellations along the two front roof edges + flag.
+      for (let i = 0; i < 4; i++) {
+        const t = (i + 0.5) / 4;
+        g.rect(rw[0] + (rs[0] - rw[0]) * t - 2.5, rw[1] + (rs[1] - rw[1]) * t - 6, 5, 6).fill(
+          shade(def.art.color, 1.25),
+        );
+        g.rect(rs[0] + (re[0] - rs[0]) * t - 2.5, rs[1] + (re[1] - rs[1]) * t - 6, 5, 6).fill(
+          shade(def.art.color, 1.25),
+        );
+      }
+      g.moveTo(roofCx, roofCy).lineTo(roofCx, roofCy - 14).stroke({ color: 0x4a3b28, width: 2 });
+      g.poly([roofCx, roofCy - 14, roofCx + 9, roofCy - 11, roofCx, roofCy - 8]).fill(PALETTE.flag);
+      break;
+    }
+    case 'barracks': {
+      g.moveTo(roofCx, roofCy).lineTo(roofCx, roofCy - 16).stroke({ color: 0x4a3b28, width: 2 });
+      g.poly([roofCx, roofCy - 16, roofCx + 11, roofCy - 12.5, roofCx, roofCy - 9]).fill(
+        PALETTE.flag,
+      );
+      break;
+    }
+    case 'warehouse': {
+      // Two crates on the roof.
+      g.rect(roofCx - 10, roofCy - 7, 9, 7).fill(shade(def.art.color, 0.8));
+      g.rect(roofCx + 1, roofCy - 5, 7, 5).fill(shade(def.art.color, 0.65));
+      break;
+    }
+    case 'bakery': {
+      // Chimney with a bright opening.
+      g.rect(rn[0] + 6, rn[1] + 2, 6, 10).fill(shade(def.art.color, 0.6));
+      g.rect(rn[0] + 6, rn[1], 6, 3).fill(0xe8e3d4);
+      break;
+    }
+    case 'farm': {
+      // Crop rows on the flat roof face.
+      for (let i = 1; i <= 3; i++) {
+        const t = i / 4;
+        g.moveTo(rn[0] + (rw[0] - rn[0]) * t, rn[1] + (rw[1] - rn[1]) * t)
+          .lineTo(re[0] + (rs[0] - re[0]) * t, re[1] + (rs[1] - re[1]) * t)
+          .stroke({ color: shade(def.art.color, 1.3), width: 3, alpha: 0.8 });
+      }
+      break;
+    }
+    case 'lumberjack': {
+      // Log pile at the front corner.
+      for (const [ox, oy] of [[-6, -2], [0, -2], [-3, -7]]) {
+        g.circle(s[0] + ox, s[1] + oy - 2, 3.2)
+          .fill(PALETTE.trunk)
+          .stroke({ color: shade(PALETTE.trunk, 1.4), width: 1 });
+      }
+      break;
+    }
+    case 'hut': {
+      // Door on the right wall.
+      const dx = (s[0] + e[0]) / 2;
+      const dy = (s[1] + e[1]) / 2;
+      g.poly([dx, dy - 1, dx + 5, dy - 3.5, dx + 5, dy - 12, dx, dy - 9]).fill(0x4a3826);
+      break;
+    }
+    case 'gate': {
+      // Arch opening.
+      const dx2 = (s[0] + e[0]) / 2;
+      const dy2 = (s[1] + e[1]) / 2;
+      g.poly([dx2, dy2, dx2 + 7, dy2 - 3.5, dx2 + 7, dy2 - 16, dx2, dy2 - 12]).fill(0x241b12);
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 /** Redraw the ghost preview into `g` (cleared first). */
@@ -192,19 +348,27 @@ export function drawSelection(g: Graphics, w: number, h: number): void {
   g.poly([...n, ...e, ...s, ...wp]).stroke({ color: PALETTE.selection, width: 3, alpha: 0.9 });
 }
 
-/** Draw a soldier placeholder (red body, steel helmet). */
+/** Draw a soldier placeholder (tunic, helmet, spear and shield). */
 export function drawSoldier(g: Graphics, selected: boolean, hpRatio = 1): void {
   g.clear();
   if (selected) {
     g.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
   }
   g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
-  g.circle(0, -7, 6.5)
+  // Spear behind the body.
+  g.moveTo(5, 1).lineTo(9, -20).stroke({ color: PALETTE.trunk, width: 1.8 });
+  g.poly([9, -20, 11.5, -16.5, 7.5, -17]).fill(PALETTE.soldierHelmet);
+  // Tunic body.
+  g.poly([-5, 0, 5, 0, 3.5, -9, -3.5, -9])
     .fill(PALETTE.soldierBody)
-    .stroke({ color: PALETTE.soldierOutline, width: 1.5 });
-  // Helmet cap.
-  g.circle(0, -10, 4).fill(PALETTE.soldierHelmet);
-  drawHpBar(g, 0, -20, 18, hpRatio);
+    .stroke({ color: PALETTE.soldierOutline, width: 1.2 });
+  // Head + helmet with nose guard.
+  g.circle(0, -12, 3.8).fill(PALETTE.skin).stroke({ color: PALETTE.soldierOutline, width: 1 });
+  g.poly([-4.2, -12.5, 4.2, -12.5, 3, -17, -3, -17]).fill(PALETTE.soldierHelmet);
+  g.rect(-0.8, -12.5, 1.6, 3).fill(PALETTE.soldierHelmet);
+  // Shield on the left arm.
+  g.ellipse(-5.5, -6, 3.2, 4.2).fill(0x7a5230).stroke({ color: 0x3a2a18, width: 1 });
+  drawHpBar(g, 0, -22, 18, hpRatio);
 }
 
 /** Draw an enemy placeholder (dark body, horns); size/color from its def. */
@@ -224,11 +388,17 @@ export function drawWorker(g: Graphics, carryingColor: number | null): void {
   g.clear();
   // Soft shadow.
   g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
-  // Body.
-  g.circle(0, -6, 6)
+  // Tunic body.
+  g.poly([-5, 0, 5, 0, 3.5, -9, -3.5, -9])
     .fill(PALETTE.workerBody)
-    .stroke({ color: PALETTE.workerOutline, width: 1.5 });
+    .stroke({ color: PALETTE.workerOutline, width: 1.2 });
+  // Head with simple hood.
+  g.circle(0, -12, 3.8).fill(PALETTE.skin).stroke({ color: PALETTE.workerOutline, width: 1 });
+  g.poly([-4, -13, 4, -13, 0, -17.5]).fill(shade(PALETTE.workerBody, 0.8));
   if (carryingColor !== null) {
-    g.circle(0, -14, 4).fill(carryingColor).stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+    // Crate on the shoulder.
+    g.rect(2, -18, 7, 6)
+      .fill(carryingColor)
+      .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
   }
 }
