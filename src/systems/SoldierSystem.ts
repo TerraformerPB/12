@@ -7,9 +7,8 @@ import { findPath } from '../world/Pathfinding';
 const SPEED_PER_TICK = SOLDIER_SPEED / TICK_RATE;
 
 /**
- * Soldier movement and player commands.
- * Phase 3 extension point: target acquisition, combat and tower garrisons
- * plug in here without touching the economy.
+ * Soldier movement and player commands. Combat decisions (engaging,
+ * chasing, striking) live in CombatSystem, which sets paths on guards.
  */
 export class SoldierSystem {
   private grid: IsoGrid;
@@ -22,12 +21,14 @@ export class SoldierSystem {
 
   tick(): void {
     for (const s of this.soldiers) {
-      if (s.state !== 'moving') {
+      if (!s.hasPath()) {
         s.rest();
         continue;
       }
-      if (s.step(SPEED_PER_TICK)) {
-        s.state = 'idle';
+      if (s.step(SPEED_PER_TICK) && s.mode === 'command') {
+        // Order completed: take up guard duty here.
+        s.mode = 'guard';
+        s.anchor = s.tile;
       }
     }
   }
@@ -46,8 +47,10 @@ export class SoldierSystem {
       events.emit('toast:show', { message: 'Kein Weg dorthin' });
       return false;
     }
+    soldier.mode = 'command';
+    soldier.combatTargetId = null;
+    soldier.anchor = { ...target };
     soldier.setPath(path);
-    soldier.state = 'moving';
     return true;
   }
 

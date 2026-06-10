@@ -3,7 +3,7 @@ import type { BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Soldier } from '../entities/Soldier';
 
-export type GamePhase = 'loading' | 'playing' | 'paused';
+export type GamePhase = 'loading' | 'playing' | 'paused' | 'gameover';
 
 /**
  * All events flowing between game logic and DOM UI.
@@ -19,6 +19,9 @@ export interface GameEvents {
   'build:modeChanged': { defId: BuildingDefId | null; rotated: boolean };
   'game:phaseChanged': { phase: GamePhase };
   'game:loaded': void;
+  'wave:started': { wave: number; count: number };
+  'wave:status': { wave: number; nextInSeconds: number; enemiesAlive: number; kills: number };
+  'game:over': { wavesSurvived: number; kills: number };
 }
 
 type Handler<P> = (payload: P) => void;
