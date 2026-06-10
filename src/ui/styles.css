@@ -376,6 +376,12 @@ button:active {
   color: #ff9d96;
 }
 
+.gameover-stats {
+  margin: 0 0 10px;
+  color: var(--ui-text-dim);
+  font-size: 14px;
+}
+
 .fatal-error {
   position: fixed;
   inset: 0;

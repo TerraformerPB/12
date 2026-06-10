@@ -84,6 +84,9 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       stats.appendChild(row);
     };
 
+    if (b.hp < b.maxHp) {
+      addRow(`❤️ ${b.hp}/${b.maxHp}`, b.hp / b.maxHp);
+    }
     const recipe = b.def.recipe;
     if (recipe) {
       const progress = b.durationTicks > 0 ? b.progress / b.durationTicks : 0;

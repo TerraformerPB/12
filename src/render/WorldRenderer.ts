@@ -1,15 +1,25 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import { RESOURCE_INFO, TERRAIN_CHUNK_SIZE, TILE_H, TILE_W } from '../data/config';
+import {
+  ENEMY_HP,
+  RESOURCE_INFO,
+  SOLDIER_HP,
+  TERRAIN_CHUNK_SIZE,
+  TILE_H,
+  TILE_W,
+} from '../data/config';
 import { getDef } from '../data/buildings';
 import type { Building } from '../entities/Building';
+import type { Enemy } from '../entities/Enemy';
 import type { Soldier } from '../entities/Soldier';
 import type { Worker } from '../entities/Worker';
+import type { Projectile } from '../systems/CombatSystem';
 import type { Camera } from '../world/Camera';
 import { gridToScreen, type IsoGrid } from '../world/IsoGrid';
 import type { GhostState } from '../systems/BuildSystem';
 import {
   PALETTE,
-  createBuildingView,
+  drawBuildingView,
+  drawEnemy,
   drawGhost,
   drawSelection,
   drawSoldier,
@@ -29,6 +39,7 @@ interface Bounds {
 interface BuildingViewEntry {
   view: Graphics;
   bounds: Bounds;
+  lastHp: number;
 }
 
 interface WorkerViewEntry {
@@ -39,6 +50,12 @@ interface WorkerViewEntry {
 interface SoldierViewEntry {
   view: Graphics;
   lastSelected: boolean;
+  lastHp: number;
+}
+
+interface EnemyViewEntry {
+  view: Graphics;
+  lastHp: number;
 }
 
 /** Everything the renderer needs to draw one frame. */
@@ -47,6 +64,8 @@ export interface RenderState {
   buildings: Map<number, Building>;
   workers: Worker[];
   soldiers: Soldier[];
+  enemies: Enemy[];
+  projectiles: Projectile[];
   ghost: GhostState | null;
   selectedId: number | null;
   selectedSoldierId: number | null;
@@ -72,6 +91,8 @@ export class WorldRenderer {
   private buildingViews = new Map<number, BuildingViewEntry>();
   private workerViews = new Map<number, WorkerViewEntry>();
   private soldierViews = new Map<number, SoldierViewEntry>();
+  private enemyViews = new Map<number, EnemyViewEntry>();
+  private projectileView!: Graphics;
   private ghostView!: Graphics;
   private ghostKey = '';
   private selectionView!: Graphics;
@@ -105,6 +126,10 @@ export class WorldRenderer {
     this.ghostView.zIndex = 1_000_000; // always on top of objects
     this.ghostView.visible = false;
     this.objectLayer.addChild(this.ghostView);
+
+    this.projectileView = new Graphics();
+    this.projectileView.zIndex = 999_999; // arrows fly above everything
+    this.objectLayer.addChild(this.projectileView);
 
     this.selectionView = new Graphics();
     this.selectionView.visible = false;
@@ -151,9 +176,12 @@ export class WorldRenderer {
     for (const entry of this.buildingViews.values()) entry.view.destroy();
     for (const entry of this.workerViews.values()) entry.view.destroy();
     for (const entry of this.soldierViews.values()) entry.view.destroy();
+    for (const entry of this.enemyViews.values()) entry.view.destroy();
     this.buildingViews.clear();
     this.workerViews.clear();
     this.soldierViews.clear();
+    this.enemyViews.clear();
+    this.projectileView?.clear();
     this.ghostKey = '';
     this.selectionKey = '';
   }
@@ -164,10 +192,57 @@ export class WorldRenderer {
     this.syncBuildings(state);
     this.syncWorkers(state, alpha);
     this.syncSoldiers(state, alpha);
+    this.syncEnemies(state, alpha);
+    this.syncProjectiles(state);
     this.syncGhost(state);
     this.syncSelection(state);
     this.cull(camera);
     this.app.render();
+  }
+
+  private syncEnemies(state: RenderState, alpha: number): void {
+    const liveIds = new Set<number>();
+    for (const e of state.enemies) {
+      liveIds.add(e.id);
+      let entry = this.enemyViews.get(e.id);
+      if (!entry) {
+        const view = new Graphics();
+        drawEnemy(view, e.hp / ENEMY_HP);
+        this.objectLayer.addChild(view);
+        entry = { view, lastHp: e.hp };
+        this.enemyViews.set(e.id, entry);
+      }
+      if (entry.lastHp !== e.hp) {
+        drawEnemy(entry.view, e.hp / ENEMY_HP);
+        entry.lastHp = e.hp;
+      }
+      const fx = e.prevX + (e.x - e.prevX) * alpha;
+      const fy = e.prevY + (e.y - e.prevY) * alpha;
+      const p = gridToScreen(fx, fy);
+      entry.view.position.set(p.x, p.y);
+      entry.view.zIndex = fx + fy + 0.5;
+    }
+    for (const [id, entry] of this.enemyViews) {
+      if (!liveIds.has(id)) {
+        entry.view.destroy();
+        this.enemyViews.delete(id);
+      }
+    }
+  }
+
+  /** Tower arrows: tiny dots flying from tower to target (visual only). */
+  private syncProjectiles(state: RenderState): void {
+    const g = this.projectileView;
+    g.clear();
+    for (const p of state.projectiles) {
+      const t = Math.min(1, p.age / 6);
+      const from = gridToScreen(p.x0, p.y0);
+      const to = gridToScreen(p.x1, p.y1);
+      const x = from.x + (to.x - from.x) * t;
+      // Arc: launch height at the tower top, dipping to the target.
+      const y = from.y - 40 * (1 - t) + (to.y - from.y) * t - Math.sin(t * Math.PI) * 14;
+      g.circle(x, y, 2.5).fill(PALETTE.projectile);
+    }
   }
 
   private syncSoldiers(state: RenderState, alpha: number): void {
@@ -177,15 +252,16 @@ export class WorldRenderer {
       let entry = this.soldierViews.get(s.id);
       if (!entry) {
         const view = new Graphics();
-        drawSoldier(view, false);
+        drawSoldier(view, false, s.hp / SOLDIER_HP);
         this.objectLayer.addChild(view);
-        entry = { view, lastSelected: false };
+        entry = { view, lastSelected: false, lastHp: s.hp };
         this.soldierViews.set(s.id, entry);
       }
       const selected = state.selectedSoldierId === s.id;
-      if (entry.lastSelected !== selected) {
-        drawSoldier(entry.view, selected);
+      if (entry.lastSelected !== selected || entry.lastHp !== s.hp) {
+        drawSoldier(entry.view, selected, s.hp / SOLDIER_HP);
         entry.lastSelected = selected;
+        entry.lastHp = s.hp;
       }
       const fx = s.prevX + (s.x - s.prevX) * alpha;
       const fy = s.prevY + (s.y - s.prevY) * alpha;
@@ -209,8 +285,16 @@ export class WorldRenderer {
       }
     }
     for (const b of state.buildings.values()) {
-      if (this.buildingViews.has(b.id)) continue;
-      const view = createBuildingView(b.def, b.w, b.h);
+      const existing = this.buildingViews.get(b.id);
+      if (existing) {
+        if (existing.lastHp !== b.hp) {
+          drawBuildingView(existing.view, b.def, b.w, b.h, b.hp / b.maxHp);
+          existing.lastHp = b.hp;
+        }
+        continue;
+      }
+      const view = new Graphics();
+      drawBuildingView(view, b.def, b.w, b.h, b.hp / b.maxHp);
       const anchor = gridToScreen(b.x, b.y);
       view.position.set(anchor.x, anchor.y);
       view.zIndex = b.zIndex;
@@ -229,6 +313,7 @@ export class WorldRenderer {
           minY: Math.min(...corners.map((c) => c.y)) - TILE_H / 2 - b.def.art.height,
           maxY: Math.max(...corners.map((c) => c.y)) + TILE_H / 2,
         },
+        lastHp: b.hp,
       });
     }
   }
@@ -318,6 +403,10 @@ export class WorldRenderer {
       entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
     }
     for (const entry of this.soldierViews.values()) {
+      const { x, y } = entry.view.position;
+      entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+    for (const entry of this.enemyViews.values()) {
       const { x, y } = entry.view.position;
       entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
     }

@@ -11,13 +11,16 @@ import {
 } from '../data/config';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import { Building } from '../entities/Building';
+import { Enemy } from '../entities/Enemy';
 import { Soldier } from '../entities/Soldier';
 import { Worker } from '../entities/Worker';
 import { WorldRenderer } from '../render/WorldRenderer';
 import { BuildSystem } from '../systems/BuildSystem';
 import { missingResourcesMessage } from '../systems/BuildSystem';
+import { CombatSystem } from '../systems/CombatSystem';
 import { EconomySystem, ResourceStore } from '../systems/EconomySystem';
 import { SoldierSystem } from '../systems/SoldierSystem';
+import { WaveSystem } from '../systems/WaveSystem';
 import { Camera } from '../world/Camera';
 import {
   IsoGrid,
@@ -37,6 +40,7 @@ import { createBuildMenu } from '../ui/BuildMenu';
 import { createToast } from '../ui/Toast';
 import { createInfoPanel } from '../ui/InfoPanel';
 import { createPauseMenu } from '../ui/PauseMenu';
+import { createGameOverMenu } from '../ui/GameOverMenu';
 
 /**
  * Central game class: owns world state, systems, renderer and UI, and runs
@@ -56,10 +60,13 @@ export class Game {
   economy!: EconomySystem;
   buildSystem!: BuildSystem;
   soldierSystem!: SoldierSystem;
+  waveSystem!: WaveSystem;
+  combatSystem!: CombatSystem;
 
   readonly buildings = new Map<number, Building>();
   readonly workers: Worker[] = [];
   readonly soldiers: Soldier[] = [];
+  readonly enemies: Enemy[] = [];
   seed = 0;
   private nextId = 1;
   private warehouseId = 0;
@@ -78,6 +85,7 @@ export class Game {
     createBuildMenu(uiRoot, this);
     createInfoPanel(uiRoot, this);
     createPauseMenu(uiRoot, this);
+    createGameOverMenu(uiRoot, this);
     createToast(uiRoot);
 
     const data = this.saveManager.load();
@@ -90,6 +98,11 @@ export class Game {
     window.setInterval(() => {
       if (this.phase === 'playing') this.saveNow();
     }, AUTOSAVE_INTERVAL_MS);
+
+    events.on('wave:started', ({ wave, count }) => {
+      this.sound.play('horn');
+      events.emit('toast:show', { message: `⚔️ Welle ${wave}: ${count} Angreifer!` });
+    });
 
     this.setPhase('playing');
   }
@@ -104,6 +117,7 @@ export class Game {
     this.buildings.clear();
     this.workers.length = 0;
     this.soldiers.length = 0;
+    this.enemies.length = 0;
     this.grid = new IsoGrid(MAP_W, MAP_H);
     generateTerrain(this.grid, seed);
 
@@ -126,6 +140,22 @@ export class Game {
       getSoldierCount: () => this.soldiers.length,
     });
     this.soldierSystem = new SoldierSystem(this.grid, this.soldiers);
+    this.waveSystem = new WaveSystem({
+      grid: this.grid,
+      enemies: this.enemies,
+      nextEntityId: () => this.nextId++,
+    });
+    this.combatSystem = new CombatSystem({
+      grid: this.grid,
+      buildings: this.buildings,
+      soldiers: this.soldiers,
+      enemies: this.enemies,
+      getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
+      destroyBuilding: (id) => this.destroyBuilding(id),
+      onEnemyKilled: () => this.waveSystem.onEnemyKilled(),
+      onSoldierKilled: (soldier) => this.onSoldierKilled(soldier),
+      playSound: (id) => this.sound.play(id),
+    });
     this.buildSystem = new BuildSystem({
       grid: this.grid,
       store,
@@ -159,6 +189,8 @@ export class Game {
     if (this.phase !== 'playing') return;
     this.economy.tick();
     this.soldierSystem.tick();
+    this.waveSystem.tick();
+    this.combatSystem.tick();
   }
 
   renderFrame(alpha: number): void {
@@ -169,6 +201,8 @@ export class Game {
         buildings: this.buildings,
         workers: this.workers,
         soldiers: this.soldiers,
+        enemies: this.enemies,
+        projectiles: this.combatSystem?.projectiles ?? [],
         ghost: this.buildSystem?.ghost ?? null,
         selectedId: this.selectedId,
         selectedSoldierId: this.selectedSoldierId,
@@ -195,7 +229,8 @@ export class Game {
 
   /** Called when the tab is hidden: persist, logic stops via the loop. */
   onHidden(): void {
-    if (this.phase !== 'loading') this.saveNow();
+    // Never persist a lost game over the last valid save.
+    if (this.phase === 'playing' || this.phase === 'paused') this.saveNow();
   }
 
   // --- Interaction -------------------------------------------------------------
@@ -271,7 +306,10 @@ export class Game {
       events.emit('toast:show', { message: missing });
       return;
     }
-    const spawn = barracks.accessTiles(this.grid)[0];
+    // Front-most access tile so the new soldier isn't hidden behind the roof.
+    const spawn = barracks
+      .accessTiles(this.grid)
+      .sort((a, b) => b.x + b.y - (a.x + a.y))[0];
     if (!spawn) {
       events.emit('toast:show', { message: 'Kaserne ist eingebaut — kein Platz' });
       return;
@@ -315,6 +353,39 @@ export class Game {
     events.emit('toast:show', { message: `${b.def.name} abgerissen` });
   }
 
+  /** Building destroyed by enemies: no refund; losing the warehouse ends the game. */
+  destroyBuilding(id: number): void {
+    const b = this.buildings.get(id);
+    if (!b) return;
+    this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
+    this.buildings.delete(id);
+    this.economy.onBuildingRemoved(id);
+    if (this.selectedId === id) this.select(null);
+    this.sound.play('demolish');
+    events.emit('toast:show', { message: `${b.def.name} zerstört!` });
+    if (b.def.isWarehouse) this.gameOver();
+  }
+
+  private onSoldierKilled(soldier: Soldier): void {
+    const idx = this.soldiers.indexOf(soldier);
+    if (idx !== -1) this.soldiers.splice(idx, 1);
+    if (this.selectedSoldierId === soldier.id) this.selectSoldier(null);
+    this.sound.play('death');
+    events.emit('toast:show', { message: 'Ein Soldat ist gefallen' });
+  }
+
+  private gameOver(): void {
+    this.buildSystem.cancel();
+    this.setPhase('gameover');
+    this.sound.play('gameover');
+    // A lost run must not be resumable after reload.
+    this.saveManager.clear();
+    events.emit('game:over', {
+      wavesSurvived: Math.max(0, this.waveSystem.waveNumber - 1),
+      kills: this.waveSystem.kills,
+    });
+  }
+
   // --- Persistence -----------------------------------------------------------------
 
   toSaveData(): SaveData {
@@ -326,6 +397,8 @@ export class Game {
       buildings: [...this.buildings.values()].map((b) => b.toSave()),
       workers: this.workers.map((w) => w.toSave()),
       soldiers: this.soldiers.map((s) => s.toSave()),
+      enemies: this.enemies.map((e) => e.toSave()),
+      wave: this.waveSystem.toSave(),
     };
   }
 
@@ -356,6 +429,12 @@ export class Game {
       if (target) soldierTargets.set(soldier.id, target);
     }
     this.soldierSystem.restoreAfterLoad(soldierTargets);
+
+    for (const es of data.enemies) {
+      // Routes and attack targets are recomputed by CombatSystem.
+      this.enemies.push(Enemy.fromSave(es));
+    }
+    this.waveSystem.restore(data.wave);
 
     const warehouse = this.buildings.get(this.warehouseId);
     if (warehouse) {

@@ -29,6 +29,11 @@ export const PALETTE = {
   soldierBody: 0xb5443c,
   soldierHelmet: 0xb9c0cc,
   soldierOutline: 0x3a1f1c,
+  enemyBody: 0x47324d,
+  enemyHorns: 0x1f1524,
+  hpBack: 0x331111,
+  hpFill: 0x57c454,
+  projectile: 0xf5e9c8,
 } as const;
 
 /** Multiply an RGB color by a brightness factor. */
@@ -131,11 +136,28 @@ export function drawBuildingBlock(
     .fill({ color: shade(color, 1.12), alpha });
 }
 
-/** Create the display object for a placed building. */
-export function createBuildingView(def: BuildingDef, w: number, h: number): Graphics {
-  const g = new Graphics();
+/** Small health bar centered at (cx, cy); only drawn when damaged. */
+export function drawHpBar(g: Graphics, cx: number, cy: number, width: number, ratio: number): void {
+  if (ratio >= 1) return;
+  const r = Math.max(0, ratio);
+  g.rect(cx - width / 2, cy, width, 4).fill({ color: PALETTE.hpBack, alpha: 0.9 });
+  g.rect(cx - width / 2, cy, width * r, 4).fill({ color: PALETTE.hpFill, alpha: 0.95 });
+}
+
+/** (Re)draw a placed building, with a health bar once damaged. */
+export function drawBuildingView(
+  g: Graphics,
+  def: BuildingDef,
+  w: number,
+  h: number,
+  hpRatio: number,
+): void {
+  g.clear();
   drawBuildingBlock(g, w, h, def.art);
-  return g;
+  // Bar floats above the roof, centered over the footprint.
+  const [n, , s] = footprintCorners(w, h);
+  const cx = (n[0] + s[0]) / 2;
+  drawHpBar(g, cx, n[1] - def.art.height - 10, Math.max(28, w * 18), hpRatio);
 }
 
 /** Redraw the ghost preview into `g` (cleared first). */
@@ -158,7 +180,7 @@ export function drawSelection(g: Graphics, w: number, h: number): void {
 }
 
 /** Draw a soldier placeholder (red body, steel helmet). */
-export function drawSoldier(g: Graphics, selected: boolean): void {
+export function drawSoldier(g: Graphics, selected: boolean, hpRatio = 1): void {
   g.clear();
   if (selected) {
     g.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
@@ -169,6 +191,20 @@ export function drawSoldier(g: Graphics, selected: boolean): void {
     .stroke({ color: PALETTE.soldierOutline, width: 1.5 });
   // Helmet cap.
   g.circle(0, -10, 4).fill(PALETTE.soldierHelmet);
+  drawHpBar(g, 0, -20, 18, hpRatio);
+}
+
+/** Draw a raider placeholder (dark body, horns). */
+export function drawEnemy(g: Graphics, hpRatio = 1): void {
+  g.clear();
+  g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+  g.circle(0, -7, 6.5)
+    .fill(PALETTE.enemyBody)
+    .stroke({ color: PALETTE.enemyHorns, width: 1.5 });
+  // Horns.
+  g.poly([-5, -11, -8, -17, -3, -13]).fill(PALETTE.enemyHorns);
+  g.poly([5, -11, 8, -17, 3, -13]).fill(PALETTE.enemyHorns);
+  drawHpBar(g, 0, -22, 18, hpRatio);
 }
 
 /** Create the display object for a carrier. Redrawn when cargo changes. */

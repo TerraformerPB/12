@@ -28,6 +28,7 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
 
   for (const r of RESOURCE_IDS) addChip(r, RESOURCE_INFO[r].icon, RESOURCE_INFO[r].label);
   addChip('population', '👷', 'Bevölkerung (genutzt/gesamt)');
+  addChip('wave', '⚔️', 'Nächste Welle / Gegner');
 
   const spacer = document.createElement('div');
   spacer.className = 'hud-spacer';
@@ -58,5 +59,14 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
   });
   events.on('population:changed', ({ used, total }) => {
     update('population', `${used}/${total}`);
+  });
+  events.on('wave:status', ({ wave, nextInSeconds, enemiesAlive }) => {
+    if (enemiesAlive > 0) {
+      update('wave', `W${wave} · ${enemiesAlive}`);
+    } else {
+      const m = Math.floor(nextInSeconds / 60);
+      const s = nextInSeconds % 60;
+      update('wave', `${m}:${String(s).padStart(2, '0')}`);
+    }
   });
 }
