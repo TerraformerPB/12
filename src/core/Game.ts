@@ -88,9 +88,11 @@ import {
   DUEL_NODE_RADIUS,
   DUEL_NODE_YIELD,
   DUEL_TIME_LIMIT,
+  type DuelAiLevelId,
   type DuelBudgetId,
 } from '../data/duel';
 import { DuelAI } from '../systems/DuelAI';
+import { recordDuel } from './DuelRating';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
 import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
@@ -148,6 +150,8 @@ export class Game {
   private foeWarehouseId = 0;
   /** Selected deployment card (Clash-style unit placement). */
   duelDeployType: SoldierTypeId | null = null;
+  private duelLevel: DuelAiLevelId = 'normal';
+  private duelSpawnCount = 0;
   /** Capturable resource depots on the duel battlefield. */
   duelNodes: { x: number; y: number; resource: ResourceId; icon: string; owner: 'none' | 'player' | 'foe' }[] = [];
   private duelBackup: SaveData | null = null;
@@ -487,11 +491,13 @@ export class Game {
    * resource budget for both. The opponent (DuelAI) converts its budget into
    * attack squads; destroy its warehouse before yours falls.
    */
-  startMirrorDuel(budgetId: DuelBudgetId): boolean {
+  startMirrorDuel(budgetId: DuelBudgetId, level: DuelAiLevelId = 'normal'): boolean {
     if (this.duelMode) return false;
     const budget = DUEL_BUDGETS[budgetId];
     this.duelBackup = this.toSaveData();
     this.duelMode = true;
+    this.duelLevel = level;
+    this.duelSpawnCount = 0;
     this.duelOutcome = null;
     this.duelStats = { unitsLost: 0, buildingsDestroyed: 0, startMs: performance.now() };
 
@@ -526,6 +532,7 @@ export class Game {
           events.emit('toast:show', { message: `⚔️ Der Gegner schickt ${size} Angreifer!` }),
       },
       budget.resources,
+      level,
     );
 
     const wh = this.buildings.get(this.warehouseId);
@@ -568,18 +575,27 @@ export class Game {
     return warehouse.id;
   }
 
-  /** Marshalling tile in front of the foe castle's gate. */
+  /**
+   * AI marshalling tile: rotates between the castle gate and spots next to
+   * the mirrored depots, so AI squads contest the flags on their way out.
+   */
   private duelSpawnTile(): Point {
     const cy = Math.floor(MAP_H / 2);
-    const x = MAP_W - 12;
+    const spots = [
+      { x: MAP_W - 12, y: cy },
+      ...this.duelNodes
+        .filter((n) => n.x >= Math.floor(MAP_W / 2))
+        .map((n) => ({ x: n.x + 1, y: n.y })),
+    ];
+    const base = spots[this.duelSpawnCount++ % spots.length];
     for (let dy = 0; dy < 8; dy++) {
-      for (const y of [cy + dy, cy - dy]) {
-        if (this.grid.inBounds(x, y) && this.grid.occupantAt(x, y) === NO_OCCUPANT) {
-          return { x, y };
+      for (const y of [base.y + dy, base.y - dy]) {
+        if (this.grid.inBounds(base.x, y) && this.grid.occupantAt(base.x, y) === NO_OCCUPANT) {
+          return { x: base.x, y };
         }
       }
     }
-    return { x, y: cy };
+    return { x: MAP_W - 12, y: cy };
   }
 
   /** Resolve duel outcomes outside the combat iteration (safe point). */
@@ -697,7 +713,9 @@ export class Game {
     if (outcome === 'aborted') {
       events.emit('toast:show', { message: 'Duell abgebrochen' });
     } else {
-      events.emit('duel:ended', stats);
+      // Trophies are the offline rating — the future match system's MMR.
+      const { delta } = recordDuel(outcome === 'victory', this.duelLevel);
+      events.emit('duel:ended', { ...stats, trophyDelta: delta });
       this.sound.play(outcome === 'victory' ? 'horn' : 'gameover');
     }
   }

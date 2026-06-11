@@ -595,6 +595,18 @@ button:active {
   display: none;
 }
 
+/* Difficulty selector inside the duel dialog. */
+.pause-card .market-row button {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 12px;
+}
+
+.pause-card .market-row button.researched {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
 /* Clash-style deployment cards during a duel. */
 .duel-deploy {
   position: absolute;

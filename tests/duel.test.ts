@@ -176,3 +176,71 @@ describe('clash-style duel (phase 14)', () => {
     }
   });
 });
+
+describe('duel expansion (phase 15)', () => {
+  function fakeStorage(): Pick<Storage, 'getItem' | 'setItem'> {
+    const map = new Map<string, string>();
+    return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v) };
+  }
+
+  it('trophy rating tracks wins, losses and streaks per difficulty', async () => {
+    const { loadDuelRating, recordDuel } = await import('../src/core/DuelRating');
+    const storage = fakeStorage();
+    expect(loadDuelRating(storage).trophies).toBe(0);
+    const win = recordDuel(true, 'schwer', storage);
+    expect(win.delta).toBe(45);
+    const win2 = recordDuel(true, 'leicht', storage);
+    expect(win2.rating.trophies).toBe(65);
+    expect(win2.rating.streak).toBe(2);
+    const loss = recordDuel(false, 'normal', storage);
+    expect(loss.delta).toBe(-15);
+    expect(loss.rating.streak).toBe(0);
+    expect(loss.rating.bestStreak).toBe(2);
+    expect(loss.rating.wins).toBe(2);
+    expect(loss.rating.losses).toBe(1);
+  });
+
+  it('trophies never drop below zero', async () => {
+    const { recordDuel } = await import('../src/core/DuelRating');
+    const storage = fakeStorage();
+    const loss = recordDuel(false, 'schwer', storage);
+    expect(loss.rating.trophies).toBe(0);
+    expect(loss.delta).toBe(0);
+  });
+
+  it('adds archer (ranged) and ram (siege) as duel-only cards', async () => {
+    const { getSoldierType } = await import('../src/data/soldiers');
+    const { DUEL_DEPLOY_IDS, DUEL_DEPLOY_COSTS } = await import('../src/data/duel');
+    expect(DUEL_DEPLOY_IDS.length).toBe(4);
+    const archer = getSoldierType('archer');
+    expect(archer.range).toBeGreaterThan(1);
+    expect(archer.duelOnly).toBe(true);
+    const ram = getSoldierType('ram');
+    expect(ram.siege).toBe(true);
+    expect(ram.duelOnly).toBe(true);
+    for (const id of DUEL_DEPLOY_IDS) {
+      expect(Object.keys(DUEL_DEPLOY_COSTS[id]).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('harder AI levels attack faster with bigger squads', async () => {
+    const { DUEL_AI_LEVELS } = await import('../src/data/duel');
+    expect(DUEL_AI_LEVELS.schwer.attackInterval).toBeLessThan(DUEL_AI_LEVELS.leicht.attackInterval);
+    expect(DUEL_AI_LEVELS.schwer.squadSize).toBeGreaterThan(DUEL_AI_LEVELS.leicht.squadSize);
+    expect(DUEL_AI_LEVELS.schwer.trophiesWin).toBeGreaterThan(DUEL_AI_LEVELS.leicht.trophiesWin);
+  });
+
+  it('AI squads cap their rams and spend wood on them', async () => {
+    const { DuelAI } = await import('../src/systems/DuelAI');
+    const { Enemy } = await import('../src/entities/Enemy');
+    const enemies: InstanceType<typeof Enemy>[] = [];
+    let id = 1;
+    const ai = new DuelAI(
+      { enemies, nextEntityId: () => id++, spawnTile: () => ({ x: 40, y: 24 }), playSound: () => {}, onSquadSent: () => {} },
+      { wood: 100 },
+      'normal',
+    );
+    expect(ai.sendSquad()).toBe(1); // only rams affordable, capped at 1 per squad
+    expect(enemies.filter((e) => e.defId === 'ram').length).toBe(1);
+  });
+});

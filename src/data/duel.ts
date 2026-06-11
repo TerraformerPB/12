@@ -58,16 +58,41 @@ export const DUEL_UNIT_COSTS: Partial<Record<EnemyDefId, Partial<Record<Resource
   raider: { bread: DUEL_BREAD_PER_RAIDER },
   brute: { weapons: DUEL_WEAPONS_PER_BRUTE },
   skirmisher: { fish: DUEL_FISH_PER_SKIRMISHER },
+  ram: { wood: 20 },
 };
+/** At most this many rams per AI squad (they pay from the wood budget). */
+export const DUEL_AI_RAM_CAP = 1;
 
 // --- Clash-style deployment & capture points (phase 14) ---------------------------
 
 /** What deploying one player unit costs (paid from the inventory). */
-export const DUEL_DEPLOY_COSTS: Record<'soldier' | 'knight', Partial<Record<ResourceId, number>>> =
-  {
-    soldier: { bread: 3 },
-    knight: { weapons: 5, bread: 2 },
-  };
+export const DUEL_DEPLOY_COSTS: Record<
+  'soldier' | 'knight' | 'archer' | 'ram',
+  Partial<Record<ResourceId, number>>
+> = {
+  soldier: { bread: 3 },
+  archer: { fish: 6 },
+  knight: { weapons: 5, bread: 2 },
+  ram: { wood: 12 },
+};
+
+/** Deployment card order and icons in the duel bar. */
+export const DUEL_DEPLOY_IDS = ['soldier', 'archer', 'knight', 'ram'] as const;
+export const DUEL_DEPLOY_ICONS: Record<(typeof DUEL_DEPLOY_IDS)[number], string> = {
+  soldier: '⚔️',
+  archer: '🏹',
+  knight: '🛡️',
+  ram: '🐏',
+};
+
+/** AI difficulty levels — attack pacing, squad size and trophy stakes. */
+export const DUEL_AI_LEVELS = {
+  leicht: { name: 'Leicht', attackInterval: 65, squadSize: 4, trophiesWin: 20, trophiesLoss: 10 },
+  normal: { name: 'Normal', attackInterval: 45, squadSize: 5, trophiesWin: 30, trophiesLoss: 15 },
+  schwer: { name: 'Schwer', attackInterval: 30, squadSize: 7, trophiesWin: 45, trophiesLoss: 20 },
+} as const;
+export type DuelAiLevelId = keyof typeof DUEL_AI_LEVELS;
+export const DUEL_AI_LEVEL_IDS = Object.keys(DUEL_AI_LEVELS) as DuelAiLevelId[];
 
 /** Capture radius of a resource depot in tiles. */
 export const DUEL_NODE_RADIUS = 2.5;
