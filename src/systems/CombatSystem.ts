@@ -33,6 +33,8 @@ export interface Projectile {
   x1: number;
   y1: number;
   age: number;
+  /** Render tint; tower arrows when omitted. */
+  color?: number;
 }
 
 export interface CombatContext {
@@ -88,12 +90,19 @@ export class CombatSystem {
       const enemy = enemies[i];
       if (enemy.attackCooldown > 0) enemy.attackCooldown--;
 
-      // Fight back: strike an adjacent soldier first.
-      const soldier = this.nearestSoldier(enemy.x, enemy.y, MELEE_RANGE);
+      // Fight back: strike a soldier within reach (ranged enemies shoot).
+      const reach = enemy.def.range ?? MELEE_RANGE;
+      const soldier = this.nearestSoldier(enemy.x, enemy.y, reach);
       if (soldier) {
         enemy.rest();
         if (enemy.attackCooldown <= 0) {
           enemy.attackCooldown = Math.round(enemy.def.attackInterval * TICK_RATE);
+          if (enemy.def.range) {
+            this.projectiles.push({
+              x0: enemy.x, y0: enemy.y, x1: soldier.x, y1: soldier.y, age: 0, color: 0x9a4a3a,
+            });
+            this.ctx.playSound('arrow');
+          }
           this.damageSoldier(soldier, enemy.def.damage);
         }
         continue;
@@ -108,6 +117,12 @@ export class CombatSystem {
           enemy.rest();
           if (enemy.attackCooldown <= 0) {
             enemy.attackCooldown = Math.round(enemy.def.attackInterval * TICK_RATE);
+            if (enemy.def.range) {
+              const tc = target.center;
+              this.projectiles.push({
+                x0: enemy.x, y0: enemy.y, x1: tc.x, y1: tc.y, age: 0, color: 0x9a4a3a,
+              });
+            }
             this.damageBuilding(target, enemy.def.damage);
           }
           continue;
