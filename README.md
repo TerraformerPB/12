@@ -119,7 +119,15 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Holzverstrebungen (Stufe 2) und Goldzier + Banner (Stufe 3), neue
   Dekorationen für Mine, Schmiede, Fischerhütte und Brauerei. Savegame v6
   (migriert verlustfrei von v5).
-- **Phase 9 (Konzept) — Burg-Duell (PvP):** Asynchroner 1-gegen-1-Modus im
+- **Phase 9 (✓) — Feinschliff & Inhalt:** Endlicher Wald — Holzfäller
+  fällen pro 10 Holz einen angrenzenden Waldtile (Status im Info-Panel,
+  Produktion stoppt ohne Wald), Wald breitet sich langsam auf freies Gras
+  aus; Terrain-Änderungen werden im Savegame (v7) gespeichert und nur der
+  betroffene Karten-Chunk neu gebacken. Dritter Gegnertyp „Plänkler"
+  (Fernkampf, ab Welle 4, eigene Pfeil-Projektile). Lokale Bestenliste im
+  Game-Over-Screen (Top 5). Repo-Hygiene: GitHub-Actions-CI (Tests + Build),
+  vitest 4 (npm audit: 0 Findings), Debug-Handle nicht mehr im Store-Build.
+- **Phase 10 (Konzept) — Burg-Duell (PvP):** Asynchroner 1-gegen-1-Modus im
   Clash-of-Clans-Stil: Man greift den Burg-Schnappschuss eines anderen
   Spielers an, aber statt Karten/Truppen direkt zu steuern, schickt das
   eigene Wirtschaftssystem automatisch Angriffswellen — wer seine Produktion
@@ -174,7 +182,11 @@ Release-Checkliste vor dem Store-Upload:
   Ziel auf der Karte antippen. Tore lassen eigene Einheiten durch, Mauern nicht.
 - Wellen: Die HUD-Anzeige ⚔️ zählt zur nächsten Welle herunter. Gegner
   marschieren aufs Lagerhaus zu; ist es eingemauert, brechen sie die
-  günstigste Stelle auf. Ab Welle 3 kommen langsame, harte „Brecher" dazu.
+  günstigste Stelle auf. Ab Welle 3 kommen langsame, harte „Brecher" dazu,
+  ab Welle 4 schießende „Plänkler".
+- Wald ist endlich: Holzfäller roden ihn allmählich (Info-Panel zeigt
+  „Kein Wald mehr"), gleichzeitig wächst Wald langsam nach — Holzwirtschaft
+  will geplant sein.
   Fällt das Lagerhaus, ist das Spiel verloren — einmal pro Run kann per
   Werbe-Platzhalter weitergespielt werden.
 - Straßen beschleunigen Träger und Soldaten; Forschung (im Bau-Menü unter

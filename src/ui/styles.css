@@ -446,6 +446,18 @@ button:active {
   font-size: 14px;
 }
 
+.score-list {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ui-text-dim);
+}
+
+.score-list li:first-child {
+  color: var(--ui-accent);
+}
+
 /* --- Dev rewarded-ad placeholder --- */
 
 .ad-overlay {

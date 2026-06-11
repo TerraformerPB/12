@@ -27,6 +27,7 @@ import {
   IsoGrid,
   NO_OCCUPANT,
   PassMode,
+  Terrain,
   gridToScreen,
   screenToGrid,
   screenToTile,
@@ -45,7 +46,12 @@ import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
-import { UPGRADE_COST_FACTOR } from '../data/config';
+import {
+  FOREST_REGROW_ATTEMPTS,
+  FOREST_REGROW_INTERVAL,
+  UPGRADE_COST_FACTOR,
+} from '../data/config';
+import { recordScore } from './Highscores';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
 import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
@@ -156,6 +162,7 @@ export class Game {
     this.lostWarehouseSpot = null;
     this.grid = new IsoGrid(MAP_W, MAP_H);
     generateTerrain(this.grid, seed);
+    this.grid.sealBaseline();
 
     this.renderer.clearEntities();
     this.renderer.buildTerrain(this.grid);
@@ -177,6 +184,7 @@ export class Game {
       getSpeedFactor: () =>
         (this.techs.has('fastCarriers') ? TECH_EFFECTS.fastCarriersSpeed : 1) *
         (this.techs.has('freeBeer') ? TECH_EFFECTS.freeBeerSpeed : 1),
+      fellForestTile: (b) => this.fellForest(b),
     });
     this.soldierSystem = new SoldierSystem(this.grid, this.soldiers, () =>
       this.techs.has('fieldRations') ? TECH_EFFECTS.fieldRationsSpeed : 1,
@@ -243,6 +251,39 @@ export class Game {
     this.combatSystem.tick();
     // Tutorial conditions are cheap but need no per-tick precision.
     if (this.tickCount % 20 === 0) this.checkTutorial();
+    if (this.tickCount % (FOREST_REGROW_INTERVAL * 20) === 0) this.regrowForest();
+  }
+
+  // --- Forest ----------------------------------------------------------------
+
+  /** A lumberjack felled one adjacent forest tile. */
+  private fellForest(b: Building): void {
+    const tile = b.adjacentTerrainTile(this.grid, Terrain.Forest);
+    if (!tile) return;
+    this.grid.setTerrain(tile.x, tile.y, Terrain.Grass);
+    this.renderer.rebuildChunkAt(this.grid, tile.x, tile.y);
+  }
+
+  /** A few forest tiles try to spread onto free grass. */
+  private regrowForest(): void {
+    const forest: Point[] = [];
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        if (this.grid.terrainAt(x, y) === Terrain.Forest) forest.push({ x, y });
+      }
+    }
+    if (forest.length === 0) return;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+    for (let i = 0; i < FOREST_REGROW_ATTEMPTS; i++) {
+      const src = forest[Math.floor(Math.random() * forest.length)];
+      const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
+      const nx = src.x + dx;
+      const ny = src.y + dy;
+      if (this.grid.isFree(nx, ny)) {
+        this.grid.setTerrain(nx, ny, Terrain.Forest);
+        this.renderer.rebuildChunkAt(this.grid, nx, ny);
+      }
+    }
   }
 
   // --- Tutorial ----------------------------------------------------------------
@@ -590,6 +631,11 @@ export class Game {
     this.sound.play('gameover');
     // A lost run must not be resumable after reload.
     this.saveManager.clear();
+    recordScore({
+      waves: Math.max(0, this.waveSystem.waveNumber - 1),
+      kills: this.waveSystem.kills,
+      date: new Date().toLocaleDateString('de-DE'),
+    });
     events.emit('game:over', {
       wavesSurvived: Math.max(0, this.waveSystem.waveNumber - 1),
       kills: this.waveSystem.kills,
@@ -640,6 +686,7 @@ export class Game {
       wave: this.waveSystem.toSave(),
       techs: [...this.techs],
       tutorialStep: this.tutorialStep,
+      terrainOverrides: this.grid.terrainOverrides(),
     };
   }
 
@@ -649,6 +696,11 @@ export class Game {
 
   loadFromData(data: SaveData): void {
     this.resetWorld(data.seed);
+    // Re-apply terrain changes (felled/regrown forest) before buildings.
+    if (data.terrainOverrides.length > 0) {
+      this.grid.applyTerrainOverrides(data.terrainOverrides as [number, number, Terrain][]);
+      this.renderer.buildTerrain(this.grid);
+    }
     this.setupSystems(new ResourceStore(data.resources));
     this.nextId = data.nextEntityId;
 

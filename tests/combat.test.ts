@@ -6,6 +6,7 @@ import {
   WAVE_MAX_COUNT,
 } from '../src/data/config';
 import { waveSize } from '../src/systems/WaveSystem';
+import { getEnemyDef, waveComposition } from '../src/data/enemies';
 import { IsoGrid, PassMode } from '../src/world/IsoGrid';
 import { findPath } from '../src/world/Pathfinding';
 
@@ -63,6 +64,16 @@ describe('roads', () => {
     for (let x = 0; x < 7; x++) grid.setOccupantRect(x, 2, 1, 1, 50 + x, PassMode.Road);
     const path = findPath(grid, { x: 0, y: 1 }, [{ x: 6, y: 1 }])!;
     expect(path.some((p) => p.y === 2)).toBe(true);
+  });
+});
+
+describe('wave composition', () => {
+  it('adds skirmishers from wave 4 with a range stat', () => {
+    const w3 = waveComposition(3, 6).map((p) => p.defId);
+    const w4 = waveComposition(4, 8).map((p) => p.defId);
+    expect(w3).not.toContain('skirmisher');
+    expect(w4).toContain('skirmisher');
+    expect(getEnemyDef('skirmisher').range).toBeGreaterThan(1);
   });
 });
 

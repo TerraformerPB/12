@@ -1,4 +1,5 @@
 import { events } from '../core/EventBus';
+import { loadScores } from '../core/Highscores';
 import type { Game } from '../core/Game';
 
 /** Fullscreen overlay shown when the warehouse falls. */
@@ -16,6 +17,9 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
   const stats = document.createElement('p');
   stats.className = 'gameover-stats';
 
+  const scoreList = document.createElement('ol');
+  scoreList.className = 'score-list';
+
   const reviveBtn = document.createElement('button');
   reviveBtn.textContent = '📺 Weiterspielen (Werbung)';
   reviveBtn.addEventListener('click', async () => {
@@ -31,12 +35,18 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
     game.restartNewGame();
   });
 
-  card.append(heading, stats, reviveBtn, newGameBtn);
+  card.append(heading, stats, scoreList, reviveBtn, newGameBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 
   events.on('game:over', ({ wavesSurvived, kills }) => {
     stats.textContent = `Überstandene Wellen: ${wavesSurvived} · Besiegte Gegner: ${kills}`;
+    scoreList.replaceChildren();
+    for (const s of loadScores()) {
+      const li = document.createElement('li');
+      li.textContent = `${s.waves} Wellen · ${s.kills} Gegner (${s.date})`;
+      scoreList.appendChild(li);
+    }
     reviveBtn.hidden = !game.canRevive();
     overlay.hidden = false;
   });

@@ -49,6 +49,7 @@ function sampleData(): SaveData {
     wave: { number: 4, nextInSeconds: 87, kills: 23 },
     techs: ['fastCarriers'],
     tutorialStep: 3,
+    terrainOverrides: [[5, 6, 0]],
   };
 }
 
@@ -95,6 +96,36 @@ describe('save/load roundtrip', () => {
     expect(migrated).not.toBeNull();
     expect(migrated!.saveVersion).toBe(SAVE_VERSION);
     expect(migrated!.buildings.every((b) => b.level === 1)).toBe(true);
+  });
+
+  it('migrates v6 savegames: harvest progress and terrain overrides default', () => {
+    const v6 = JSON.parse(JSON.stringify(sampleData())) as SaveData;
+    v6.saveVersion = 6;
+    delete (v6 as Partial<SaveData>).terrainOverrides;
+    for (const b of v6.buildings) delete (b as Partial<typeof b>).harvestProgress;
+    const migrated = migrateSave(v6);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.terrainOverrides).toEqual([]);
+    expect(migrated!.buildings.every((b) => b.harvestProgress === 0)).toBe(true);
+  });
+
+  it('records terrain overrides only after the baseline is sealed', () => {
+    const grid = new IsoGrid(8, 8);
+    grid.setTerrain(1, 1, 3); // generation
+    grid.sealBaseline();
+    grid.setTerrain(1, 1, 0); // felled
+    grid.setTerrain(2, 2, 3); // regrown
+    expect(grid.terrainOverrides()).toEqual([
+      [1, 1, 0],
+      [2, 2, 3],
+    ]);
+    const fresh = new IsoGrid(8, 8);
+    fresh.setTerrain(1, 1, 3);
+    fresh.sealBaseline();
+    fresh.applyTerrainOverrides(grid.terrainOverrides() as [number, number, 0 | 1 | 2 | 3][]);
+    expect(fresh.terrainAt(1, 1)).toBe(0);
+    expect(fresh.terrainAt(2, 2)).toBe(3);
   });
 
   it('rejects pre-v5 savegames (terrain generator changed)', () => {

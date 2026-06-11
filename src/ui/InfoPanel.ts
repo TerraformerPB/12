@@ -167,7 +167,11 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     const recipe = b.def.recipe;
     if (recipe) {
       const progress = b.durationTicks > 0 ? b.progress / b.durationTicks : 0;
-      addRow(b.active ? 'Produziert …' : 'Wartet', b.active ? progress : 0);
+      if (b.productionHalted) {
+        addRow('🌲 Kein Wald mehr in Reichweite!');
+      } else {
+        addRow(b.active ? 'Produziert …' : 'Wartet', b.active ? progress : 0);
+      }
       if (recipe.input) {
         addRow(
           `${RESOURCE_INFO[recipe.input].icon} Eingang: ${b.inputStore}/${LOCAL_STORE_CAP}`,
