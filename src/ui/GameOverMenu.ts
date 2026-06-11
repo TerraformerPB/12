@@ -1,0 +1,53 @@
+import { events } from '../core/EventBus';
+import { loadScores } from '../core/Highscores';
+import type { Game } from '../core/Game';
+
+/** Fullscreen overlay shown when the warehouse falls. */
+export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'pause-overlay';
+  overlay.hidden = true;
+
+  const card = document.createElement('div');
+  card.className = 'pause-card';
+
+  const heading = document.createElement('h2');
+  heading.textContent = '💀 Die Burg ist gefallen';
+
+  const stats = document.createElement('p');
+  stats.className = 'gameover-stats';
+
+  const scoreList = document.createElement('ol');
+  scoreList.className = 'score-list';
+
+  const reviveBtn = document.createElement('button');
+  reviveBtn.textContent = '📺 Weiterspielen (Werbung)';
+  reviveBtn.addEventListener('click', async () => {
+    overlay.hidden = true;
+    const revived = await game.reviveViaAd();
+    if (!revived) overlay.hidden = false;
+  });
+
+  const newGameBtn = document.createElement('button');
+  newGameBtn.textContent = 'Neues Spiel';
+  newGameBtn.addEventListener('click', () => {
+    overlay.hidden = true;
+    game.restartNewGame();
+  });
+
+  card.append(heading, stats, scoreList, reviveBtn, newGameBtn);
+  overlay.appendChild(card);
+  uiRoot.appendChild(overlay);
+
+  events.on('game:over', ({ wavesSurvived, kills }) => {
+    stats.textContent = `Überstandene Wellen: ${wavesSurvived} · Besiegte Gegner: ${kills}`;
+    scoreList.replaceChildren();
+    for (const s of loadScores()) {
+      const li = document.createElement('li');
+      li.textContent = `${s.waves} Wellen · ${s.kills} Gegner (${s.date})`;
+      scoreList.appendChild(li);
+    }
+    reviveBtn.hidden = !game.canRevive();
+    overlay.hidden = false;
+  });
+}

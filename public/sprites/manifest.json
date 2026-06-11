@@ -1,0 +1,94 @@
+{
+  "buildings": {
+    "warehouse": {
+      "file": "warehouse.png",
+      "anchorX": 136,
+      "anchorY": 160,
+      "scale": 0.5
+    },
+    "lumberjack": {
+      "file": "lumberjack.png",
+      "anchorX": 136,
+      "anchorY": 126,
+      "scale": 0.5
+    },
+    "quarry": {
+      "file": "quarry.png",
+      "anchorX": 136,
+      "anchorY": 136,
+      "scale": 0.5
+    },
+    "mine": {
+      "file": "mine.png",
+      "anchorX": 136,
+      "anchorY": 112,
+      "scale": 0.5
+    },
+    "smithy": {
+      "file": "smithy.png",
+      "anchorX": 136,
+      "anchorY": 160,
+      "scale": 0.5
+    },
+    "fishery": {
+      "file": "fishery.png",
+      "anchorX": 72,
+      "anchorY": 100,
+      "scale": 0.5
+    },
+    "farm": {
+      "file": "farm.png",
+      "anchorX": 200,
+      "anchorY": 108,
+      "scale": 0.5
+    },
+    "mill": {
+      "file": "mill.png",
+      "anchorX": 136,
+      "anchorY": 212,
+      "scale": 0.5
+    },
+    "bakery": {
+      "file": "bakery.png",
+      "anchorX": 136,
+      "anchorY": 160,
+      "scale": 0.5
+    },
+    "brewery": {
+      "file": "brewery.png",
+      "anchorX": 136,
+      "anchorY": 144,
+      "scale": 0.5
+    },
+    "hut": {
+      "file": "hut.png",
+      "anchorX": 72,
+      "anchorY": 106,
+      "scale": 0.5
+    },
+    "wall": {
+      "file": "wall.png",
+      "anchorX": 72,
+      "anchorY": 120,
+      "scale": 0.5
+    },
+    "gate": {
+      "file": "gate.png",
+      "anchorX": 72,
+      "anchorY": 112,
+      "scale": 0.5
+    },
+    "tower": {
+      "file": "tower.png",
+      "anchorX": 136,
+      "anchorY": 188,
+      "scale": 0.5
+    },
+    "barracks": {
+      "file": "barracks.png",
+      "anchorX": 200,
+      "anchorY": 168,
+      "scale": 0.5
+    }
+  }
+}
