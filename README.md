@@ -157,6 +157,24 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Gebäude — Türme/Ritter müssen ihn stoppen). Savegame v8 (migriert
   verlustfrei).
 
+- **Phase 12 (in Arbeit) — Komplexität & Tiefe:** Plan:
+  1. **Verbrauch & Moral** — Bevölkerung isst laufend (Brot/Fisch); Hunger
+     senkt Moral und Arbeitstempo, Nahrungsvielfalt (inkl. Bier) hebt sie.
+  2. **Baustellen** — Gebäude brauchen Materiallieferung durch Träger und
+     Bauzeit statt Instant-Bau; Straßen/Karren beeinflussen Reaktionszeit.
+  3. **Veteranen & Belagerung** — Soldaten sammeln Ränge über Kills;
+     neue Gegner: Katapult (überreicht Türme) und Kriegsherr-Boss
+     (jede 10. Welle).
+  4. **Markt, Gold & Steuern** — Marktplatz handelt Waren gegen das neue
+     Gut Gold; Steuer-Regler erzeugt Gold, kostet Moral.
+  5. **Jahreszeiten** — 4er-Zyklus mit Karten-Tönung: Winter stoppt Farmen
+     und erhöht Verbrauch, Herbst beschleunigt die Ernte.
+  6. **Szenarien & Tech-Zweige** — Spielziele mit Sieg-Screen (Endlos,
+     10 Wellen überleben, Gold-Ziel) im Hauptmenü; Forschungs-Stufen mit
+     Voraussetzungen und exklusiven Zweigen (Militär vs. Handel).
+  Bewusst auf später verschoben: Turm-Garnison, zugefrorener Fluss,
+  dynamische Marktpreise, Soldaten-Sold, Zufallsereignisse, Achievements.
+
 ## Echte Grafiken einbinden
 
 Das Spiel rendert Gebäude über gebackene Texturen mit einem Drop-in-Override:
