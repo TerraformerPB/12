@@ -573,6 +573,36 @@ button:active {
   z-index: 30;
 }
 
+/* --- Online dialog --- */
+
+.online-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.online-form input {
+  font: inherit;
+  color: var(--ui-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.online-form input:focus {
+  outline: none;
+  border-color: var(--ui-accent);
+}
+
+.online-msg {
+  min-height: 18px;
+}
+
+.online-error {
+  color: #ff9d96;
+}
+
 .menu-scores {
   text-align: left;
   font-size: 13px;

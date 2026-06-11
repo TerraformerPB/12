@@ -193,6 +193,37 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   kommt, wird daraus das echte Match-System (Gegner-Suche nach Pokalen,
   Burg-Upload statt lokaler KI hinter demselben `DuelAI`-Interface).
 
+- **Phase 17 (✓) — Online-Backend (Accounts, Bestenlisten, Matchmaking, Admin):**
+  Vollständiges Backend in `server/` — bewusst **dependency-frei** (reines
+  `node:http`, läuft überall mit Node 18+, keine nativen Builds):
+  Accounts mit scrypt-Passwort-Hashes und HMAC-signierten Tokens (30 Tage),
+  JSON-Datei-Persistenz mit atomaren Writes (`storage.ts`, hinter einem
+  Interface — austauschbar gegen eine echte DB), Rate-Limit, CORS, Bann-
+  Prüfung. REST-API: Registrieren/Login/Profil/Passwort/Konto löschen,
+  Online-Bestenlisten (🏆 Duell-Elo und 🌊 überlebte Wellen), Score-Submit
+  (Server behält den besten Lauf), Burg-Upload (Burg-Code), **Matchmaking
+  nach Elo-Nähe** und Ergebnis-Meldung mit **Elo-Verrechnung** (K=32,
+  Start 1000, nullsummig). **Admin-Dashboard** unter `/admin` (Statistik,
+  Nutzerliste, Sperren/Entsperren, Rollen, Löschen); der erste registrierte
+  Account wird Admin (oder Seed via `BURGSPIEL_ADMIN_USER`/`_PASSWORD`).
+  Im Spiel: 🌐-Online-Dialog im Hauptmenü (Konto, Server-Adresse einstellbar,
+  Online-Bestenliste, Burg hochladen, **Online-Duell suchen** — der gematchte
+  Gegner wird im Spiegel-Duell von der KI vertreten, deren Stärke mit der
+  Pokal-Differenz skaliert; das Ergebnis verrechnet der Server). Beste Läufe
+  werden bei Game Over/Sieg automatisch gemeldet. Alles strikt optional —
+  offline bleibt das Spiel vollständig spielbar. Start: `npm run server`
+  (Port 8787; `PORT`, `BURGSPIEL_DATA`, `BURGSPIEL_CORS` als Env). Nächste
+  Ausbaustufe für echtes PvP: die hochgeladene Gegnerburg in die Spiegel-Map
+  importieren und Echtzeit-Matches über WebSockets — Accounts, Rating und
+  API sind dafür ausgelegt.
+
+- **Phase 16 (✓) — Duell-Fixes & Store-Hauptmenü:** Garantierte Lanes
+  verbinden beide Burgen auf jeder Zufallskarte (Fluss konnte die Hälften
+  trennen); Anti-Oszillations-Pathing (Einheiten pendelten vor der Burg auf
+  der Stelle, statt anzugreifen). Neues Hauptmenü mit Wappen-Hero,
+  Szenario-Picker, Pokal-Badge, Bestenlisten- und Einstellungs-Dialog
+  (Ton, Spielstand löschen) und Versions-Footer.
+
 - **Phase 14 (✓) — Burg-Duell im Clash-Stil:** Im Duell gibt es keine
   Produktion mehr — Rohstoffe kommen ausschließlich aus dem Start-Budget
   (Inventar) und von **eroberbaren Rohstoff-Lagern** auf dem Schlachtfeld
@@ -225,6 +256,28 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   eigene Spielstand bleibt unberührt (In-Memory-Backup). Eine Online-Variante
   bräuchte ein Backend — die KI hängt an einem schmalen Kontext-Interface,
   hinter das ein echter Gegner geschaltet werden kann.
+
+## Online-Backend betreiben
+
+```bash
+npm run server          # kompiliert server/ und startet auf Port 8787
+# Admin-Dashboard: http://localhost:8787/admin
+```
+
+Konfiguration über Umgebungsvariablen:
+
+| Variable | Bedeutung | Default |
+| --- | --- | --- |
+| `PORT` | HTTP-Port | `8787` |
+| `BURGSPIEL_DATA` | Pfad der Daten-Datei | `./server-data/burgspiel.json` |
+| `BURGSPIEL_CORS` | `Access-Control-Allow-Origin` | `*` |
+| `BURGSPIEL_ADMIN_USER` / `BURGSPIEL_ADMIN_PASSWORD` | Admin-Konto beim ersten Start | — (sonst: erster Account wird Admin) |
+| `BURGSPIEL_RATE_MAX` | Requests pro 10 s und IP | `30` |
+
+Deployment: ein beliebiger Node-18+-Host genügt (`node server/dist/index.js`
+hinter einem Reverse-Proxy mit HTTPS). Im Spiel unter 🌐 Online die
+Server-Adresse eintragen. Für den Play-Store-Build gehört die produktive
+URL als Default in `src/online/OnlineClient.ts`.
 
 ## Echte Grafiken einbinden
 
