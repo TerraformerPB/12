@@ -60,6 +60,32 @@ export const DUEL_UNIT_COSTS: Partial<Record<EnemyDefId, Partial<Record<Resource
   skirmisher: { fish: DUEL_FISH_PER_SKIRMISHER },
 };
 
+// --- Clash-style deployment & capture points (phase 14) ---------------------------
+
+/** What deploying one player unit costs (paid from the inventory). */
+export const DUEL_DEPLOY_COSTS: Record<'soldier' | 'knight', Partial<Record<ResourceId, number>>> =
+  {
+    soldier: { bread: 3 },
+    knight: { weapons: 5, bread: 2 },
+  };
+
+/** Capture radius of a resource depot in tiles. */
+export const DUEL_NODE_RADIUS = 2.5;
+/** Seconds between income ticks of a controlled depot. */
+export const DUEL_NODE_INTERVAL = 6;
+/** Units of the depot's resource per income tick. */
+export const DUEL_NODE_YIELD = 1;
+
+/**
+ * Neutral resource depots on the battlefield (west coordinates; each gets a
+ * mirrored twin so both sides face the same layout). Whoever holds units
+ * nearby — and the opponent doesn't — earns the depot's resource.
+ */
+export const DUEL_NODES: { x: number; y: number; resource: ResourceId; icon: string }[] = [
+  { x: 21, y: 17, resource: 'bread', icon: '🥖' },
+  { x: 21, y: 31, resource: 'weapons', icon: '⚔️' },
+];
+
 /** Compute an attack army from resources and soldiers. Pure. */
 export function computeArmy(
   resources: Record<ResourceId, number>,

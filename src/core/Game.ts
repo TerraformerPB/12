@@ -80,7 +80,16 @@ import {
   TRADE_GUILD_BUY_FACTOR,
   TRADE_GUILD_SELL_FACTOR,
 } from '../data/market';
-import { DUEL_BUDGETS, DUEL_TIME_LIMIT, type DuelBudgetId } from '../data/duel';
+import {
+  DUEL_BUDGETS,
+  DUEL_DEPLOY_COSTS,
+  DUEL_NODES,
+  DUEL_NODE_INTERVAL,
+  DUEL_NODE_RADIUS,
+  DUEL_NODE_YIELD,
+  DUEL_TIME_LIMIT,
+  type DuelBudgetId,
+} from '../data/duel';
 import { DuelAI } from '../systems/DuelAI';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
@@ -137,6 +146,10 @@ export class Game {
   duelMode = false;
   private duelAI: DuelAI | null = null;
   private foeWarehouseId = 0;
+  /** Selected deployment card (Clash-style unit placement). */
+  duelDeployType: SoldierTypeId | null = null;
+  /** Capturable resource depots on the duel battlefield. */
+  duelNodes: { x: number; y: number; resource: ResourceId; icon: string; owner: 'none' | 'player' | 'foe' }[] = [];
   private duelBackup: SaveData | null = null;
   private duelOutcome: 'victory' | 'defeat' | 'aborted' | null = null;
   private duelStats = { unitsLost: 0, buildingsDestroyed: 0, startMs: 0 };
@@ -285,6 +298,8 @@ export class Game {
         this.techs.has('militaryDoctrine') ? TECH_EFFECTS.militaryDoctrineRange : 0,
       soldierDamageFactor: () =>
         this.techs.has('combatTraining') ? TECH_EFFECTS.combatTrainingDamage : 1,
+      getFoeWarehouse: () =>
+        this.foeWarehouseId !== 0 ? (this.buildings.get(this.foeWarehouseId) ?? null) : null,
     });
     this.buildSystem = new BuildSystem({
       grid: this.grid,
@@ -330,12 +345,12 @@ export class Game {
     if (this.phase !== 'playing') return;
     this.tickCount++;
     if (this.duelMode) {
-      // Full economy on the own half, the AI opponent instead of waves;
-      // no food/taxes/seasons — a duel is a compact skirmish.
-      this.economy.tick();
+      // Clash-style: no production — resources come from the inventory
+      // budget and captured depots only. The AI opponent replaces waves.
       this.soldierSystem.tick();
       this.combatSystem.tick();
       this.duelAI?.tick();
+      this.tickDuelNodes();
       this.tickDuel();
       return;
     }
@@ -481,11 +496,22 @@ export class Game {
     this.duelStats = { unitsLost: 0, buildingsDestroyed: 0, startMs: performance.now() };
 
     const cy = Math.floor(MAP_H / 2);
+    // Each depot gets a cleared, walkable patch (plus its mirrored twin).
+    const nodeRects = DUEL_NODES.flatMap((n) => [
+      { x: n.x - 2, y: n.y - 2, w: 5, h: 5 },
+      { x: MAP_W - 1 - (n.x + 2), y: n.y - 2, w: 5, h: 5 },
+    ]);
     this.resetWorld((Math.random() * 0xffffffff) >>> 0, [
       { x: 2, y: cy - 6, w: 10, h: 13 },
       { x: MAP_W - 12, y: cy - 6, w: 10, h: 13 },
+      ...nodeRects,
     ]);
     this.setupSystems(new ResourceStore(budget.resources));
+    this.duelNodes = DUEL_NODES.flatMap((n) => [
+      { ...n, owner: 'none' as const },
+      { ...n, x: MAP_W - 1 - n.x, owner: 'none' as const },
+    ]);
+    this.duelDeployType = null;
 
     this.warehouseId = this.buildCastle('player', cy);
     this.foeWarehouseId = this.buildCastle('foe', cy);
@@ -578,6 +604,72 @@ export class Game {
     return b ? b.hp / b.maxHp : 0;
   }
 
+  /**
+   * Capture & income of the battlefield depots: a side controls a depot
+   * while only its units stand nearby; controlled depots pay out their
+   * resource every few seconds (player → inventory, AI → its budget).
+   */
+  private tickDuelNodes(): void {
+    for (const node of this.duelNodes) {
+      const playerNear = this.soldiers.some(
+        (s) => Math.hypot(s.x - node.x, s.y - node.y) <= DUEL_NODE_RADIUS,
+      );
+      const foeNear = this.enemies.some(
+        (e) => Math.hypot(e.x - node.x, e.y - node.y) <= DUEL_NODE_RADIUS,
+      );
+      const owner = playerNear && !foeNear ? 'player' : foeNear && !playerNear ? 'foe' : node.owner;
+      if (owner !== node.owner) {
+        node.owner = owner;
+        if (owner === 'player') {
+          events.emit('toast:show', { message: `${node.icon} Lager erobert!` });
+          this.sound.play('ui');
+        } else if (owner === 'foe') {
+          events.emit('toast:show', { message: `${node.icon} Lager an den Gegner verloren!` });
+        }
+      }
+    }
+    if (this.tickCount % (DUEL_NODE_INTERVAL * TICK_RATE) === 0) {
+      for (const node of this.duelNodes) {
+        if (node.owner === 'player') this.store.add(node.resource, DUEL_NODE_YIELD);
+        else if (node.owner === 'foe') this.duelAI?.credit(node.resource, DUEL_NODE_YIELD);
+      }
+    }
+  }
+
+  /** Toggle the deployment card (Clash-style unit placement). */
+  setDuelDeploy(typeId: SoldierTypeId | null): void {
+    this.duelDeployType = this.duelDeployType === typeId ? null : typeId;
+    this.buildSystem.cancel();
+  }
+
+  /** Deploy the selected unit on the own half. Returns true on success. */
+  private tryDeployDuelUnit(worldX: number, worldY: number): boolean {
+    const typeId = this.duelDeployType;
+    if (!typeId) return false;
+    const tile = screenToTile(worldX, worldY);
+    if (!this.grid.inBounds(tile.x, tile.y)) return false;
+    if (tile.x >= Math.floor(MAP_W / 2) - 1) {
+      events.emit('toast:show', { message: 'Nur auf deiner Kartenhälfte absetzen' });
+      return false;
+    }
+    if (!isFinite(this.grid.moveCost(tile.x, tile.y))) {
+      events.emit('toast:show', { message: 'Hier können Truppen nicht stehen' });
+      return false;
+    }
+    const cost = DUEL_DEPLOY_COSTS[typeId];
+    const missing = missingResourcesMessage(this.store, cost);
+    if (missing) {
+      events.emit('toast:show', { message: missing });
+      return false;
+    }
+    this.store.pay(cost);
+    const unit = new Soldier(this.nextId++, tile.x, tile.y, typeId);
+    unit.mode = 'advance';
+    this.soldiers.push(unit);
+    this.sound.play('place');
+    return true;
+  }
+
   /** Abort button in the duel HUD. */
   abortDuel(): void {
     if (!this.duelMode) return;
@@ -597,6 +689,8 @@ export class Game {
     this.duelOutcome = null;
     this.duelAI = null;
     this.foeWarehouseId = 0;
+    this.duelNodes = [];
+    this.duelDeployType = null;
     this.duelBackup = null;
     if (backup) this.loadFromData(backup);
     this.setPhase('playing');
@@ -720,6 +814,7 @@ export class Game {
         ghost: this.buildSystem?.ghost ?? null,
         selectedId: this.selectedId,
         selectedSoldierId: this.selectedSoldierId,
+        duelNodes: this.duelMode ? this.duelNodes : null,
       },
       alpha,
     );
@@ -754,6 +849,11 @@ export class Game {
     const world = this.camera.screenToWorld(sx, sy);
     if (this.buildSystem.active) {
       this.buildSystem.tryPlaceAt(world.x, world.y);
+      return;
+    }
+    // Duel deployment card selected: taps drop units instead of selecting.
+    if (this.duelMode && this.duelDeployType !== null) {
+      this.tryDeployDuelUnit(world.x, world.y);
       return;
     }
 

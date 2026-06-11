@@ -144,3 +144,35 @@ describe('mirror duel (phase 13)', () => {
     }
   });
 });
+
+describe('clash-style duel (phase 14)', () => {
+  it('depot income tops the AI budget back up', async () => {
+    const { DuelAI } = await import('../src/systems/DuelAI');
+    const ai = new DuelAI(
+      {
+        enemies: [],
+        nextEntityId: () => 1,
+        spawnTile: () => ({ x: 40, y: 24 }),
+        playSound: () => {},
+        onSquadSent: () => {},
+      },
+      {},
+    );
+    expect(ai.exhausted).toBe(true);
+    ai.credit('bread', 3);
+    expect(ai.exhausted).toBe(false);
+    expect(ai.sendSquad()).toBe(1);
+  });
+
+  it('deploy costs and depots are defined consistently', async () => {
+    const { DUEL_DEPLOY_COSTS, DUEL_NODES } = await import('../src/data/duel');
+    expect((DUEL_DEPLOY_COSTS.soldier.bread ?? 0)).toBeGreaterThan(0);
+    expect((DUEL_DEPLOY_COSTS.knight.weapons ?? 0)).toBeGreaterThan(0);
+    expect(DUEL_NODES.length).toBeGreaterThan(0);
+    for (const n of DUEL_NODES) {
+      // West half only — the mirrored twin is derived at duel start.
+      expect(n.x).toBeLessThan(24);
+      expect(['bread', 'weapons', 'fish'].includes(n.resource)).toBe(true);
+    }
+  });
+});

@@ -65,6 +65,8 @@ export interface RenderState {
   ghost: GhostState | null;
   selectedId: number | null;
   selectedSoldierId: number | null;
+  /** Capturable resource depots while a duel is running. */
+  duelNodes: { x: number; y: number; owner: 'none' | 'player' | 'foe' }[] | null;
 }
 
 const CULL_MARGIN = TILE_W * 2;
@@ -295,8 +297,39 @@ export class WorldRenderer {
     this.syncProjectiles(state);
     this.syncGhost(state);
     this.syncSelection(state);
+    this.syncDuelNodes(state);
     this.cull(camera);
     this.app.render();
+  }
+
+  private duelNodesView: Graphics | null = null;
+  private duelNodesKey = '';
+
+  /** Flag markers for the duel's capturable depots, tinted by controller. */
+  private syncDuelNodes(state: RenderState): void {
+    const key = state.duelNodes
+      ? state.duelNodes.map((n) => `${n.x},${n.y},${n.owner}`).join(';')
+      : '';
+    if (key === this.duelNodesKey) return;
+    this.duelNodesKey = key;
+    if (!this.duelNodesView) {
+      this.duelNodesView = new Graphics();
+      this.markerLayer.addChild(this.duelNodesView);
+    }
+    const g = this.duelNodesView;
+    g.clear();
+    if (!state.duelNodes) return;
+    for (const node of state.duelNodes) {
+      const p = gridToScreen(node.x, node.y);
+      const color =
+        node.owner === 'player' ? 0x4f9dd8 : node.owner === 'foe' ? 0xd4574e : 0xcfc6a8;
+      // Capture area, pole and pennant.
+      g.ellipse(p.x, p.y, TILE_W * 1.1, TILE_H * 1.1)
+        .stroke({ color, width: 2, alpha: 0.55 })
+        .fill({ color, alpha: 0.08 });
+      g.rect(p.x - 1.5, p.y - 34, 3, 34).fill({ color: 0x5a4632 });
+      g.poly([p.x + 1.5, p.y - 34, p.x + 18, p.y - 28, p.x + 1.5, p.y - 22]).fill({ color });
+    }
   }
 
   private syncEnemies(state: RenderState, alpha: number): void {

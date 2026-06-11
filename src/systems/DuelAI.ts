@@ -43,6 +43,11 @@ export class DuelAI {
     return this.affordableUnit() === null;
   }
 
+  /** Income from captured battlefield depots. */
+  credit(resource: ResourceId, n: number): void {
+    this.budget[resource] += n;
+  }
+
   tick(): void {
     this.ticks++;
     if (this.ticks < this.nextAttackTick) return;
