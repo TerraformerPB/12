@@ -44,6 +44,7 @@ import { createToast } from '../ui/Toast';
 import { createInfoPanel } from '../ui/InfoPanel';
 import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
+import { createDuelMenu } from '../ui/DuelMenu';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
 import {
@@ -52,6 +53,15 @@ import {
   UPGRADE_COST_FACTOR,
 } from '../data/config';
 import { recordScore } from './Highscores';
+import { decodeCastle, encodeCastle } from './CastleCode';
+import {
+  DUEL_GROUP_SIZE,
+  DUEL_SPAWN_EDGE,
+  DUEL_TIME_LIMIT,
+  ENEMY_BREACH_COST_DUEL,
+  computeArmy,
+} from '../data/duel';
+import type { EnemyDefId } from '../data/enemies';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
 import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
@@ -97,6 +107,13 @@ export class Game {
   ads!: RewardedAdProvider;
   private reviveUsed = false;
   private lostWarehouseSpot: { x: number; y: number; rotated: boolean } | null = null;
+  // --- Duel mode (Burg-Duell): attack a shared castle snapshot. ---
+  duelMode = false;
+  private duelQueue: EnemyDefId[] = [];
+  private duelBackup: SaveData | null = null;
+  private duelOutcome: 'victory' | 'defeat' | 'aborted' | null = null;
+  private duelStats = { unitsLost: 0, buildingsDestroyed: 0, startMs: 0 };
+  private duelLastStatus = '';
   seed = 0;
   private nextId = 1;
   private warehouseId = 0;
@@ -117,6 +134,7 @@ export class Game {
     createPauseMenu(uiRoot, this);
     createGameOverMenu(uiRoot, this);
     createTutorialBanner(uiRoot, this);
+    createDuelMenu(uiRoot, this);
     createToast(uiRoot);
     if (Capacitor.isNativePlatform()) {
       const admob = new AdmobRewardedAdProvider();
@@ -204,7 +222,10 @@ export class Game {
       enemies: this.enemies,
       getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
       destroyBuilding: (id) => this.destroyBuilding(id),
-      onEnemyKilled: () => this.waveSystem.onEnemyKilled(),
+      onEnemyKilled: () => {
+        if (this.duelMode) this.duelStats.unitsLost++;
+        else this.waveSystem.onEnemyKilled();
+      },
       onSoldierKilled: (soldier) => this.onSoldierKilled(soldier),
       playSound: (id) => this.sound.play(id),
       towerDamageFactor: () => (this.techs.has('steelArrows') ? TECH_EFFECTS.steelArrowsDamage : 1),
@@ -247,6 +268,13 @@ export class Game {
   tick(): void {
     if (this.phase !== 'playing') return;
     this.tickCount++;
+    if (this.duelMode) {
+      // The defending castle fights back; no economy or waves run.
+      this.soldierSystem.tick();
+      this.combatSystem.tick();
+      this.tickDuel();
+      return;
+    }
     this.economy.tick();
     this.soldierSystem.tick();
     this.waveSystem.tick();
@@ -254,6 +282,159 @@ export class Game {
     // Tutorial conditions are cheap but need no per-tick precision.
     if (this.tickCount % 20 === 0) this.checkTutorial();
     if (this.tickCount % (FOREST_REGROW_INTERVAL * 20) === 0) this.regrowForest();
+  }
+
+  // --- Duel mode ----------------------------------------------------------------
+
+  /** Compact shareable snapshot of the current castle. */
+  exportCastleCode(): string {
+    return encodeCastle({
+      seed: this.seed,
+      overrides: this.grid.terrainOverrides(),
+      buildings: [...this.buildings.values()].map((b) => ({
+        d: b.defId,
+        x: b.x,
+        y: b.y,
+        r: b.rotated ? 1 : 0,
+        l: b.level,
+      })),
+      soldiers: this.soldiers.map((s) => ({ x: s.tile.x, y: s.tile.y })),
+      techs: [...this.techs],
+    });
+  }
+
+  /** Start attacking a shared castle. Returns false with a toast on error. */
+  startDuel(code: string): boolean {
+    const castle = decodeCastle(code);
+    if (!castle) {
+      events.emit('toast:show', { message: 'Ungültiger Burg-Code' });
+      return false;
+    }
+    const army = computeArmy(this.store.snapshot(), this.soldiers.length);
+    if (army.length === 0) {
+      events.emit('toast:show', { message: 'Zu wenig Vorräte (Brot/Waffen) für einen Angriff' });
+      return false;
+    }
+    this.duelBackup = this.toSaveData();
+    this.duelMode = true;
+    this.duelOutcome = null;
+    this.duelStats = { unitsLost: 0, buildingsDestroyed: 0, startMs: performance.now() };
+
+    this.resetWorld(castle.seed);
+    this.grid.applyTerrainOverrides(castle.overrides as [number, number, Terrain][]);
+    this.renderer.buildTerrain(this.grid);
+    this.setupSystems(new ResourceStore());
+    for (const b of castle.buildings) {
+      const placed = this.addBuilding(b.d, b.x, b.y, b.r === 1);
+      placed.level = Math.max(1, Math.min(b.l, placed.maxLevel));
+      placed.hp = placed.maxHp;
+      placed.assignedWorkers = placed.workersRequired; // looks staffed
+      if (placed.def.isWarehouse) this.warehouseId = placed.id;
+    }
+    for (const s of castle.soldiers) {
+      this.soldiers.push(new Soldier(this.nextId++, s.x, s.y));
+    }
+    for (const t of castle.techs) this.techs.add(t); // defender research applies
+
+    this.duelQueue = army;
+    const warehouse = this.buildings.get(this.warehouseId);
+    if (warehouse) {
+      const c = gridToScreen(warehouse.x + warehouse.w / 2, warehouse.y + warehouse.h / 2);
+      this.camera.centerOn(c.x, c.y);
+    }
+    events.emit('tutorial:changed', { text: null });
+    this.emitDuelStatus();
+    this.setPhase('playing');
+    events.emit('toast:show', { message: '⚔️ Duell! Tippe an den Kartenrand, um Truppen zu entsenden' });
+    return true;
+  }
+
+  /** Player taps during a duel: release the next group at the map border. */
+  private duelTap(worldX: number, worldY: number): void {
+    const tile = screenToTile(worldX, worldY);
+    if (!this.grid.inBounds(tile.x, tile.y)) return;
+    const nearEdge =
+      tile.x < DUEL_SPAWN_EDGE ||
+      tile.y < DUEL_SPAWN_EDGE ||
+      tile.x >= this.grid.width - DUEL_SPAWN_EDGE ||
+      tile.y >= this.grid.height - DUEL_SPAWN_EDGE;
+    if (!nearEdge) {
+      events.emit('toast:show', { message: 'Truppen am Kartenrand entsenden' });
+      return;
+    }
+    if (!isFinite(this.grid.enemyMoveCost(ENEMY_BREACH_COST_DUEL)(tile.x, tile.y))) {
+      events.emit('toast:show', { message: 'Hier können Truppen nicht landen' });
+      return;
+    }
+    if (this.duelQueue.length === 0) {
+      events.emit('toast:show', { message: 'Keine Truppen mehr in Reserve' });
+      return;
+    }
+    const group = this.duelQueue.splice(0, DUEL_GROUP_SIZE);
+    for (const defId of group) {
+      this.enemies.push(
+        new Enemy(
+          this.nextId++,
+          tile.x + (Math.random() - 0.5) * 0.8,
+          tile.y + (Math.random() - 0.5) * 0.8,
+          defId,
+        ),
+      );
+    }
+    this.sound.play('horn');
+    this.emitDuelStatus();
+  }
+
+  /** Resolve duel outcomes outside the combat iteration (safe point). */
+  private tickDuel(): void {
+    this.emitDuelStatus();
+    if (this.duelOutcome === null && this.enemies.length === 0 && this.duelQueue.length === 0) {
+      this.duelOutcome = 'defeat';
+    }
+    if (
+      this.duelOutcome === null &&
+      performance.now() - this.duelStats.startMs > DUEL_TIME_LIMIT * 1000
+    ) {
+      events.emit('toast:show', { message: 'Zeit abgelaufen — die Burg hält stand' });
+      this.duelOutcome = 'defeat';
+    }
+    if (this.duelOutcome !== null) this.finishDuel(this.duelOutcome);
+  }
+
+  /** Abort button in the duel HUD. */
+  abortDuel(): void {
+    if (!this.duelMode) return;
+    this.duelOutcome = 'aborted';
+    this.setPhase('playing'); // ensure the next tick resolves it
+  }
+
+  private finishDuel(outcome: 'victory' | 'defeat' | 'aborted'): void {
+    const stats = {
+      victory: outcome === 'victory',
+      unitsLost: this.duelStats.unitsLost,
+      buildingsDestroyed: this.duelStats.buildingsDestroyed,
+      seconds: Math.round((performance.now() - this.duelStats.startMs) / 1000),
+    };
+    const backup = this.duelBackup;
+    this.duelMode = false;
+    this.duelOutcome = null;
+    this.duelQueue = [];
+    this.duelBackup = null;
+    if (backup) this.loadFromData(backup);
+    this.setPhase('playing');
+    if (outcome === 'aborted') {
+      events.emit('toast:show', { message: 'Duell abgebrochen' });
+    } else {
+      events.emit('duel:ended', stats);
+      this.sound.play(outcome === 'victory' ? 'horn' : 'gameover');
+    }
+  }
+
+  private emitDuelStatus(): void {
+    const key = `${this.duelQueue.length}:${this.enemies.length}`;
+    if (key === this.duelLastStatus) return;
+    this.duelLastStatus = key;
+    events.emit('duel:status', { queued: this.duelQueue.length, alive: this.enemies.length });
   }
 
   // --- Forest ----------------------------------------------------------------
@@ -383,6 +564,10 @@ export class Game {
   private handleTap(sx: number, sy: number): void {
     if (this.phase !== 'playing') return;
     const world = this.camera.screenToWorld(sx, sy);
+    if (this.duelMode) {
+      this.duelTap(world.x, world.y);
+      return;
+    }
     if (this.buildSystem.active) {
       this.buildSystem.tryPlaceAt(world.x, world.y);
       return;
@@ -428,6 +613,7 @@ export class Game {
   }
 
   selectSoldier(id: number | null): void {
+    if (this.duelMode) return; // defenders are not commandable
     if (this.selectedSoldierId === id) return;
     this.selectedSoldierId = id;
     if (id !== null && this.selectedId !== null) this.select(null);
@@ -440,6 +626,7 @@ export class Game {
 
   /** Recruit one soldier at a barracks (info panel action). */
   recruitSoldier(barracksId: number): void {
+    if (this.duelMode) return;
     const barracks = this.buildings.get(barracksId);
     if (!barracks || !barracks.def.recruitsSoldiers) return;
     if (this.economy.workerTarget() <= MIN_WORKERS) {
@@ -497,6 +684,7 @@ export class Game {
 
   /** Info-panel action: change a building's staff by ±1. */
   assignWorker(buildingId: number, delta: 1 | -1): void {
+    if (this.duelMode) return;
     const b = this.buildings.get(buildingId);
     if (!b || b.workersRequired === 0) return;
     if (delta > 0) {
@@ -524,6 +712,7 @@ export class Game {
 
   /** Info-panel action: restore a damaged building to full hp. */
   repairBuilding(id: number): void {
+    if (this.duelMode) return;
     const b = this.buildings.get(id);
     if (!b || b.hp >= b.maxHp) return;
     const cost = this.repairCost(b);
@@ -555,6 +744,7 @@ export class Game {
    * stronger towers, larger huts).
    */
   upgradeBuilding(id: number): void {
+    if (this.duelMode) return;
     const b = this.buildings.get(id);
     if (!b) return;
     const targetId = b.def.upgradesTo as BuildingDefId | undefined;
@@ -589,6 +779,7 @@ export class Game {
   }
 
   demolish(id: number): void {
+    if (this.duelMode) return;
     const b = this.buildings.get(id);
     if (!b || b.def.isWarehouse) return;
     this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
@@ -613,6 +804,11 @@ export class Game {
     if (this.selectedId === id) this.select(null);
     this.sound.play('demolish');
     events.emit('toast:show', { message: `${b.def.name} zerstört!` });
+    if (this.duelMode) {
+      this.duelStats.buildingsDestroyed++;
+      if (b.def.isWarehouse) this.duelOutcome = 'victory'; // resolved next tick
+      return;
+    }
     if (b.def.isWarehouse) {
       this.lostWarehouseSpot = { x: b.x, y: b.y, rotated: b.rotated };
       this.gameOver();
@@ -693,6 +889,7 @@ export class Game {
   }
 
   saveNow(): void {
+    if (this.duelMode) return; // never persist the opponent's castle
     this.saveManager.save(this.toSaveData());
   }
 
@@ -745,6 +942,10 @@ export class Game {
 
   /** Wipe the save and start over (pause menu action). */
   restartNewGame(): void {
+    if (this.duelMode) {
+      events.emit('toast:show', { message: 'Erst das Duell beenden' });
+      return;
+    }
     this.saveManager.clear();
     this.buildSystem.cancel();
     this.newGame();

@@ -458,6 +458,55 @@ button:active {
   color: var(--ui-accent);
 }
 
+/* --- Burg-Duell --- */
+
+.duel-card {
+  max-width: min(92vw, 420px);
+  text-align: left;
+}
+
+.duel-label {
+  font-size: 13px;
+  color: var(--ui-text-dim);
+  margin-top: 4px;
+}
+
+.duel-army {
+  color: var(--ui-accent);
+}
+
+.duel-code {
+  width: 100%;
+  resize: none;
+  font: 11px/1.4 ui-monospace, monospace;
+  color: var(--ui-text);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  word-break: break-all;
+}
+
+.duel-hud {
+  position: absolute;
+  top: calc(52px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-danger);
+  border-radius: 999px;
+  padding: 7px 8px 7px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.duel-hud[hidden] {
+  display: none;
+}
+
 /* --- Dev rewarded-ad placeholder --- */
 
 .ad-overlay {

@@ -17,6 +17,14 @@ export function createPauseMenu(uiRoot: HTMLElement, game: Game): void {
   resumeBtn.textContent = 'Weiterspielen';
   resumeBtn.addEventListener('click', () => game.setPhase('playing'));
 
+  const duelBtn = document.createElement('button');
+  duelBtn.textContent = '⚔️ Burg-Duell';
+  duelBtn.addEventListener('click', () => {
+    events.emit('duel:openMenu', undefined);
+    overlay.hidden = true;
+    game.setPhase('playing');
+  });
+
   const soundBtn = document.createElement('button');
   const soundLabel = (): string => (game.sound.isMuted() ? '🔇 Ton: aus' : '🔊 Ton: an');
   soundBtn.textContent = soundLabel();
@@ -39,7 +47,7 @@ export function createPauseMenu(uiRoot: HTMLElement, game: Game): void {
     game.restartNewGame();
   });
 
-  card.append(heading, resumeBtn, soundBtn, newGameBtn);
+  card.append(heading, resumeBtn, duelBtn, soundBtn, newGameBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 
