@@ -59,6 +59,26 @@ export const ENEMY_DEFS = {
     ignoresSoldiers: true,
     art: { color: 0x5a4632, radius: 10 },
   },
+  catapult: {
+    id: 'catapult',
+    name: 'Katapult',
+    hp: 80,
+    speed: 0.8,
+    damage: 18,
+    attackInterval: 4,
+    range: 7,
+    ignoresSoldiers: true,
+    art: { color: 0x4c4438, radius: 9 },
+  },
+  warlord: {
+    id: 'warlord',
+    name: 'Kriegsherr',
+    hp: 420,
+    speed: 0.9,
+    damage: 12,
+    attackInterval: 1.2,
+    art: { color: 0x2e2238, radius: 12 },
+  },
 } as const satisfies Record<string, Omit<EnemyDef, 'id'> & { id: string }>;
 
 export type EnemyDefId = keyof typeof ENEMY_DEFS;
@@ -79,5 +99,10 @@ export function waveComposition(n: number, raiders: number): { defId: EnemyDefId
   // Battering rams from wave 6 on.
   const rams = n >= 6 ? 1 + Math.floor((n - 6) / 3) : 0;
   if (rams > 0) parts.push({ defId: 'ram', count: rams });
+  // Catapults outrange towers from wave 8 on.
+  const catapults = n >= 8 ? 1 + Math.floor((n - 8) / 4) : 0;
+  if (catapults > 0) parts.push({ defId: 'catapult', count: catapults });
+  // A warlord leads every tenth wave.
+  if (n % 10 === 0) parts.push({ defId: 'warlord', count: 1 });
   return parts;
 }

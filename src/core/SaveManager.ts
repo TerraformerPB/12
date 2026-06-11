@@ -1,4 +1,4 @@
-import { SAVE_KEY, SAVE_VERSION, type ResourceId } from '../data/config';
+import { MORALE_START, SAVE_KEY, SAVE_VERSION, type ResourceId } from '../data/config';
 import type { BuildingSave } from '../entities/Building';
 import type { EnemySave } from '../entities/Enemy';
 import type { SoldierSave } from '../entities/Soldier';
@@ -25,6 +25,11 @@ export interface SaveData {
   tutorialStep: number;
   /** Since save version 7: terrain changes (felled/regrown forest). */
   terrainOverrides: [number, number, number][];
+  /** Since save version 9. */
+  morale: number;
+  taxLevel: number;
+  seasonTicks: number;
+  scenarioId: string;
 }
 
 /**
@@ -58,6 +63,21 @@ export function migrateSave(data: SaveData): SaveData | null {
       w.carryingCount = w.carryingCount ?? (w.carrying ? 1 : 0);
     }
     data.saveVersion = 8;
+  }
+  if (data.saveVersion === 8) {
+    // v8 → v9: consumption/morale, construction, veterans, gold, seasons.
+    data.morale = MORALE_START;
+    data.taxLevel = 0;
+    data.seasonTicks = 0;
+    data.scenarioId = 'endless';
+    data.resources.gold = data.resources.gold ?? 0;
+    for (const b of data.buildings) {
+      b.underConstruction = false;
+      b.materialsRemaining = {};
+      b.buildTicks = 0;
+    }
+    for (const s of data.soldiers) s.kills = 0;
+    data.saveVersion = 9;
   }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }

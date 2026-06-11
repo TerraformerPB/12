@@ -10,6 +10,10 @@ export interface TechDef {
   name: string;
   cost: Partial<Record<ResourceId, number>>;
   description: string;
+  /** Tier-2 techs require a researched tier-1 tech … */
+  requires?: string;
+  /** … and lock out their rival branch for the rest of the run. */
+  excludes?: string;
 }
 
 export const TECH_DEFS = {
@@ -43,6 +47,22 @@ export const TECH_DEFS = {
     cost: { beer: 8 },
     description: 'Träger laufen zusätzlich 15% schneller.',
   },
+  militaryDoctrine: {
+    id: 'militaryDoctrine',
+    name: 'Militärdoktrin',
+    cost: { weapons: 6, bread: 10 },
+    requires: 'combatTraining',
+    excludes: 'tradeGuild',
+    description: '+1 Turm-Reichweite. Schließt Handelsgilde aus.',
+  },
+  tradeGuild: {
+    id: 'tradeGuild',
+    name: 'Handelsgilde',
+    cost: { beer: 6, gold: 20 },
+    requires: 'freeBeer',
+    excludes: 'militaryDoctrine',
+    description: 'Bessere Marktpreise. Schließt Militärdoktrin aus.',
+  },
 } as const satisfies Record<string, Omit<TechDef, 'id'> & { id: string }>;
 
 export type TechId = keyof typeof TECH_DEFS;
@@ -60,4 +80,5 @@ export const TECH_EFFECTS = {
   combatTrainingDamage: 1.5,
   fieldRationsSpeed: 1.25,
   freeBeerSpeed: 1.15,
+  militaryDoctrineRange: 1,
 } as const;

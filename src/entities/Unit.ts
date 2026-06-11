@@ -53,6 +53,11 @@ export abstract class Unit {
     return this.pathIndex < this.path.length ? this.path[this.pathIndex] : null;
   }
 
+  /** The next up-to-n upcoming waypoints (ranged standoff checks). */
+  peekPath(n: number): Point[] {
+    return this.path.slice(this.pathIndex, this.pathIndex + n);
+  }
+
   /** Freeze interpolation when standing still. */
   rest(): void {
     this.prevX = this.x;

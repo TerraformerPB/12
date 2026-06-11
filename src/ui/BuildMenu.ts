@@ -76,6 +76,7 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
   content.appendChild(techGrid);
 
   const techCards = new Map<TechId, HTMLButtonElement>();
+  const techCostText = new Map<TechId, string>();
   for (const techId of TECH_IDS) {
     const def = getTechDef(techId);
     const card = document.createElement('button');
@@ -89,9 +90,11 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
     meta.textContent = def.description;
     const cost = document.createElement('span');
     cost.className = 'cost';
-    cost.textContent = RESOURCE_IDS.filter((r) => (def.cost[r] ?? 0) > 0)
+    const costText = RESOURCE_IDS.filter((r) => (def.cost[r] ?? 0) > 0)
       .map((r) => `${RESOURCE_INFO[r].icon} ${def.cost[r]}`)
       .join('  ');
+    cost.textContent = costText;
+    techCostText.set(techId, costText);
 
     card.append(title, meta, cost);
     card.addEventListener('click', () => game.buyTech(techId));
@@ -99,15 +102,23 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
     techCards.set(techId, card);
   }
 
+  // Tier-2 techs stay locked until their prerequisite is researched and
+  // disappear once the rival branch was chosen.
   events.on('techs:changed', ({ researched }) => {
     for (const [techId, card] of techCards) {
+      const def = getTechDef(techId);
       const done = researched.includes(techId);
-      card.disabled = done;
+      const lockedOut = def.excludes !== undefined && researched.includes(def.excludes);
+      const missingReq = def.requires !== undefined && !researched.includes(def.requires);
+      card.hidden = lockedOut;
+      card.disabled = done || missingReq;
       card.classList.toggle('researched', done);
-      if (done) {
-        const costEl = card.querySelector('.cost');
-        if (costEl) costEl.textContent = '✓ Erforscht';
-      }
+      const costEl = card.querySelector('.cost');
+      if (!costEl) continue;
+      if (done) costEl.textContent = '✓ Erforscht';
+      else if (missingReq) {
+        costEl.textContent = `🔒 Benötigt: ${getTechDef(def.requires as TechId).name}`;
+      } else costEl.textContent = techCostText.get(techId) ?? '';
     }
   });
 

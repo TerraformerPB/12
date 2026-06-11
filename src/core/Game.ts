@@ -9,6 +9,24 @@ import {
   START_RESOURCES,
 } from '../data/config';
 import { getSoldierType, type SoldierTypeId } from '../data/soldiers';
+import {
+  AUTUMN_FARM_BONUS,
+  FOOD_INTERVAL,
+  FOOD_PER_POP,
+  FOOD_PER_SOLDIER,
+  MORALE_FED_BONUS,
+  MORALE_HUNGER_PENALTY,
+  MORALE_SPEED_BASE,
+  MORALE_SPEED_SPAN,
+  MORALE_START,
+  MORALE_TAX_PENALTY,
+  MORALE_VARIETY_BONUS,
+  SEASON_LENGTH,
+  TAX_GOLD_PER_POP,
+  TICK_RATE,
+  WINTER_FOOD_FACTOR,
+} from '../data/config';
+import { SCENARIOS, getScenario, type ScenarioId } from '../data/scenarios';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
@@ -47,6 +65,7 @@ import { createGameOverMenu } from '../ui/GameOverMenu';
 import { createDuelMenu } from '../ui/DuelMenu';
 import { createMainMenu } from '../ui/MainMenu';
 import { createStatsPanel } from '../ui/StatsPanel';
+import { createMarketPanel } from '../ui/MarketPanel';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
 import {
@@ -55,6 +74,12 @@ import {
   UPGRADE_COST_FACTOR,
 } from '../data/config';
 import { recordScore } from './Highscores';
+import {
+  BUY_MARKUP,
+  SELL_PRICE,
+  TRADE_GUILD_BUY_FACTOR,
+  TRADE_GUILD_SELL_FACTOR,
+} from '../data/market';
 import { decodeCastle, encodeCastle } from './CastleCode';
 import {
   DUEL_GROUP_SIZE,
@@ -105,6 +130,12 @@ export class Game {
   readonly enemies: Enemy[] = [];
   readonly techs = new Set<TechId>();
   tutorialStep = 0;
+  /** Phase 12: settlement morale (0–100), tax level (0–3), season clock. */
+  morale = MORALE_START;
+  taxLevel = 0;
+  seasonTicks = 0;
+  scenarioId: ScenarioId = 'endless';
+  private victoryAnnounced = false;
   /** Swapped for an AdMob-backed provider in the store build (phase 6). */
   ads!: RewardedAdProvider;
   private reviveUsed = false;
@@ -122,6 +153,7 @@ export class Game {
   selectedId: number | null = null;
   selectedSoldierId: number | null = null;
   statsPanel: { toggle(): void } | null = null;
+  marketPanel: { open(): void } | null = null;
   /** True once the player has built anything beyond the starting warehouse. */
   hasProgress(): boolean {
     return this.buildings.size > 1 || this.waveSystem.waveNumber > 0;
@@ -144,6 +176,7 @@ export class Game {
     createDuelMenu(uiRoot, this);
     createMainMenu(uiRoot, this);
     this.statsPanel = createStatsPanel(uiRoot, this);
+    this.marketPanel = createMarketPanel(uiRoot, this);
     createToast(uiRoot);
     if (Capacitor.isNativePlatform()) {
       const admob = new AdmobRewardedAdProvider();
@@ -188,6 +221,10 @@ export class Game {
     this.enemies.length = 0;
     this.techs.clear();
     this.tutorialStep = 0;
+    this.morale = MORALE_START;
+    this.taxLevel = 0;
+    this.seasonTicks = 0;
+    this.victoryAnnounced = false;
     this.reviveUsed = false;
     this.lostWarehouseSpot = null;
     this.grid = new IsoGrid(MAP_W, MAP_H);
@@ -213,8 +250,14 @@ export class Game {
       getSoldierCount: () => this.soldiers.length,
       getSpeedFactor: () =>
         (this.techs.has('fastCarriers') ? TECH_EFFECTS.fastCarriersSpeed : 1) *
-        (this.techs.has('freeBeer') ? TECH_EFFECTS.freeBeerSpeed : 1),
+        (this.techs.has('freeBeer') ? TECH_EFFECTS.freeBeerSpeed : 1) *
+        this.moraleSpeedFactor(),
       fellForestTile: (b) => this.fellForest(b),
+      getFarmFactor: () => (this.season === 2 ? AUTUMN_FARM_BONUS : this.season === 3 ? 0 : 1),
+      onConstructionFinished: (b) => {
+        this.sound.play('place');
+        events.emit('toast:show', { message: `${b.def.name} fertiggestellt` });
+      },
     });
     this.soldierSystem = new SoldierSystem(this.grid, this.soldiers, () =>
       this.techs.has('fieldRations') ? TECH_EFFECTS.fieldRationsSpeed : 1,
@@ -239,6 +282,8 @@ export class Game {
       onSoldierKilled: (soldier) => this.onSoldierKilled(soldier),
       playSound: (id) => this.sound.play(id),
       towerDamageFactor: () => (this.techs.has('steelArrows') ? TECH_EFFECTS.steelArrowsDamage : 1),
+      towerRangeBonus: () =>
+        this.techs.has('militaryDoctrine') ? TECH_EFFECTS.militaryDoctrineRange : 0,
       soldierDamageFactor: () =>
         this.techs.has('combatTraining') ? TECH_EFFECTS.combatTrainingDamage : 1,
     });
@@ -249,12 +294,17 @@ export class Game {
         this.addBuilding(defId, gx, gy, rotated);
         this.sound.play('place');
       },
+      // Roads/bridges build instantly and are paid up front; everything
+      // else becomes a construction site supplied by carriers.
+      paysUpFront: (defId) => getDef(defId).roadTier !== undefined,
     });
     store.emitChanged();
   }
 
-  newGame(seed: number = (Math.random() * 0xffffffff) >>> 0): void {
+  newGame(seed: number = (Math.random() * 0xffffffff) >>> 0, scenarioId: ScenarioId = 'endless'): void {
     this.resetWorld(seed);
+    this.scenarioId = scenarioId;
+    this.lastSeason = -1;
     this.setupSystems(new ResourceStore(START_RESOURCES));
 
     // Starting warehouse in the map center (the generator keeps it clear).
@@ -267,6 +317,7 @@ export class Game {
     const center = gridToScreen(wx + warehouseDef.footprint.w / 2, wy + warehouseDef.footprint.h / 2);
     this.camera.centerOn(center.x, center.y);
     events.emit('techs:changed', { researched: [] });
+    events.emit('morale:changed', { morale: Math.round(this.morale) });
     this.checkTutorial(true);
     events.emit('game:loaded', undefined);
   }
@@ -285,13 +336,130 @@ export class Game {
       this.tickDuel();
       return;
     }
+    this.seasonTicks++;
     this.economy.tick();
     this.soldierSystem.tick();
     this.waveSystem.tick();
     this.combatSystem.tick();
+    if (this.tickCount % (FOOD_INTERVAL * TICK_RATE) === 0) this.foodAndTaxTick();
     // Tutorial conditions are cheap but need no per-tick precision.
-    if (this.tickCount % 20 === 0) this.checkTutorial();
+    if (this.tickCount % 20 === 0) {
+      this.checkTutorial();
+      this.checkSeasonChange();
+      this.checkVictory();
+    }
     if (this.tickCount % (FOREST_REGROW_INTERVAL * 20) === 0) this.regrowForest();
+  }
+
+  // --- Seasons -------------------------------------------------------------------
+
+  /** 0 Frühling, 1 Sommer, 2 Herbst, 3 Winter. */
+  get season(): number {
+    return Math.floor(this.seasonTicks / (SEASON_LENGTH * TICK_RATE)) % 4;
+  }
+
+  private lastSeason = -1;
+
+  private checkSeasonChange(): void {
+    const s = this.season;
+    if (s === this.lastSeason) return;
+    this.lastSeason = s;
+    const names = ['🌱 Frühling', '☀️ Sommer', '🍂 Herbst', '❄️ Winter'];
+    events.emit('season:changed', { season: s, label: names[s] });
+    if (this.tickCount > 1) events.emit('toast:show', { message: `${names[s]} beginnt` });
+    // Subtle map tint per season (terrain is baked into sprites — cheap).
+    this.renderer.setSeasonTint([0xffffff, 0xfff6e4, 0xffe3c0, 0xdce8f5][s]);
+  }
+
+  // --- Consumption, morale & taxes ---------------------------------------------------
+
+  private foodAndTaxTick(): void {
+    const pop = this.economy.populationTotal();
+    const winter = this.season === 3;
+    let need = Math.ceil(pop * FOOD_PER_POP) + this.soldiers.length * FOOD_PER_SOLDIER;
+    if (winter) need = Math.ceil(need * WINTER_FOOD_FACTOR);
+    let missing = need;
+    for (const r of ['bread', 'fish'] as const) {
+      const take = Math.min(missing, this.store.get(r));
+      if (take > 0) this.store.pay({ [r]: take });
+      missing -= take;
+    }
+    if (missing > 0) {
+      this.morale = Math.max(0, this.morale - MORALE_HUNGER_PENALTY);
+      events.emit('toast:show', { message: `🍽️ Hunger! ${missing} Mahlzeiten fehlen` });
+    } else {
+      const variety =
+        ['bread', 'fish', 'beer'].filter((r) => this.store.get(r as 'bread') > 0).length >= 2;
+      this.morale = Math.min(
+        100,
+        this.morale + MORALE_FED_BONUS + (variety ? MORALE_VARIETY_BONUS : 0),
+      );
+    }
+    if (this.taxLevel > 0) {
+      this.store.add('gold', Math.round(pop * TAX_GOLD_PER_POP * this.taxLevel));
+      this.morale = Math.max(0, this.morale - MORALE_TAX_PENALTY * this.taxLevel);
+    }
+    events.emit('morale:changed', { morale: Math.round(this.morale) });
+  }
+
+  /** Worker speed scales with morale (0.75–1.25). */
+  moraleSpeedFactor(): number {
+    return MORALE_SPEED_BASE + (this.morale / 100) * MORALE_SPEED_SPAN;
+  }
+
+  setTaxLevel(level: number): void {
+    this.taxLevel = Math.max(0, Math.min(3, level));
+  }
+
+  /** Market trade: positive = sell to the market, negative = buy. */
+  trade(resource: ResourceId, amount: number): void {
+    if (this.duelMode || resource === 'gold') return;
+    const sellFactor = this.techs.has('tradeGuild') ? TRADE_GUILD_SELL_FACTOR : 1;
+    const buyFactor = this.techs.has('tradeGuild') ? TRADE_GUILD_BUY_FACTOR : 1;
+    const base = SELL_PRICE[resource] ?? 0;
+    if (base <= 0) return;
+    if (amount > 0) {
+      const units = Math.min(amount, this.store.get(resource));
+      if (units <= 0) return;
+      this.store.pay({ [resource]: units });
+      this.store.add('gold', Math.round(units * base * sellFactor));
+    } else {
+      const units = -amount;
+      const cost = Math.ceil(units * base * BUY_MARKUP * buyFactor);
+      if (this.store.get('gold') < cost) {
+        events.emit('toast:show', { message: 'Nicht genug Gold' });
+        return;
+      }
+      this.store.pay({ gold: cost });
+      this.store.add(resource, units);
+    }
+    this.sound.play('ui');
+  }
+
+  // --- Scenario victory ---------------------------------------------------------------
+
+  private checkVictory(): void {
+    if (this.victoryAnnounced || this.duelMode) return;
+    const scenario = getScenario(this.scenarioId);
+    if (!scenario.isWon) return;
+    if (
+      scenario.isWon({
+        wavesSurvived:
+          this.enemies.length === 0 ? this.waveSystem.waveNumber : this.waveSystem.waveNumber - 1,
+        gold: this.store.get('gold'),
+      })
+    ) {
+      this.victoryAnnounced = true;
+      recordScore({
+        waves: this.waveSystem.waveNumber,
+        kills: this.waveSystem.kills,
+        date: new Date().toLocaleDateString('de-DE'),
+      });
+      this.saveManager.clear();
+      this.setPhase('gameover');
+      this.sound.play('horn');
+      events.emit('game:victory', { scenario: scenario.name, kills: this.waveSystem.kills });
+    }
   }
 
   // --- Duel mode ----------------------------------------------------------------
@@ -517,6 +685,14 @@ export class Game {
   buyTech(id: TechId): void {
     if (this.techs.has(id)) return;
     const def = getTechDef(id);
+    if (def.requires && !this.techs.has(def.requires as TechId)) {
+      events.emit('toast:show', { message: `Benötigt erst: ${getTechDef(def.requires as TechId).name}` });
+      return;
+    }
+    if (def.excludes && this.techs.has(def.excludes as TechId)) {
+      events.emit('toast:show', { message: 'Der andere Zweig wurde bereits gewählt' });
+      return;
+    }
     const missing = missingResourcesMessage(this.store, def.cost);
     if (missing) {
       events.emit('toast:show', { message: missing });
@@ -676,6 +852,15 @@ export class Game {
 
   private addBuilding(defId: BuildingDefId, gx: number, gy: number, rotated: boolean): Building {
     const b = new Building(this.nextId++, defId, gx, gy, rotated);
+    // Roads, the starting warehouse and duel castles appear instantly;
+    // everything else starts as a construction site awaiting materials.
+    const instant =
+      b.def.roadTier !== undefined || b.def.isWarehouse === true || this.duelMode;
+    if (!instant && Object.keys(b.def.cost).length > 0) {
+      b.underConstruction = true;
+      b.materialsRemaining = { ...b.def.cost };
+      b.buildTicks = b.totalBuildTicks;
+    }
     this.buildings.set(b.id, b);
     this.grid.setOccupantRect(gx, gy, b.w, b.h, b.id, passModeOf(b.def));
     // Staff new workplaces automatically from the free population.
@@ -896,6 +1081,10 @@ export class Game {
       techs: [...this.techs],
       tutorialStep: this.tutorialStep,
       terrainOverrides: this.grid.terrainOverrides(),
+      morale: this.morale,
+      taxLevel: this.taxLevel,
+      seasonTicks: this.seasonTicks,
+      scenarioId: this.scenarioId,
     };
   }
 
@@ -939,6 +1128,12 @@ export class Game {
     }
     this.waveSystem.restore(data.wave);
     for (const t of data.techs) this.techs.add(t);
+    this.morale = data.morale;
+    this.taxLevel = data.taxLevel;
+    this.seasonTicks = data.seasonTicks;
+    this.scenarioId = (data.scenarioId in SCENARIOS ? data.scenarioId : 'endless') as ScenarioId;
+    this.lastSeason = -1;
+    events.emit('morale:changed', { morale: Math.round(this.morale) });
     this.tutorialStep = Math.min(data.tutorialStep, TUTORIAL_STEPS.length);
     events.emit('techs:changed', { researched: [...this.techs] });
     this.checkTutorial(true);
@@ -952,14 +1147,14 @@ export class Game {
   }
 
   /** Wipe the save and start over (pause menu action). */
-  restartNewGame(): void {
+  restartNewGame(scenarioId: ScenarioId = 'endless'): void {
     if (this.duelMode) {
       events.emit('toast:show', { message: 'Erst das Duell beenden' });
       return;
     }
     this.saveManager.clear();
     this.buildSystem.cancel();
-    this.newGame();
+    this.newGame(undefined, scenarioId);
     this.setPhase('playing');
     events.emit('toast:show', { message: 'Neues Spiel gestartet' });
   }

@@ -37,7 +37,8 @@ interface BuildingViewEntry {
   sprite: Sprite;
   hpBar: Graphics;
   bounds: Bounds;
-  lastHp: number;
+  /** Redraw trigger for the hp/construction overlay. */
+  lastOverlayKey: string;
   lastLevel: number;
 }
 
@@ -145,6 +146,11 @@ export class WorldRenderer {
 
   resize(w: number, h: number): void {
     this.app.renderer.resize(w, h);
+  }
+
+  /** Seasonal map mood — terrain is baked into chunk textures, so one tint. */
+  setSeasonTint(color: number): void {
+    this.terrainLayer.tint = color;
   }
 
   /** (Re)build the static terrain chunk textures. Call after terrain changes. */
@@ -347,7 +353,7 @@ export class WorldRenderer {
         this.soldierViews.set(s.id, entry);
       }
       const selected = state.selectedSoldierId === s.id;
-      const key = `${selected}:${s.hp}`;
+      const key = `${selected}:${s.hp}:${s.rank}`;
       if (entry.lastKey !== key) {
         entry.lastKey = key;
         entry.gfx.clear();
@@ -355,9 +361,13 @@ export class WorldRenderer {
           if (selected) {
             entry.gfx.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
           }
-          drawHpBar(entry.gfx, 0, -26, 18, s.hp / s.def.hp);
+          drawHpBar(entry.gfx, 0, -26, 18, s.hp / s.maxHp);
         } else {
-          drawSoldier(entry.gfx, selected, s.hp / s.def.hp);
+          drawSoldier(entry.gfx, selected, s.hp / s.maxHp);
+        }
+        // Veteran rank pips above the head.
+        for (let r = 0; r < s.rank; r++) {
+          entry.gfx.rect(-5 + r * 4, -31, 3, 3).fill({ color: 0xf0c843, alpha: 0.95 });
         }
       }
       this.placeUnit(entry, s.prevX, s.prevY, s.x, s.y, alpha);
@@ -370,17 +380,33 @@ export class WorldRenderer {
     }
   }
 
-  /** Health bar geometry over the roof (world px, relative to the anchor). */
-  private updateHpBar(entry: BuildingViewEntry, b: Building): void {
+  /** Construction sites tick every frame; finished buildings only on hp change. */
+  private buildingOverlayKey(b: Building): string {
+    return b.underConstruction ? `c:${b.materialsMissing()}:${b.buildTicks}` : `h:${b.hp}`;
+  }
+
+  /**
+   * Overlay above the roof (world px, relative to the anchor):
+   * health bar for finished buildings, yellow progress bar for sites.
+   */
+  private updateOverlay(entry: BuildingViewEntry, b: Building): void {
+    entry.sprite.alpha = b.underConstruction ? 0.55 : 1;
     entry.hpBar.clear();
     const [n, , s] = footprintCorners(b.w, b.h);
-    drawHpBar(
-      entry.hpBar,
-      (n[0] + s[0]) / 2,
-      n[1] - b.def.art.height - 10,
-      Math.max(28, b.w * 18),
-      b.hp / b.maxHp,
-    );
+    const cx = (n[0] + s[0]) / 2;
+    const cy = n[1] - b.def.art.height - 10;
+    const width = Math.max(28, b.w * 18);
+    if (b.underConstruction) {
+      // Fills only once all materials arrived (delivery phase shows empty).
+      const ratio =
+        b.materialsMissing() > 0 ? 0 : 1 - b.buildTicks / Math.max(1, b.totalBuildTicks);
+      entry.hpBar.rect(cx - width / 2, cy, width, 4).fill({ color: 0x33301f, alpha: 0.9 });
+      entry.hpBar
+        .rect(cx - width / 2, cy, width * Math.max(0, Math.min(1, ratio)), 4)
+        .fill({ color: 0xe8b93c, alpha: 0.95 });
+    } else {
+      drawHpBar(entry.hpBar, cx, cy, width, b.hp / b.maxHp);
+    }
   }
 
   private syncBuildings(state: RenderState): void {
@@ -400,9 +426,10 @@ export class WorldRenderer {
           existing.sprite.scale.set(tex.scale);
           existing.lastLevel = b.level;
         }
-        if (existing.lastHp !== b.hp) {
-          this.updateHpBar(existing, b);
-          existing.lastHp = b.hp;
+        const overlayKey = this.buildingOverlayKey(b);
+        if (existing.lastOverlayKey !== overlayKey) {
+          this.updateOverlay(existing, b);
+          existing.lastOverlayKey = overlayKey;
         }
         continue;
       }
@@ -433,10 +460,10 @@ export class WorldRenderer {
           minY: Math.min(...corners.map((c) => c.y)) - TILE_H / 2 - b.def.art.height,
           maxY: Math.max(...corners.map((c) => c.y)) + TILE_H / 2,
         },
-        lastHp: b.hp,
+        lastOverlayKey: this.buildingOverlayKey(b),
         lastLevel: b.level,
       };
-      this.updateHpBar(entry, b);
+      this.updateOverlay(entry, b);
       this.buildingViews.set(b.id, entry);
     }
   }

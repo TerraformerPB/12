@@ -27,6 +27,9 @@ export interface GameEvents {
   'duel:openMenu': void;
   'duel:status': { queued: number; alive: number };
   'duel:ended': { victory: boolean; unitsLost: number; buildingsDestroyed: number; seconds: number };
+  'morale:changed': { morale: number };
+  'season:changed': { season: number; label: string };
+  'game:victory': { scenario: string; kills: number };
 }
 
 type Handler<P> = (payload: P) => void;
