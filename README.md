@@ -178,6 +178,21 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Bewusst auf später verschoben: Turm-Garnison, zugefrorener Fluss,
   dynamische Marktpreise, Soldaten-Sold, Zufallsereignisse, Achievements.
 
+- **Phase 15 (✓) — Duell-Ausbau (Vorbereitung Match-System):** Zwei neue
+  Duell-Karten: **🏹 Bogenschütze** (Fernkampf, Reichweite 4, 6 Fisch) und
+  **🐏 Ramme** (Belagerung: ignoriert Truppen, 20 Schaden gegen Gebäude,
+  12 Holz) — nur im Duell, nicht in der Kaserne. Drei **KI-Schwierigkeiten**
+  (Leicht/Normal/Schwer: Angriffstakt 65/45/30 s, Truppgröße 4/5/7); die KI
+  setzt jetzt auch Rammen ein (max. 1 pro Trupp, bezahlt aus ihrem
+  Holz-Budget) und sammelt sich abwechselnd am Tor und an den Lagern, um
+  die Flaggen aktiv zu umkämpfen. **🏆 Pokal-System** (`core/DuelRating.ts`,
+  localStorage): Siege bringen 20/30/45 Pokale je nach Schwierigkeit,
+  Niederlagen kosten welche (nie unter 0), Serien werden getrackt; Anzeige
+  im Duell-Dialog und Ergebnis-Screen. Die Pokale sind bewusst als
+  Matchmaking-Rating angelegt: Sobald die APK steht und ein Backend dazu
+  kommt, wird daraus das echte Match-System (Gegner-Suche nach Pokalen,
+  Burg-Upload statt lokaler KI hinter demselben `DuelAI`-Interface).
+
 - **Phase 14 (✓) — Burg-Duell im Clash-Stil:** Im Duell gibt es keine
   Produktion mehr — Rohstoffe kommen ausschließlich aus dem Start-Budget
   (Inventar) und von **eroberbaren Rohstoff-Lagern** auf dem Schlachtfeld

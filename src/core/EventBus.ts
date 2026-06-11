@@ -26,7 +26,13 @@ export interface GameEvents {
   'game:over': { wavesSurvived: number; kills: number };
   'duel:openMenu': void;
   'duel:status': { ownHp: number; foeHp: number; foes: number };
-  'duel:ended': { victory: boolean; unitsLost: number; buildingsDestroyed: number; seconds: number };
+  'duel:ended': {
+    victory: boolean;
+    unitsLost: number;
+    buildingsDestroyed: number;
+    seconds: number;
+    trophyDelta: number;
+  };
   'morale:changed': { morale: number };
   'season:changed': { season: number; label: string };
   'game:victory': { scenario: string; kills: number };

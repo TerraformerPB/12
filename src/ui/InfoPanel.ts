@@ -49,8 +49,10 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   demolishBtn.className = 'demolish';
   demolishBtn.textContent = 'Abreißen (50% zurück)';
 
-  // One recruit button per soldier type (data-driven).
-  const recruitBtns: HTMLButtonElement[] = SOLDIER_TYPE_IDS.map((typeId) => {
+  // One recruit button per soldier type (data-driven; duel cards excluded).
+  const recruitBtns: HTMLButtonElement[] = SOLDIER_TYPE_IDS.filter(
+    (typeId) => getSoldierType(typeId).duelOnly !== true,
+  ).map((typeId) => {
     const type = getSoldierType(typeId);
     const costText = RESOURCE_IDS.filter((r) => (type.cost[r] ?? 0) > 0)
       .map((r) => `${RESOURCE_INFO[r].icon} ${type.cost[r]}`)

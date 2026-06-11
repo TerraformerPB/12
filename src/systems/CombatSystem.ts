@@ -210,12 +210,9 @@ export class CombatSystem {
 
       s.combatTargetId = target.id;
       const dist = Math.hypot(target.x - s.x, target.y - s.y);
-      if (dist <= MELEE_RANGE) {
+      if (dist <= this.soldierReach(s)) {
         s.clearPath();
-        if (s.attackCooldown <= 0) {
-          s.attackCooldown = SOLDIER_ATTACK_TICKS;
-          this.damageEnemy(target, s.attackDamage * this.ctx.soldierDamageFactor(), s);
-        }
+        this.soldierStrikeEnemy(s, target);
       } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
         s.lastRepath = this.tickCount;
         const path = findPath(this.ctx.grid, s.tile, [target.tile]);
@@ -251,10 +248,17 @@ export class CombatSystem {
     const found = this.nearestFoeBuilding(s, origin);
     if (!found) return false;
     const { building, dist } = found;
-    if (dist <= MELEE_RANGE + 0.45) {
+    if (dist <= this.soldierReach(s) + 0.45) {
       s.clearPath();
       if (s.attackCooldown <= 0) {
         s.attackCooldown = SOLDIER_ATTACK_TICKS;
+        if (s.def.range) {
+          const c = building.center;
+          this.projectiles.push({
+            x0: s.x, y0: s.y, x1: c.x, y1: c.y, age: 0, color: 0x4f9dd8,
+          });
+          this.ctx.playSound('arrow');
+        }
         this.damageBuilding(building, s.attackDamage * this.ctx.soldierDamageFactor());
       }
       return true;
@@ -273,29 +277,28 @@ export class CombatSystem {
    * own position, otherwise keeps marching on the foe warehouse.
    */
   private tickAdvance(s: Soldier): void {
-    // 1) Enemy units crossing the lane.
-    let foe: Enemy | null = null;
-    let foeDist = SOLDIER_AGGRO_RANGE;
-    for (const e of this.ctx.enemies) {
-      const d = Math.hypot(e.x - s.x, e.y - s.y);
-      if (d < foeDist) {
-        foe = e;
-        foeDist = d;
-      }
-    }
-    if (foe) {
-      if (foeDist <= MELEE_RANGE) {
-        s.clearPath();
-        if (s.attackCooldown <= 0) {
-          s.attackCooldown = SOLDIER_ATTACK_TICKS;
-          this.damageEnemy(foe, s.attackDamage * this.ctx.soldierDamageFactor(), s);
+    // 1) Enemy units crossing the lane (siege units push on regardless).
+    if (!s.def.siege) {
+      let foe: Enemy | null = null;
+      let foeDist = SOLDIER_AGGRO_RANGE;
+      for (const e of this.ctx.enemies) {
+        const d = Math.hypot(e.x - s.x, e.y - s.y);
+        if (d < foeDist) {
+          foe = e;
+          foeDist = d;
         }
-      } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
-        s.lastRepath = this.tickCount;
-        const path = findPath(this.ctx.grid, s.tile, [foe.tile]);
-        if (path) s.setPath(path);
       }
-      return;
+      if (foe) {
+        if (foeDist <= this.soldierReach(s)) {
+          s.clearPath();
+          this.soldierStrikeEnemy(s, foe);
+        } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
+          s.lastRepath = this.tickCount;
+          const path = findPath(this.ctx.grid, s.tile, [foe.tile]);
+          if (path) s.setPath(path);
+        }
+        return;
+      }
     }
     // 2) Foe buildings around the current position (walls first).
     if (this.engageFoeBuilding(s, s)) return;
@@ -327,8 +330,27 @@ export class CombatSystem {
     }
   }
 
+  /** Strike reach of a soldier (ranged types shoot from a distance). */
+  private soldierReach(s: Soldier): number {
+    return s.def.range ?? MELEE_RANGE;
+  }
+
+  /** One strike at an enemy, with an arrow visual for ranged types. */
+  private soldierStrikeEnemy(s: Soldier, target: Enemy): void {
+    if (s.attackCooldown > 0) return;
+    s.attackCooldown = SOLDIER_ATTACK_TICKS;
+    if (s.def.range) {
+      this.projectiles.push({
+        x0: s.x, y0: s.y, x1: target.x, y1: target.y, age: 0, color: 0x4f9dd8,
+      });
+      this.ctx.playSound('arrow');
+    }
+    this.damageEnemy(target, s.attackDamage * this.ctx.soldierDamageFactor(), s);
+  }
+
   /** Nearest living enemy within aggro range of the soldier's anchor. */
   private acquireSoldierTarget(s: Soldier): Enemy | null {
+    if (s.def.siege) return null; // rams only care about buildings
     let best: Enemy | null = null;
     let bestDist = Infinity;
     for (const e of this.ctx.enemies) {

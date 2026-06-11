@@ -1,5 +1,15 @@
 import { events } from '../core/EventBus';
-import { DUEL_BUDGETS, DUEL_BUDGET_IDS, DUEL_DEPLOY_COSTS } from '../data/duel';
+import {
+  DUEL_AI_LEVELS,
+  DUEL_AI_LEVEL_IDS,
+  DUEL_BUDGETS,
+  DUEL_BUDGET_IDS,
+  DUEL_DEPLOY_COSTS,
+  DUEL_DEPLOY_ICONS,
+  DUEL_DEPLOY_IDS,
+  type DuelAiLevelId,
+} from '../data/duel';
+import { loadDuelRating } from '../core/DuelRating';
 import { RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
 import { getSoldierType } from '../data/soldiers';
 import type { Game } from '../core/Game';
@@ -30,11 +40,31 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
     'und zerstöre das gegnerische Lagerhaus, bevor deins fällt. ' +
     'Dein Spielstand bleibt unberührt.';
 
+  const ratingLine = document.createElement('div');
+  ratingLine.className = 'duel-label';
+
+  // Difficulty selector (trophy stakes scale with it).
+  let selectedLevel: DuelAiLevelId = 'normal';
+  const levelRow = document.createElement('div');
+  levelRow.className = 'market-row';
+  const levelBtns = new Map<DuelAiLevelId, HTMLButtonElement>();
+  for (const id of DUEL_AI_LEVEL_IDS) {
+    const btn = document.createElement('button');
+    btn.textContent = `${DUEL_AI_LEVELS[id].name} (+${DUEL_AI_LEVELS[id].trophiesWin}🏆)`;
+    btn.classList.toggle('researched', id === selectedLevel);
+    btn.addEventListener('click', () => {
+      selectedLevel = id;
+      for (const [lid, b] of levelBtns) b.classList.toggle('researched', lid === selectedLevel);
+    });
+    levelRow.appendChild(btn);
+    levelBtns.set(id, btn);
+  }
+
   const budgetLabel = document.createElement('div');
   budgetLabel.className = 'duel-label';
   budgetLabel.textContent = 'Rohstoff-Budget wählen:';
 
-  card.append(heading, intro, budgetLabel);
+  card.append(heading, intro, ratingLine, levelRow, budgetLabel);
 
   for (const id of DUEL_BUDGET_IDS) {
     const budget = DUEL_BUDGETS[id];
@@ -51,7 +81,7 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
       .join('  ');
     btn.append(name, detail);
     btn.addEventListener('click', () => {
-      if (game.startMirrorDuel(id)) overlay.hidden = true;
+      if (game.startMirrorDuel(id, selectedLevel)) overlay.hidden = true;
     });
     card.appendChild(btn);
   }
@@ -65,6 +95,11 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
   uiRoot.appendChild(overlay);
 
   events.on('duel:openMenu', () => {
+    const rating = loadDuelRating();
+    ratingLine.textContent =
+      rating.wins + rating.losses > 0
+        ? `🏆 ${rating.trophies} Pokale · ${rating.wins} Siege / ${rating.losses} Niederlagen · Beste Serie: ${rating.bestStreak}`
+        : '🏆 Noch kein Duell gespielt — hol dir die ersten Pokale!';
     overlay.hidden = false;
   });
 
@@ -89,20 +124,20 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
   const deploy = document.createElement('div');
   deploy.className = 'duel-deploy';
   deploy.hidden = true;
-  const deployCards = new Map<'soldier' | 'knight', HTMLButtonElement>();
+  const deployCards = new Map<(typeof DUEL_DEPLOY_IDS)[number], HTMLButtonElement>();
   const refreshCards = (): void => {
     for (const [typeId, btn] of deployCards) {
       btn.classList.toggle('selected', game.duelDeployType === typeId);
       btn.classList.toggle('unaffordable', !game.store.canAfford(DUEL_DEPLOY_COSTS[typeId]));
     }
   };
-  for (const typeId of ['soldier', 'knight'] as const) {
+  for (const typeId of DUEL_DEPLOY_IDS) {
     const type = getSoldierType(typeId);
     const cost = DUEL_DEPLOY_COSTS[typeId];
     const btn = document.createElement('button');
     btn.className = 'duel-card-btn';
     const name = document.createElement('span');
-    name.textContent = `${typeId === 'knight' ? '🛡️' : '⚔️'} ${type.name}`;
+    name.textContent = `${DUEL_DEPLOY_ICONS[typeId]} ${type.name}`;
     const costEl = document.createElement('span');
     costEl.className = 'scenario-desc';
     costEl.textContent = RESOURCE_IDS.filter((r) => (cost[r] ?? 0) > 0)
@@ -146,11 +181,14 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
   result.appendChild(resultCard);
   uiRoot.appendChild(result);
 
-  events.on('duel:ended', ({ victory, unitsLost, buildingsDestroyed, seconds }) => {
+  events.on('duel:ended', ({ victory, unitsLost, buildingsDestroyed, seconds, trophyDelta }) => {
     hud.hidden = true;
     deploy.hidden = true;
     resultHeading.textContent = victory ? '🏆 Burg erobert!' : '💀 Burg verloren';
-    resultStats.textContent = `Feinde besiegt: ${unitsLost} · Gegnerische Gebäude zerstört: ${buildingsDestroyed} · Dauer: ${seconds}s`;
+    const trophies = trophyDelta >= 0 ? `+${trophyDelta}` : `${trophyDelta}`;
+    resultStats.textContent =
+      `${trophies} 🏆 (gesamt ${loadDuelRating().trophies}) · ` +
+      `Feinde besiegt: ${unitsLost} · Gegnerische Gebäude zerstört: ${buildingsDestroyed} · Dauer: ${seconds}s`;
     result.hidden = false;
   });
 }
