@@ -29,6 +29,7 @@ export function createStatsPanel(uiRoot: HTMLElement, game: Game): { toggle(): v
   const ratePerMinute = (): Partial<Record<(typeof RESOURCE_IDS)[number], number>> => {
     const rates: Partial<Record<(typeof RESOURCE_IDS)[number], number>> = {};
     for (const b of game.buildings.values()) {
+      if (b.owner !== 'player') continue;
       const recipe = b.def.recipe;
       if (!recipe || b.productionHalted) continue;
       const speed = b.staffingFactor * b.levelFactor;
@@ -78,6 +79,7 @@ export function createStatsPanel(uiRoot: HTMLElement, game: Game): { toggle(): v
     row('Anlage', 'stats-section');
     const counts = new Map<string, number>();
     for (const b of game.buildings.values()) {
+      if (b.owner !== 'player') continue;
       counts.set(b.def.name, (counts.get(b.def.name) ?? 0) + 1);
     }
     row([...counts.entries()].map(([name, n]) => `${n}× ${name}`).join(' · '));

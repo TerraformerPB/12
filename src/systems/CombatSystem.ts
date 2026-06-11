@@ -192,6 +192,8 @@ export class CombatSystem {
       const target = this.acquireSoldierTarget(s);
       if (!target) {
         s.combatTargetId = null;
+        // Duel: with no enemy units around, besiege the opposing castle.
+        if (this.engageFoeBuilding(s)) continue;
         // Walk back to the guard post after a fight.
         if (!s.hasPath() && (s.tile.x !== s.anchor.x || s.tile.y !== s.anchor.y)) {
           const path = findPath(this.ctx.grid, s.tile, [s.anchor]);
@@ -215,6 +217,46 @@ export class CombatSystem {
         else s.combatTargetId = null; // unreachable (behind a wall)
       }
     }
+  }
+
+  /** Duel: nearest foe building with a footprint tile in anchor aggro range. */
+  private nearestFoeBuilding(s: Soldier): { building: Building; dist: number } | null {
+    let best: Building | null = null;
+    let bestDist = Infinity;
+    for (const b of this.ctx.buildings.values()) {
+      if (b.owner !== 'foe') continue;
+      for (const t of b.footprintTiles()) {
+        if (Math.hypot(t.x - s.anchor.x, t.y - s.anchor.y) > SOLDIER_AGGRO_RANGE) continue;
+        const d = Math.hypot(t.x - s.x, t.y - s.y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = b;
+        }
+      }
+    }
+    return best ? { building: best, dist: bestDist } : null;
+  }
+
+  /** March to and strike the nearest foe building. True while engaged. */
+  private engageFoeBuilding(s: Soldier): boolean {
+    const found = this.nearestFoeBuilding(s);
+    if (!found) return false;
+    const { building, dist } = found;
+    if (dist <= MELEE_RANGE + 0.45) {
+      s.clearPath();
+      if (s.attackCooldown <= 0) {
+        s.attackCooldown = SOLDIER_ATTACK_TICKS;
+        this.damageBuilding(building, s.attackDamage * this.ctx.soldierDamageFactor());
+      }
+      return true;
+    }
+    if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
+      s.lastRepath = this.tickCount;
+      const path = findPath(this.ctx.grid, s.tile, building.accessTiles(this.ctx.grid));
+      if (path) s.setPath(path);
+      else return false; // walled off — stand down until something opens
+    }
+    return true;
   }
 
   /** Nearest living enemy within aggro range of the soldier's anchor. */
@@ -257,6 +299,18 @@ export class CombatSystem {
         continue;
       }
       const center = b.center;
+      // Duel: the opposing castle's towers shoot the player's soldiers.
+      if (b.owner === 'foe') {
+        const soldier = this.nearestSoldier(center.x, center.y, TOWER_RANGE);
+        if (!soldier) continue;
+        this.towerCooldowns.set(b.id, TOWER_ATTACK_TICKS);
+        this.projectiles.push({
+          x0: center.x, y0: center.y, x1: soldier.x, y1: soldier.y, age: 0, color: 0x9a4a3a,
+        });
+        this.ctx.playSound('arrow');
+        this.damageSoldier(soldier, TOWER_DAMAGE);
+        continue;
+      }
       let target: Enemy | null = null;
       let bestDist =
         TOWER_RANGE + UPGRADE_TOWER_RANGE_BONUS * (b.level - 1) + this.ctx.towerRangeBonus();

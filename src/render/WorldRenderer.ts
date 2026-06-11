@@ -437,6 +437,8 @@ export class WorldRenderer {
       const sprite = new Sprite(tex.texture);
       sprite.position.set(tex.offsetX, tex.offsetY);
       sprite.scale.set(tex.scale);
+      // Duel: the opposing castle reads as hostile via a reddish tint.
+      if (b.owner === 'foe') sprite.tint = 0xffb0a0;
       const hpBar = new Graphics();
       const view = new Container();
       view.addChild(sprite, hpBar);

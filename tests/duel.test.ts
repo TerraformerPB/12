@@ -77,3 +77,70 @@ describe('phase 11 data', () => {
     expect(getDef('gateIron').passable).toBe(true);
   });
 });
+
+describe('mirror duel (phase 13)', () => {
+  it('mirrors the west half onto the east half', async () => {
+    const { IsoGrid } = await import('../src/world/IsoGrid');
+    const { generateTerrain, mirrorTerrainEastWest } = await import(
+      '../src/world/TerrainGenerator'
+    );
+    const grid = new IsoGrid(48, 48);
+    generateTerrain(grid, 13371337);
+    mirrorTerrainEastWest(grid);
+    for (let y = 0; y < 48; y++) {
+      for (let x = 0; x < 24; x++) {
+        expect(grid.terrainAt(47 - x, y)).toBe(grid.terrainAt(x, y));
+      }
+    }
+  });
+
+  it('clears the requested castle rects to grass', async () => {
+    const { IsoGrid, Terrain } = await import('../src/world/IsoGrid');
+    const { generateTerrain, mirrorTerrainEastWest } = await import(
+      '../src/world/TerrainGenerator'
+    );
+    const grid = new IsoGrid(48, 48);
+    generateTerrain(grid, 24682468);
+    mirrorTerrainEastWest(grid, [{ x: 2, y: 18, w: 10, h: 13 }]);
+    for (let y = 18; y < 31; y++) {
+      for (let x = 2; x < 12; x++) {
+        expect(grid.terrainAt(x, y)).toBe(Terrain.Grass);
+      }
+    }
+  });
+
+  it('AI converts its budget into squads until it is exhausted', async () => {
+    const { DuelAI } = await import('../src/systems/DuelAI');
+    const { Enemy } = await import('../src/entities/Enemy');
+    const enemies: InstanceType<typeof Enemy>[] = [];
+    let nextId = 1;
+    let squads = 0;
+    const ai = new DuelAI(
+      {
+        enemies,
+        nextEntityId: () => nextId++,
+        spawnTile: () => ({ x: 40, y: 24 }),
+        playSound: () => {},
+        onSquadSent: () => squads++,
+      },
+      { bread: 9, weapons: 10, fish: 6 },
+    );
+    // 9/3 raiders + 10/5 brutes + 6/6 skirmishers = 6 units total.
+    let sent = 0;
+    while (!ai.exhausted) sent += ai.sendSquad();
+    expect(sent).toBe(6);
+    expect(enemies.length).toBe(6);
+    expect(squads).toBeGreaterThan(0);
+    expect(ai.sendSquad()).toBe(0); // budget exhausted
+  });
+
+  it('offers three symmetric budgets', async () => {
+    const { DUEL_BUDGETS, DUEL_BUDGET_IDS } = await import('../src/data/duel');
+    expect(DUEL_BUDGET_IDS.length).toBe(3);
+    for (const id of DUEL_BUDGET_IDS) {
+      const b = DUEL_BUDGETS[id];
+      expect((b.resources.wood ?? 0)).toBeGreaterThan(0);
+      expect((b.resources.bread ?? 0)).toBeGreaterThan(0);
+    }
+  });
+});

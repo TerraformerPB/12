@@ -125,6 +125,7 @@ export class EconomySystem {
   populationTotal(): number {
     let total = START_WORKERS;
     for (const b of this.ctx.buildings.values()) {
+      if (b.owner !== 'player') continue;
       total += b.populationBonus;
     }
     return total;
@@ -141,7 +142,9 @@ export class EconomySystem {
   /** Population assigned as building staff. */
   assignedTotal(): number {
     let total = 0;
-    for (const b of this.ctx.buildings.values()) total += b.assignedWorkers;
+    for (const b of this.ctx.buildings.values()) {
+      if (b.owner === 'player') total += b.assignedWorkers;
+    }
     return total;
   }
 
@@ -153,6 +156,8 @@ export class EconomySystem {
   tick(): void {
     this.tickCount++;
     for (const b of this.ctx.buildings.values()) {
+      // The duel opponent's castle has no economy of its own.
+      if (b.owner !== 'player') continue;
       // Lumberjacks need standing forest and slowly consume it.
       if (b.def.placement === 'adjacentForest' && b.def.recipe) {
         b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Forest) === null;
@@ -229,7 +234,9 @@ export class EconomySystem {
   private syncCartCount(): void {
     const { workers } = this.ctx;
     let stables = 0;
-    for (const b of this.ctx.buildings.values()) if (b.defId === 'stable') stables++;
+    for (const b of this.ctx.buildings.values()) {
+      if (b.defId === 'stable' && b.owner === 'player') stables++;
+    }
     const target = stables * CARTS_PER_STABLE;
     const carts = workers.filter((w) => w.isCart);
     if (carts.length < target) {
@@ -254,7 +261,7 @@ export class EconomySystem {
     const warehouse = this.ctx.getWarehouse();
     if (!warehouse) return;
     for (const b of this.ctx.buildings.values()) {
-      if (b.def.isWarehouse) continue;
+      if (b.def.isWarehouse || b.owner !== 'player') continue;
       // Pickups: bring finished output to the warehouse.
       while (b.unclaimedOutput() > 0) {
         const output = b.def.recipe?.output;

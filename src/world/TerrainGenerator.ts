@@ -94,3 +94,27 @@ export function generateTerrain(grid: IsoGrid, seed: number): void {
   blob(cx + ring, cy - 2, TERRAIN_FOREST_CLUSTER_MAX, Terrain.Forest);
   blob(cx + 2, cy + ring, TERRAIN_ROCK_CLUSTER_MAX, Terrain.Rock);
 }
+
+/**
+ * Mirror the west half onto the east half (duel maps): both players face
+ * identical terrain. The given rects are forced to grass afterwards so
+ * each side's castle has a guaranteed clear building site.
+ */
+export function mirrorTerrainEastWest(
+  grid: IsoGrid,
+  clearRects: { x: number; y: number; w: number; h: number }[] = [],
+): void {
+  const half = Math.floor(grid.width / 2);
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < half; x++) {
+      grid.setTerrain(grid.width - 1 - x, y, grid.terrainAt(x, y));
+    }
+  }
+  for (const r of clearRects) {
+    for (let dy = 0; dy < r.h; dy++) {
+      for (let dx = 0; dx < r.w; dx++) {
+        if (grid.inBounds(r.x + dx, r.y + dy)) grid.setTerrain(r.x + dx, r.y + dy, Terrain.Grass);
+      }
+    }
+  }
+}
