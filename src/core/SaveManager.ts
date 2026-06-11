@@ -23,6 +23,8 @@ export interface SaveData {
   /** Since save version 4. */
   techs: TechId[];
   tutorialStep: number;
+  /** Since save version 7: terrain changes (felled/regrown forest). */
+  terrainOverrides: [number, number, number][];
 }
 
 /**
@@ -41,6 +43,12 @@ export function migrateSave(data: SaveData): SaveData | null {
     // v5 → v6: building levels introduced.
     for (const b of data.buildings) b.level = 1;
     data.saveVersion = 6;
+  }
+  if (data.saveVersion === 6) {
+    // v6 → v7: finite forest (harvest progress + terrain overrides).
+    for (const b of data.buildings) b.harvestProgress = 0;
+    data.terrainOverrides = [];
+    data.saveVersion = 7;
   }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }

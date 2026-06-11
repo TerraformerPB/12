@@ -96,7 +96,8 @@ export class WorldRenderer {
   private markerLayer!: Container;
   private objectLayer!: Container;
 
-  private terrainChunks: { view: Sprite; bounds: Bounds }[] = [];
+  private terrainChunks = new Map<number, { view: Sprite; bounds: Bounds }>();
+  private chunkCols = 0;
   private buildingSprites = new BuildingSprites();
   private buildingViews = new Map<number, BuildingViewEntry>();
   private workerViews = new Map<number, WorkerViewEntry>();
@@ -155,51 +156,69 @@ export class WorldRenderer {
 
   /** (Re)build the static terrain chunk textures. Call after terrain changes. */
   buildTerrain(grid: IsoGrid): void {
-    for (const chunk of this.terrainChunks) chunk.view.destroy(true);
-    this.terrainChunks = [];
+    for (const chunk of this.terrainChunks.values()) chunk.view.destroy(true);
+    this.terrainChunks.clear();
     this.terrainLayer.removeChildren();
+    this.chunkCols = Math.ceil(grid.width / TERRAIN_CHUNK_SIZE);
 
     for (let cy = 0; cy < grid.height; cy += TERRAIN_CHUNK_SIZE) {
       for (let cx = 0; cx < grid.width; cx += TERRAIN_CHUNK_SIZE) {
-        const g = new Graphics();
-        const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-        const maxY = Math.min(cy + TERRAIN_CHUNK_SIZE, grid.height);
-        const maxX = Math.min(cx + TERRAIN_CHUNK_SIZE, grid.width);
-        // Draw back-to-front inside the chunk so rock lumps overlap correctly.
-        for (let gy = cy; gy < maxY; gy++) {
-          for (let gx = cx; gx < maxX; gx++) {
-            const p = gridToScreen(gx, gy);
-            drawTerrainTile(g, p.x, p.y, grid.terrainAt(gx, gy), (gx + gy) % 2 === 0, gx, gy);
-            bounds.minX = Math.min(bounds.minX, p.x - TILE_W / 2);
-            bounds.maxX = Math.max(bounds.maxX, p.x + TILE_W / 2);
-            bounds.minY = Math.min(bounds.minY, p.y - TILE_H);
-            bounds.maxY = Math.max(bounds.maxY, p.y + TILE_H / 2);
-          }
-        }
-        // Subtle build grid: a few long lines per chunk instead of one
-        // stroked outline per tile (massively fewer vertices).
-        for (let gx = cx; gx <= maxX; gx++) {
-          const a = gridToScreen(gx - 0.5, cy - 0.5);
-          const b = gridToScreen(gx - 0.5, maxY - 0.5);
-          g.moveTo(a.x, a.y).lineTo(b.x, b.y);
-        }
-        for (let gy = cy; gy <= maxY; gy++) {
-          const a = gridToScreen(cx - 0.5, gy - 0.5);
-          const b = gridToScreen(maxX - 0.5, gy - 0.5);
-          g.moveTo(a.x, a.y).lineTo(b.x, b.y);
-        }
-        g.stroke({ color: 0x3a5c30, width: 1, alpha: 0.22 });
-        // Bake the chunk once: one textured quad per chunk instead of
-        // thousands of polygons every frame.
-        const localBounds = g.getLocalBounds();
-        const texture = this.app.renderer.generateTexture({ target: g });
-        g.destroy();
-        const sprite = new Sprite(texture);
-        sprite.position.set(localBounds.minX, localBounds.minY);
-        this.terrainLayer.addChild(sprite);
-        this.terrainChunks.push({ view: sprite, bounds });
+        this.buildChunk(grid, cx, cy);
       }
     }
+  }
+
+  /** Re-bake only the chunk containing the given tile (terrain changed). */
+  rebuildChunkAt(grid: IsoGrid, gx: number, gy: number): void {
+    const cx = Math.floor(gx / TERRAIN_CHUNK_SIZE) * TERRAIN_CHUNK_SIZE;
+    const cy = Math.floor(gy / TERRAIN_CHUNK_SIZE) * TERRAIN_CHUNK_SIZE;
+    const key = (cy / TERRAIN_CHUNK_SIZE) * this.chunkCols + cx / TERRAIN_CHUNK_SIZE;
+    const old = this.terrainChunks.get(key);
+    if (old) {
+      this.terrainLayer.removeChild(old.view);
+      old.view.destroy(true);
+    }
+    this.buildChunk(grid, cx, cy);
+  }
+
+  /** Bake one chunk: one textured quad instead of thousands of polygons. */
+  private buildChunk(grid: IsoGrid, cx: number, cy: number): void {
+    const g = new Graphics();
+    const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    const maxY = Math.min(cy + TERRAIN_CHUNK_SIZE, grid.height);
+    const maxX = Math.min(cx + TERRAIN_CHUNK_SIZE, grid.width);
+    // Draw back-to-front inside the chunk so rock lumps overlap correctly.
+    for (let gy = cy; gy < maxY; gy++) {
+      for (let gx = cx; gx < maxX; gx++) {
+        const p = gridToScreen(gx, gy);
+        drawTerrainTile(g, p.x, p.y, grid.terrainAt(gx, gy), (gx + gy) % 2 === 0, gx, gy);
+        bounds.minX = Math.min(bounds.minX, p.x - TILE_W / 2);
+        bounds.maxX = Math.max(bounds.maxX, p.x + TILE_W / 2);
+        bounds.minY = Math.min(bounds.minY, p.y - TILE_H);
+        bounds.maxY = Math.max(bounds.maxY, p.y + TILE_H / 2);
+      }
+    }
+    // Subtle build grid: a few long lines per chunk instead of one
+    // stroked outline per tile (massively fewer vertices).
+    for (let gx = cx; gx <= maxX; gx++) {
+      const a = gridToScreen(gx - 0.5, cy - 0.5);
+      const b = gridToScreen(gx - 0.5, maxY - 0.5);
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+    }
+    for (let gy = cy; gy <= maxY; gy++) {
+      const a = gridToScreen(cx - 0.5, gy - 0.5);
+      const b = gridToScreen(maxX - 0.5, gy - 0.5);
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+    }
+    g.stroke({ color: 0x3a5c30, width: 1, alpha: 0.22 });
+    const localBounds = g.getLocalBounds();
+    const texture = this.app.renderer.generateTexture({ target: g });
+    g.destroy();
+    const sprite = new Sprite(texture);
+    sprite.position.set(localBounds.minX, localBounds.minY);
+    this.terrainLayer.addChild(sprite);
+    const key = (cy / TERRAIN_CHUNK_SIZE) * this.chunkCols + cx / TERRAIN_CHUNK_SIZE;
+    this.terrainChunks.set(key, { view: sprite, bounds });
   }
 
   /** Remove all building/unit views (new game / load). */
@@ -272,7 +291,7 @@ export class WorldRenderer {
       const x = from.x + (to.x - from.x) * t;
       // Arc: launch height at the tower top, dipping to the target.
       const y = from.y - 40 * (1 - t) + (to.y - from.y) * t - Math.sin(t * Math.PI) * 14;
-      g.circle(x, y, 2.5).fill(PALETTE.projectile);
+      g.circle(x, y, 2.5).fill(p.color ?? PALETTE.projectile);
     }
   }
 
@@ -458,7 +477,7 @@ export class WorldRenderer {
     const visible = (b: Bounds): boolean =>
       b.maxX >= minX && b.minX <= maxX && b.maxY >= minY && b.minY <= maxY;
 
-    for (const chunk of this.terrainChunks) chunk.view.visible = visible(chunk.bounds);
+    for (const chunk of this.terrainChunks.values()) chunk.view.visible = visible(chunk.bounds);
     for (const entry of this.buildingViews.values()) entry.view.visible = visible(entry.bounds);
     for (const entry of this.workerViews.values()) {
       const { x, y } = entry.view.position;

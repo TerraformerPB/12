@@ -98,6 +98,9 @@ export class IsoGrid {
   private occupant: Int32Array;
   /** PassMode of the occupant on each tile. */
   private passable: Uint8Array;
+  /** Terrain changes after generation (felled/regrown forest), for saves. */
+  private overrides = new Map<number, Terrain>();
+  private baselineSealed = false;
 
   constructor(width: number = MAP_W, height: number = MAP_H) {
     this.width = width;
@@ -121,6 +124,25 @@ export class IsoGrid {
 
   setTerrain(gx: number, gy: number, t: Terrain): void {
     this.terrain[this.idx(gx, gy)] = t;
+    if (this.baselineSealed) this.overrides.set(this.idx(gx, gy), t);
+  }
+
+  /** Call once after generation; later terrain edits are recorded for saves. */
+  sealBaseline(): void {
+    this.baselineSealed = true;
+  }
+
+  /** [x, y, terrain] tuples of all post-generation terrain changes. */
+  terrainOverrides(): [number, number, Terrain][] {
+    return [...this.overrides.entries()].map(([idx, t]) => [
+      idx % this.width,
+      Math.floor(idx / this.width),
+      t,
+    ]);
+  }
+
+  applyTerrainOverrides(list: [number, number, Terrain][]): void {
+    for (const [x, y, t] of list) this.setTerrain(x, y, t);
   }
 
   occupantAt(gx: number, gy: number): number {

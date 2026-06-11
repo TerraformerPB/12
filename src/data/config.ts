@@ -59,6 +59,11 @@ export const TERRAIN_RIVER_WIDTH = 2;
 export const TERRAIN_SAFE_RADIUS = 6;
 /** Walking through forest is slow (units prefer paths around it). */
 export const FOREST_MOVE_COST = 1.6;
+/** Wood a lumberjack harvests before one adjacent forest tile is felled. */
+export const FOREST_WOOD_PER_TILE = 10;
+/** Every N seconds a few forest tiles try to spread to adjacent grass. */
+export const FOREST_REGROW_INTERVAL = 20;
+export const FOREST_REGROW_ATTEMPTS = 3;
 
 // --- Camera / input ----------------------------------------------------------
 
@@ -180,5 +185,5 @@ export const ADMOB_USE_TEST_ADS = true;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

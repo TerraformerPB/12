@@ -6,9 +6,10 @@ import {
   WORKER_SPEED,
   type ResourceId,
 } from '../data/config';
+import { FOREST_WOOD_PER_TILE } from '../data/config';
 import { Building } from '../entities/Building';
 import { Worker, type Job } from '../entities/Worker';
-import type { IsoGrid, Point } from '../world/IsoGrid';
+import { Terrain, type IsoGrid, type Point } from '../world/IsoGrid';
 import { findPath } from '../world/Pathfinding';
 
 /** Global (warehouse) resource stock with reservations for pending jobs. */
@@ -86,6 +87,8 @@ export interface EconomyContext {
   getSoldierCount(): number;
   /** Global carrier speed multiplier (research). */
   getSpeedFactor(): number;
+  /** A lumberjack consumed enough wood — fell one adjacent forest tile. */
+  fellForestTile(building: Building): void;
 }
 
 const SPEED_PER_TICK = WORKER_SPEED / TICK_RATE;
@@ -144,7 +147,21 @@ export class EconomySystem {
 
   tick(): void {
     this.tickCount++;
-    for (const b of this.ctx.buildings.values()) b.tickProduction();
+    for (const b of this.ctx.buildings.values()) {
+      // Lumberjacks need standing forest and slowly consume it.
+      if (b.def.placement === 'adjacentForest' && b.def.recipe) {
+        b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Forest) === null;
+      }
+      const before = b.outputStore;
+      b.tickProduction();
+      if (b.outputStore > before && b.def.placement === 'adjacentForest') {
+        b.harvestProgress++;
+        if (b.harvestProgress >= FOREST_WOOD_PER_TILE) {
+          b.harvestProgress = 0;
+          this.ctx.fellForestTile(b);
+        }
+      }
+    }
     this.syncWorkerCount();
     this.generateJobs();
     this.assignJobs();

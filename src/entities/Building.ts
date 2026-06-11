@@ -28,6 +28,8 @@ export interface BuildingSave {
   assignedWorkers: number;
   /** Since save version 6. */
   level: number;
+  /** Since save version 7. */
+  harvestProgress: number;
 }
 
 /**
@@ -58,6 +60,10 @@ export class Building {
   assignedWorkers = 0;
   /** Upgrade level 1..maxLevel (phase 8). */
   level = 1;
+  /** Wood harvested toward felling the next forest tile (lumberjacks). */
+  harvestProgress = 0;
+  /** Production stalled by missing surroundings (e.g. no forest left). */
+  productionHalted = false;
 
   // Transient reservation counters (recomputed from worker jobs on load).
   /** Output units already promised to a pickup job. */
@@ -139,6 +145,7 @@ export class Building {
   tickProduction(): void {
     const recipe = this.def.recipe;
     if (!recipe) return;
+    if (this.productionHalted) return;
     const speed = this.staffingFactor * this.levelFactor;
     if (speed <= 0) return;
 
@@ -187,6 +194,25 @@ export class Building {
     return tiles;
   }
 
+  /** First tile of the given terrain orthogonally adjacent to the footprint. */
+  adjacentTerrainTile(grid: IsoGrid, terrain: number): Point | null {
+    for (let dx = 0; dx < this.w; dx++) {
+      for (const y of [this.y - 1, this.y + this.h]) {
+        if (grid.inBounds(this.x + dx, y) && grid.terrainAt(this.x + dx, y) === terrain) {
+          return { x: this.x + dx, y };
+        }
+      }
+    }
+    for (let dy = 0; dy < this.h; dy++) {
+      for (const x of [this.x - 1, this.x + this.w]) {
+        if (grid.inBounds(x, this.y + dy) && grid.terrainAt(x, this.y + dy) === terrain) {
+          return { x, y: this.y + dy };
+        }
+      }
+    }
+    return null;
+  }
+
   /** Walkable tiles orthogonally adjacent to the footprint (carrier targets). */
   accessTiles(grid: IsoGrid): Point[] {
     const tiles: Point[] = [];
@@ -222,6 +248,7 @@ export class Building {
       hp: this.hp,
       assignedWorkers: this.assignedWorkers,
       level: this.level,
+      harvestProgress: this.harvestProgress,
     };
   }
 
@@ -234,6 +261,7 @@ export class Building {
     b.outputStore = s.outputStore;
     b.hp = Math.min(s.hp, b.maxHp);
     b.assignedWorkers = s.assignedWorkers;
+    b.harvestProgress = s.harvestProgress;
     return b;
   }
 }
