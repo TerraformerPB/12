@@ -33,6 +33,10 @@ export function createPauseMenu(uiRoot: HTMLElement, game: Game): void {
     soundBtn.textContent = soundLabel();
   });
 
+  const menuBtn = document.createElement('button');
+  menuBtn.textContent = '🏰 Hauptmenü';
+  menuBtn.addEventListener('click', () => game.setPhase('menu'));
+
   const newGameBtn = document.createElement('button');
   newGameBtn.className = 'danger';
   const NEW_GAME_LABEL = 'Neues Spiel';
@@ -47,7 +51,7 @@ export function createPauseMenu(uiRoot: HTMLElement, game: Game): void {
     game.restartNewGame();
   });
 
-  card.append(heading, resumeBtn, duelBtn, soundBtn, newGameBtn);
+  card.append(heading, resumeBtn, duelBtn, soundBtn, menuBtn, newGameBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 

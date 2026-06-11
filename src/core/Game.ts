@@ -6,9 +6,9 @@ import {
   MIN_WORKERS,
   RESOURCE_IDS,
   SAVE_VERSION,
-  SOLDIER_RECRUIT_COST,
   START_RESOURCES,
 } from '../data/config';
+import { getSoldierType, type SoldierTypeId } from '../data/soldiers';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
@@ -45,6 +45,8 @@ import { createInfoPanel } from '../ui/InfoPanel';
 import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
 import { createDuelMenu } from '../ui/DuelMenu';
+import { createMainMenu } from '../ui/MainMenu';
+import { createStatsPanel } from '../ui/StatsPanel';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
 import {
@@ -119,6 +121,11 @@ export class Game {
   private warehouseId = 0;
   selectedId: number | null = null;
   selectedSoldierId: number | null = null;
+  statsPanel: { toggle(): void } | null = null;
+  /** True once the player has built anything beyond the starting warehouse. */
+  hasProgress(): boolean {
+    return this.buildings.size > 1 || this.waveSystem.waveNumber > 0;
+  }
 
   async init(root: HTMLElement, uiRoot: HTMLElement): Promise<void> {
     await this.renderer.init(root);
@@ -135,6 +142,8 @@ export class Game {
     createGameOverMenu(uiRoot, this);
     createTutorialBanner(uiRoot, this);
     createDuelMenu(uiRoot, this);
+    createMainMenu(uiRoot, this);
+    this.statsPanel = createStatsPanel(uiRoot, this);
     createToast(uiRoot);
     if (Capacitor.isNativePlatform()) {
       const admob = new AdmobRewardedAdProvider();
@@ -160,7 +169,8 @@ export class Game {
       events.emit('toast:show', { message: `⚔️ Welle ${wave}: ${count} Angreifer!` });
     });
 
-    this.setPhase('playing');
+    // Boot into the title screen; the player picks continue/new/duel.
+    this.setPhase('menu');
     // Howler delays actual playback until the first user gesture.
     this.sound.startAmbient();
   }
@@ -298,7 +308,7 @@ export class Game {
         r: b.rotated ? 1 : 0,
         l: b.level,
       })),
-      soldiers: this.soldiers.map((s) => ({ x: s.tile.x, y: s.tile.y })),
+      soldiers: this.soldiers.map((s) => ({ x: s.tile.x, y: s.tile.y, t: s.typeId })),
       techs: [...this.techs],
     });
   }
@@ -332,7 +342,7 @@ export class Game {
       if (placed.def.isWarehouse) this.warehouseId = placed.id;
     }
     for (const s of castle.soldiers) {
-      this.soldiers.push(new Soldier(this.nextId++, s.x, s.y));
+      this.soldiers.push(new Soldier(this.nextId++, s.x, s.y, s.t ?? 'soldier'));
     }
     for (const t of castle.techs) this.techs.add(t); // defender research applies
 
@@ -624,16 +634,17 @@ export class Game {
 
   // --- Soldiers ----------------------------------------------------------------
 
-  /** Recruit one soldier at a barracks (info panel action). */
-  recruitSoldier(barracksId: number): void {
+  /** Recruit a soldier of the given type at a barracks (info panel action). */
+  recruitSoldier(barracksId: number, typeId: SoldierTypeId = 'soldier'): void {
     if (this.duelMode) return;
     const barracks = this.buildings.get(barracksId);
     if (!barracks || !barracks.def.recruitsSoldiers) return;
+    const type = getSoldierType(typeId);
     if (this.economy.workerTarget() <= MIN_WORKERS) {
       events.emit('toast:show', { message: 'Nicht genug Bevölkerung — baue Hütten' });
       return;
     }
-    const missing = missingResourcesMessage(this.store, SOLDIER_RECRUIT_COST);
+    const missing = missingResourcesMessage(this.store, type.cost);
     if (missing) {
       events.emit('toast:show', { message: missing });
       return;
@@ -646,10 +657,10 @@ export class Game {
       events.emit('toast:show', { message: 'Kaserne ist eingebaut — kein Platz' });
       return;
     }
-    this.store.pay(SOLDIER_RECRUIT_COST);
-    this.soldiers.push(new Soldier(this.nextId++, spawn.x, spawn.y));
+    this.store.pay(type.cost);
+    this.soldiers.push(new Soldier(this.nextId++, spawn.x, spawn.y, typeId));
     this.sound.play('place');
-    events.emit('toast:show', { message: 'Soldat rekrutiert' });
+    events.emit('toast:show', { message: `${type.name} rekrutiert` });
   }
 
   /** Dismiss a soldier; the population slot returns to the carrier pool. */

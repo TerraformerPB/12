@@ -109,18 +109,22 @@ export const ROAD_SPEED_FACTOR = 1.4;
 export const STONE_ROAD_SPEED_FACTOR = 1.8;
 
 // --- Military (phase 2) --------------------------------------------------------
+// Per-type soldier stats live in data/soldiers.ts (phase 11).
 
-/** Soldier walking speed in tiles per second. */
-export const SOLDIER_SPEED = 1.8;
-/** Cost of recruiting one soldier at the barracks. */
-export const SOLDIER_RECRUIT_COST: Partial<Record<ResourceId, number>> = { bread: 2, weapons: 1 };
 /** Carriers that must always remain — soldiers cannot use the last slots. */
 export const MIN_WORKERS = 1;
 
+// --- Carts (phase 11) -------------------------------------------------------------
+
+/** Ox cart walking speed in tiles per second (slower but hauls more). */
+export const CART_SPEED = 1.7;
+/** Goods an ox cart hauls per trip. */
+export const CART_CAPACITY = 3;
+/** Carts provided per stable. */
+export const CARTS_PER_STABLE = 1;
+
 // --- Combat (phase 3) ------------------------------------------------------------
 
-export const SOLDIER_HP = 35;
-export const SOLDIER_DAMAGE = 4;
 /** Seconds between soldier melee strikes. */
 export const SOLDIER_ATTACK_INTERVAL = 0.8;
 /** Soldiers engage enemies within this radius (tiles) around their guard post. */
@@ -185,5 +189,5 @@ export const ADMOB_USE_TEST_ADS = true;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

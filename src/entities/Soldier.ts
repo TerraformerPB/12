@@ -1,4 +1,4 @@
-import { SOLDIER_HP } from '../data/config';
+import { getSoldierType, type SoldierTypeDef, type SoldierTypeId } from '../data/soldiers';
 import type { Point } from '../world/IsoGrid';
 import { Unit } from './Unit';
 
@@ -11,6 +11,8 @@ export interface SoldierSave {
   /** Since save version 3. */
   hp: number;
   anchor: Point;
+  /** Since save version 8. */
+  typeId: SoldierTypeId;
 }
 
 /**
@@ -24,7 +26,8 @@ export class Soldier extends Unit {
    * guard:   holding the anchor, auto-engaging nearby enemies.
    */
   mode: 'command' | 'guard' = 'guard';
-  hp = SOLDIER_HP;
+  readonly typeId: SoldierTypeId;
+  hp: number;
   /** Guard post: combat chases start and end here. */
   anchor: Point;
   /** Enemy currently engaged, null while guarding. */
@@ -34,9 +37,15 @@ export class Soldier extends Unit {
   /** Tick of the last chase path computation. */
   lastRepath = -1_000_000;
 
-  constructor(id: number, x: number, y: number) {
+  constructor(id: number, x: number, y: number, typeId: SoldierTypeId = 'soldier') {
     super(id, x, y);
+    this.typeId = typeId;
+    this.hp = this.def.hp;
     this.anchor = { x: Math.round(x), y: Math.round(y) };
+  }
+
+  get def(): SoldierTypeDef {
+    return getSoldierType(this.typeId);
   }
 
   toSave(): SoldierSave {
@@ -47,12 +56,13 @@ export class Soldier extends Unit {
       target: this.mode === 'command' ? this.pathTarget() : null,
       hp: this.hp,
       anchor: { ...this.anchor },
+      typeId: this.typeId,
     };
   }
 
   static fromSave(s: SoldierSave): { soldier: Soldier; target: Point | null } {
-    const soldier = new Soldier(s.id, s.x, s.y);
-    soldier.hp = Math.min(s.hp, SOLDIER_HP);
+    const soldier = new Soldier(s.id, s.x, s.y, s.typeId);
+    soldier.hp = Math.min(s.hp, soldier.def.hp);
     soldier.anchor = { ...s.anchor };
     return { soldier, target: s.target };
   }

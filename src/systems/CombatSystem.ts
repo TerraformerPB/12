@@ -4,7 +4,6 @@ import {
   MELEE_RANGE,
   SOLDIER_AGGRO_RANGE,
   SOLDIER_ATTACK_INTERVAL,
-  SOLDIER_DAMAGE,
   TICK_RATE,
   TOWER_ATTACK_INTERVAL,
   TOWER_DAMAGE,
@@ -91,8 +90,11 @@ export class CombatSystem {
       if (enemy.attackCooldown > 0) enemy.attackCooldown--;
 
       // Fight back: strike a soldier within reach (ranged enemies shoot).
+      // Siege vehicles ignore soldiers entirely and head for buildings.
       const reach = enemy.def.range ?? MELEE_RANGE;
-      const soldier = this.nearestSoldier(enemy.x, enemy.y, reach);
+      const soldier = enemy.def.ignoresSoldiers
+        ? null
+        : this.nearestSoldier(enemy.x, enemy.y, reach);
       if (soldier) {
         enemy.rest();
         if (enemy.attackCooldown <= 0) {
@@ -186,7 +188,7 @@ export class CombatSystem {
         s.clearPath();
         if (s.attackCooldown <= 0) {
           s.attackCooldown = SOLDIER_ATTACK_TICKS;
-          this.damageEnemy(target, SOLDIER_DAMAGE * this.ctx.soldierDamageFactor());
+          this.damageEnemy(target, s.def.damage * this.ctx.soldierDamageFactor());
         }
       } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
         s.lastRepath = this.tickCount;

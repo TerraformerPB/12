@@ -34,6 +34,13 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
   spacer.className = 'hud-spacer';
   bar.appendChild(spacer);
 
+  const statsBtn = document.createElement('button');
+  statsBtn.className = 'pause-btn';
+  statsBtn.textContent = '📊';
+  statsBtn.setAttribute('aria-label', 'Übersicht');
+  statsBtn.addEventListener('click', () => game.statsPanel?.toggle());
+  bar.appendChild(statsBtn);
+
   const pauseBtn = document.createElement('button');
   pauseBtn.className = 'pause-btn';
   pauseBtn.textContent = '⏸';
