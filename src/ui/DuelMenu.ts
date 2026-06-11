@@ -1,18 +1,15 @@
 import { events } from '../core/EventBus';
-import { armySummary, computeArmy } from '../data/duel';
-import { ENEMY_DEFS, type EnemyDefId } from '../data/enemies';
+import { DUEL_BUDGETS, DUEL_BUDGET_IDS } from '../data/duel';
+import { RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
 import type { Game } from '../core/Game';
 
-const ENEMY_NAMES = Object.fromEntries(
-  Object.values(ENEMY_DEFS).map((d) => [d.id, d.name]),
-) as Record<EnemyDefId, string>;
-
 /**
- * Burg-Duell UI: share/import castle codes, the in-duel HUD and the
- * result screen. Opened from the pause menu via the 'duel:openMenu' event.
+ * Burg-Duell UI: budget selection for the mirrored 1v1, the in-duel HUD
+ * (both warehouses' health) and the result screen. Opened from the main
+ * or pause menu via the 'duel:openMenu' event.
  */
 export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
-  // --- dialog ---
+  // --- setup dialog ---
   const overlay = document.createElement('div');
   overlay.className = 'pause-overlay';
   overlay.hidden = true;
@@ -26,63 +23,45 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
   const intro = document.createElement('p');
   intro.className = 'gameover-stats';
   intro.textContent =
-    'Tausche Burg-Codes mit anderen Spielern. Deine Vorräte (Brot, Waffen, Fisch) und Soldaten bestimmen deine Angriffsarmee.';
+    'Gespiegelte Karte, gleiche Burg, gleiches Budget für beide Seiten. ' +
+    'Baue Wirtschaft und Truppen auf und zerstöre das gegnerische Lagerhaus, ' +
+    'bevor deins fällt. Dein Spielstand bleibt unberührt.';
 
-  const ownLabel = document.createElement('div');
-  ownLabel.className = 'duel-label';
-  ownLabel.textContent = 'Dein Burg-Code (teilen):';
-  const ownCode = document.createElement('textarea');
-  ownCode.className = 'duel-code';
-  ownCode.readOnly = true;
-  ownCode.rows = 3;
-  const copyBtn = document.createElement('button');
-  copyBtn.textContent = '📋 Code kopieren';
-  copyBtn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(ownCode.value);
-      copyBtn.textContent = '✓ Kopiert!';
-    } catch {
-      ownCode.select();
-      copyBtn.textContent = 'Manuell kopieren (markiert)';
-    }
-    window.setTimeout(() => (copyBtn.textContent = '📋 Code kopieren'), 1500);
-  });
+  const budgetLabel = document.createElement('div');
+  budgetLabel.className = 'duel-label';
+  budgetLabel.textContent = 'Rohstoff-Budget wählen:';
 
-  const armyInfo = document.createElement('div');
-  armyInfo.className = 'duel-label duel-army';
+  card.append(heading, intro, budgetLabel);
 
-  const inLabel = document.createElement('div');
-  inLabel.className = 'duel-label';
-  inLabel.textContent = 'Gegnerischen Code einfügen:';
-  const inCode = document.createElement('textarea');
-  inCode.className = 'duel-code';
-  inCode.rows = 3;
-  inCode.placeholder = 'BURG1.…';
-
-  const attackBtn = document.createElement('button');
-  attackBtn.textContent = '⚔️ Angreifen!';
-  attackBtn.addEventListener('click', () => {
-    if (game.startDuel(inCode.value)) {
-      overlay.hidden = true;
-      inCode.value = '';
-    }
-  });
+  for (const id of DUEL_BUDGET_IDS) {
+    const budget = DUEL_BUDGETS[id];
+    const btn = document.createElement('button');
+    btn.className = 'scenario-btn';
+    const name = document.createElement('span');
+    name.textContent = `${budget.name} — ${budget.description}`;
+    const detail = document.createElement('span');
+    detail.className = 'scenario-desc';
+    detail.textContent = RESOURCE_IDS.filter(
+      (r) => ((budget.resources as Partial<Record<typeof r, number>>)[r] ?? 0) > 0,
+    )
+      .map((r) => `${RESOURCE_INFO[r].icon} ${(budget.resources as Record<string, number>)[r]}`)
+      .join('  ');
+    btn.append(name, detail);
+    btn.addEventListener('click', () => {
+      if (game.startMirrorDuel(id)) overlay.hidden = true;
+    });
+    card.appendChild(btn);
+  }
 
   const closeBtn = document.createElement('button');
   closeBtn.textContent = 'Schließen';
   closeBtn.addEventListener('click', () => (overlay.hidden = true));
+  card.appendChild(closeBtn);
 
-  card.append(heading, intro, ownLabel, ownCode, copyBtn, armyInfo, inLabel, inCode, attackBtn, closeBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 
   events.on('duel:openMenu', () => {
-    ownCode.value = game.exportCastleCode();
-    const army = computeArmy(game.store.snapshot(), game.soldiers.length);
-    armyInfo.textContent =
-      army.length > 0
-        ? `Deine Armee: ${armySummary(army, ENEMY_NAMES)}`
-        : 'Deine Armee: zu wenig Vorräte — sammle Brot, Waffen oder Fisch!';
     overlay.hidden = false;
   });
 
@@ -98,12 +77,9 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
   hud.append(hudText, abortBtn);
   uiRoot.appendChild(hud);
 
-  events.on('duel:status', ({ queued, alive }) => {
+  events.on('duel:status', ({ ownHp, foeHp, foes }) => {
     hud.hidden = !game.duelMode;
-    hudText.textContent =
-      queued > 0
-        ? `⚔️ Reserve: ${queued} · Im Feld: ${alive} — Kartenrand antippen!`
-        : `⚔️ Im Feld: ${alive}`;
+    hudText.textContent = `🏰 Du ${ownHp}% · Gegner ${foeHp}% 🏰 · Feinde im Feld: ${foes}`;
   });
 
   // --- result ---
@@ -124,8 +100,8 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
 
   events.on('duel:ended', ({ victory, unitsLost, buildingsDestroyed, seconds }) => {
     hud.hidden = true;
-    resultHeading.textContent = victory ? '🏆 Burg erobert!' : '🛡️ Angriff abgewehrt';
-    resultStats.textContent = `Gebäude zerstört: ${buildingsDestroyed} · Verlorene Truppen: ${unitsLost} · Dauer: ${seconds}s`;
+    resultHeading.textContent = victory ? '🏆 Burg erobert!' : '💀 Burg verloren';
+    resultStats.textContent = `Feinde besiegt: ${unitsLost} · Gegnerische Gebäude zerstört: ${buildingsDestroyed} · Dauer: ${seconds}s`;
     result.hidden = false;
   });
 }

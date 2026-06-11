@@ -2,9 +2,36 @@ import type { ResourceId } from './config';
 import type { EnemyDefId } from './enemies';
 
 /**
- * Duel balancing: how a player's stockpile converts into an attack army.
- * Better economy management = stronger army — the core idea of the mode.
+ * Burg-Duell (1 gegen 1): a mirrored map, one small castle per side and an
+ * identical resource budget for both players. The opponent is a local AI
+ * that converts its budget into attack squads over time — an online
+ * opponent would plug in at the same interface (DuelAI ctx).
  */
+
+/** Selectable, symmetric starting budgets. */
+export const DUEL_BUDGETS = {
+  klein: {
+    name: 'Kleines Budget',
+    description: 'Schnelles Gefecht',
+    resources: { wood: 80, stone: 30, bread: 12, weapons: 5, fish: 6 },
+  },
+  mittel: {
+    name: 'Mittleres Budget',
+    description: 'Ausgewogen',
+    resources: { wood: 130, stone: 60, bread: 24, weapons: 12, fish: 12 },
+  },
+  gross: {
+    name: 'Großes Budget',
+    description: 'Lange Schlacht',
+    resources: { wood: 200, stone: 100, bread: 40, weapons: 25, fish: 18, beer: 8 },
+  },
+} as const satisfies Record<
+  string,
+  { name: string; description: string; resources: Partial<Record<ResourceId, number>> }
+>;
+
+export type DuelBudgetId = keyof typeof DUEL_BUDGETS;
+export const DUEL_BUDGET_IDS = Object.keys(DUEL_BUDGETS) as DuelBudgetId[];
 
 /** One raider per N bread. */
 export const DUEL_BREAD_PER_RAIDER = 3;
@@ -16,16 +43,24 @@ export const DUEL_WEAPONS_PER_BRUTE = 5;
 export const DUEL_FISH_PER_SKIRMISHER = 6;
 /** Maximum total army size. */
 export const DUEL_ARMY_CAP = 40;
-/** Units released per tap on the map border. */
-export const DUEL_GROUP_SIZE = 5;
-/** Spawn taps must be within this many tiles of the map edge. */
-export const DUEL_SPAWN_EDGE = 4;
-/** Breach cost used only to validate spawn tiles (any finite tile is ok). */
-export const ENEMY_BREACH_COST_DUEL = 25;
-/** A duel ends as a defeat after this many seconds (no stalemates). */
-export const DUEL_TIME_LIMIT = 300;
+/** A duel ends after this many seconds; more warehouse hp wins then. */
+export const DUEL_TIME_LIMIT = 600;
 
-/** Compute the attack army from current resources and soldiers. Pure. */
+/** Seconds until the AI sends its first squad (build-up grace period). */
+export const DUEL_AI_FIRST_ATTACK = 75;
+/** Seconds between AI attack squads. */
+export const DUEL_AI_ATTACK_INTERVAL = 45;
+/** Units per AI squad (as long as the budget lasts). */
+export const DUEL_AI_SQUAD_SIZE = 5;
+
+/** What one AI unit costs from the shared budget. */
+export const DUEL_UNIT_COSTS: Partial<Record<EnemyDefId, Partial<Record<ResourceId, number>>>> = {
+  raider: { bread: DUEL_BREAD_PER_RAIDER },
+  brute: { weapons: DUEL_WEAPONS_PER_BRUTE },
+  skirmisher: { fish: DUEL_FISH_PER_SKIRMISHER },
+};
+
+/** Compute an attack army from resources and soldiers. Pure. */
 export function computeArmy(
   resources: Record<ResourceId, number>,
   soldierCount: number,

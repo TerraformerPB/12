@@ -131,18 +131,10 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Lauf-Frames, Blickrichtungs-Spiegelung, Fracht-Kiste in Warenfarbe) über
   die "units"-Sektion des Sprite-Manifests, mit Vektor-Fallback. Nahtloser
   synthetisierter Ambient-Loop + Ton-Schalter im Pausenmenü (persistiert).
-- **Phase 10 (✓ als Offline-MVP) — Burg-Duell (PvP):** Asynchrones 1-gegen-1
-  per **Burg-Code** (Pausenmenü → ⚔️ Burg-Duell): Der eigene Spielstand wird
-  als kompakter Code exportiert und beliebig geteilt (Messenger, Forum …).
-  Wer einen fremden Code einfügt, greift diese Burg an: Die eigene
-  Wirtschaft bestimmt die Armee (Brot → Plünderer, Waffen → Brecher,
-  Fisch → Plänkler, eigene Soldaten verstärken), entsandt wird per Tap am
-  Kartenrand; die fremde Burg verteidigt automatisch mit ihren Türmen,
-  Soldaten und Forschungen. Sieg = Lagerhaus zerstört; Zeitlimit 5 Minuten
-  verhindert Patts. Der eigene Spielstand bleibt unberührt (In-Memory-Backup,
-  kein Autosave während des Duells). Ausbaustufe mit Backend: Matchmaking,
-  Burg-Upload und Replays — das Code-Format (`core/CastleCode.ts`) ist
-  dafür bereits das Übertragungs-Payload.
+- **Phase 10 (✓, in Phase 13 neu designt) — Burg-Duell:** Erste Fassung als
+  asynchroner Burg-Code-Angriff; ab Phase 13 ersetzt durch das gespiegelte
+  1-gegen-1 (siehe unten). Das Code-Format (`core/CastleCode.ts`) bleibt als
+  Übertragungs-Payload für eine spätere Online-Variante erhalten.
 
 - **Phase 11 (✓) — Komfort & Vielfalt:** Hauptmenü beim Start (Weiterspielen /
   Neues Spiel / Burg-Duell, bester Lauf), Schnellzugriff im HUD (📊 Übersicht),
@@ -185,6 +177,26 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
      (migriert verlustfrei).
   Bewusst auf später verschoben: Turm-Garnison, zugefrorener Fluss,
   dynamische Marktpreise, Soldaten-Sold, Zufallsereignisse, Achievements.
+
+- **Phase 13 (✓) — Burg-Duell als gespiegeltes 1-gegen-1 + Start-Balancing:**
+  Mehr Startressourcen (140 Holz / 50 Stein / 8 Brot / 4 Fisch), damit trotz
+  Baustellen-System Mauern und Türme vor Welle 1 stehen. Das Burg-Duell ist
+  jetzt ein echtes 1v1-Gefecht: Die Karte wird in der Mitte gespiegelt
+  (beide Seiten identisches Gelände), auf jeder Seite steht dieselbe kleine
+  Burg (Lagerhaus, 2 Türme, Mauerlinie mit offenem Tor) und beide Spieler
+  erhalten exakt dasselbe wählbare Rohstoff-Budget (Klein/Mittel/Groß).
+  Der Spieler baut auf seiner Hälfte Wirtschaft, Verteidigung und Truppen
+  (im Duell baut alles instant — kompaktes Gefecht); der Gegner ist eine
+  lokale KI (`systems/DuelAI.ts`), die ihr Budget über Zeit in Angriffstrupps
+  umwandelt (Brot → Plünderer, Waffen → Brecher, Fisch → Plänkler; erster
+  Angriff nach 75 s, dann alle 45 s). Eigene Soldaten belagern die Gegnerburg
+  automatisch (Mauer einreißen → durchmarschieren), gegnerische Türme
+  schießen auf Soldaten, die Gegnerburg ist rötlich getönt. Sieg = fremdes
+  Lagerhaus zerstört, Niederlage = eigenes fällt; nach 10 Minuten gewinnt
+  die Burg mit mehr Lagerhaus-HP. Duell-HUD zeigt beide Burg-Zustände; der
+  eigene Spielstand bleibt unberührt (In-Memory-Backup). Eine Online-Variante
+  bräuchte ein Backend — die KI hängt an einem schmalen Kontext-Interface,
+  hinter das ein echter Gegner geschaltet werden kann.
 
 ## Echte Grafiken einbinden
 

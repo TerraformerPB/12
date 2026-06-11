@@ -87,15 +87,17 @@ export const START_WORKERS = 4;
 /** Fraction of building cost refunded on demolition. */
 export const DEMOLISH_REFUND = 0.5;
 
+// Generous enough that walls/towers stand before wave 1 even though
+// construction sites consume their materials from this stock (phase 13).
 export const START_RESOURCES: Record<ResourceId, number> = {
-  wood: 90,
-  stone: 20,
+  wood: 140,
+  stone: 50,
   ore: 0,
   weapons: 0,
   wheat: 0,
   flour: 0,
-  bread: 2,
-  fish: 0,
+  bread: 8,
+  fish: 4,
   beer: 0,
   gold: 0,
 };

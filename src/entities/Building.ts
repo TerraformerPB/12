@@ -77,6 +77,8 @@ export class Building {
   buildTicks = 0;
   /** Material units currently on their way (transient). */
   incomingMaterials = 0;
+  /** Side this building belongs to ('foe' only inside duels; not saved). */
+  owner: 'player' | 'foe' = 'player';
 
   // Transient reservation counters (recomputed from worker jobs on load).
   /** Output units already promised to a pickup job. */
