@@ -213,7 +213,7 @@ export class CombatSystem {
       if (dist <= this.soldierReach(s)) {
         s.clearPath();
         this.soldierStrikeEnemy(s, target);
-      } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
+      } else if (this.shouldChase(s, target)) {
         s.lastRepath = this.tickCount;
         const path = findPath(this.ctx.grid, s.tile, [target.tile]);
         if (path) s.setPath(path);
@@ -263,9 +263,16 @@ export class CombatSystem {
       }
       return true;
     }
-    if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
+    // Out of reach: walk to an adjacent tile. Never reset a path that is
+    // already heading there — re-pathing every interval makes the unit
+    // oscillate around its tile center and it would never arrive.
+    const access = building.accessTiles(this.ctx.grid);
+    const target = s.pathTarget();
+    const onCourse =
+      target !== null && access.some((t) => t.x === target.x && t.y === target.y);
+    if (!onCourse && this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
       s.lastRepath = this.tickCount;
-      const path = findPath(this.ctx.grid, s.tile, building.accessTiles(this.ctx.grid));
+      const path = findPath(this.ctx.grid, s.tile, access);
       if (path) s.setPath(path);
       else return false; // walled off — stand down until something opens
     }
@@ -292,7 +299,7 @@ export class CombatSystem {
         if (foeDist <= this.soldierReach(s)) {
           s.clearPath();
           this.soldierStrikeEnemy(s, foe);
-        } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
+        } else if (this.shouldChase(s, foe)) {
           s.lastRepath = this.tickCount;
           const path = findPath(this.ctx.grid, s.tile, [foe.tile]);
           if (path) s.setPath(path);
@@ -333,6 +340,17 @@ export class CombatSystem {
   /** Strike reach of a soldier (ranged types shoot from a distance). */
   private soldierReach(s: Soldier): number {
     return s.def.range ?? MELEE_RANGE;
+  }
+
+  /**
+   * Recompute the chase path only when the current one no longer ends near
+   * the target — constant re-pathing makes units oscillate in place.
+   */
+  private shouldChase(s: Soldier, target: Enemy): boolean {
+    if (this.tickCount - s.lastRepath < CHASE_REPATH_TICKS) return false;
+    const end = s.pathTarget();
+    if (!end) return true;
+    return Math.hypot(end.x - target.x, end.y - target.y) > 1.5;
   }
 
   /** One strike at an enemy, with an arrow visual for ranged types. */

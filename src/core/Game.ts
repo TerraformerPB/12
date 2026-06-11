@@ -88,6 +88,7 @@ import {
   DUEL_NODE_RADIUS,
   DUEL_NODE_YIELD,
   DUEL_TIME_LIMIT,
+  duelClearRects,
   type DuelAiLevelId,
   type DuelBudgetId,
 } from '../data/duel';
@@ -502,16 +503,7 @@ export class Game {
     this.duelStats = { unitsLost: 0, buildingsDestroyed: 0, startMs: performance.now() };
 
     const cy = Math.floor(MAP_H / 2);
-    // Each depot gets a cleared, walkable patch (plus its mirrored twin).
-    const nodeRects = DUEL_NODES.flatMap((n) => [
-      { x: n.x - 2, y: n.y - 2, w: 5, h: 5 },
-      { x: MAP_W - 1 - (n.x + 2), y: n.y - 2, w: 5, h: 5 },
-    ]);
-    this.resetWorld((Math.random() * 0xffffffff) >>> 0, [
-      { x: 2, y: cy - 6, w: 10, h: 13 },
-      { x: MAP_W - 12, y: cy - 6, w: 10, h: 13 },
-      ...nodeRects,
-    ]);
+    this.resetWorld((Math.random() * 0xffffffff) >>> 0, duelClearRects(MAP_W, MAP_H));
     this.setupSystems(new ResourceStore(budget.resources));
     this.duelNodes = DUEL_NODES.flatMap((n) => [
       { ...n, owner: 'none' as const },

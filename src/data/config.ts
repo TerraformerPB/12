@@ -237,3 +237,6 @@ export const WINTER_FOOD_FACTOR = 1.5;
 export const SAVE_KEY = 'burgspiel.save';
 export const SAVE_VERSION = 9;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
+
+/** User-facing app version (keep in sync with package.json / build.gradle). */
+export const APP_VERSION = '0.1.0';
