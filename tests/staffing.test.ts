@@ -60,3 +60,15 @@ describe('building levels', () => {
     expect(restored.maxHp).toBe(tower.maxHp);
   });
 });
+
+describe('ox carts', () => {
+  it('carts round-trip through saves with their cargo count', async () => {
+    const { Worker } = await import('../src/entities/Worker');
+    const cart = new Worker(9, 5, 5, true);
+    cart.carrying = 'wood';
+    cart.carryingCount = 3;
+    const restored = Worker.fromSave(cart.toSave());
+    expect(restored.isCart).toBe(true);
+    expect(restored.carryingCount).toBe(3);
+  });
+});

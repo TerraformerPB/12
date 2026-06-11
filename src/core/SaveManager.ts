@@ -50,6 +50,15 @@ export function migrateSave(data: SaveData): SaveData | null {
     data.terrainOverrides = [];
     data.saveVersion = 7;
   }
+  if (data.saveVersion === 7) {
+    // v7 → v8: soldier types and ox carts.
+    for (const s of data.soldiers) s.typeId = s.typeId ?? 'soldier';
+    for (const w of data.workers) {
+      w.isCart = w.isCart ?? false;
+      w.carryingCount = w.carryingCount ?? (w.carrying ? 1 : 0);
+    }
+    data.saveVersion = 8;
+  }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }
 

@@ -3,7 +3,7 @@ import type { BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Soldier } from '../entities/Soldier';
 
-export type GamePhase = 'loading' | 'playing' | 'paused' | 'gameover';
+export type GamePhase = 'loading' | 'menu' | 'playing' | 'paused' | 'gameover';
 
 /**
  * All events flowing between game logic and DOM UI.

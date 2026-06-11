@@ -151,6 +151,42 @@
       "anchorX": 32,
       "anchorY": 54,
       "scale": 0.5
+    },
+    "knight": {
+      "frames": [
+        "unit_knight_0.png",
+        "unit_knight_1.png",
+        "unit_knight_2.png",
+        "unit_knight_3.png",
+        "unit_knight_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 60,
+      "scale": 0.5
+    },
+    "cart": {
+      "frames": [
+        "unit_cart_0.png",
+        "unit_cart_1.png",
+        "unit_cart_2.png",
+        "unit_cart_3.png",
+        "unit_cart_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 38,
+      "scale": 0.5
+    },
+    "ram": {
+      "frames": [
+        "unit_ram_0.png",
+        "unit_ram_1.png",
+        "unit_ram_2.png",
+        "unit_ram_3.png",
+        "unit_ram_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 52,
+      "scale": 0.5
     }
   }
 }

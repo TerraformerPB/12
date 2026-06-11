@@ -1,11 +1,5 @@
 import { Application, Container, Graphics, Sprite } from 'pixi.js';
-import {
-  RESOURCE_INFO,
-  SOLDIER_HP,
-  TERRAIN_CHUNK_SIZE,
-  TILE_H,
-  TILE_W,
-} from '../data/config';
+import { RESOURCE_INFO, TERRAIN_CHUNK_SIZE, TILE_H, TILE_W } from '../data/config';
 import { getDef } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Enemy } from '../entities/Enemy';
@@ -349,7 +343,7 @@ export class WorldRenderer {
       liveIds.add(s.id);
       let entry = this.soldierViews.get(s.id);
       if (!entry) {
-        entry = this.createUnitEntry('soldier');
+        entry = this.createUnitEntry(s.typeId);
         this.soldierViews.set(s.id, entry);
       }
       const selected = state.selectedSoldierId === s.id;
@@ -361,9 +355,9 @@ export class WorldRenderer {
           if (selected) {
             entry.gfx.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
           }
-          drawHpBar(entry.gfx, 0, -26, 18, s.hp / SOLDIER_HP);
+          drawHpBar(entry.gfx, 0, -26, 18, s.hp / s.def.hp);
         } else {
-          drawSoldier(entry.gfx, selected, s.hp / SOLDIER_HP);
+          drawSoldier(entry.gfx, selected, s.hp / s.def.hp);
         }
       }
       this.placeUnit(entry, s.prevX, s.prevY, s.x, s.y, alpha);
@@ -453,7 +447,7 @@ export class WorldRenderer {
       liveIds.add(w.id);
       let entry = this.workerViews.get(w.id);
       if (!entry) {
-        entry = this.createUnitEntry('worker');
+        entry = this.createUnitEntry(w.isCart ? 'cart' : 'worker');
         this.workerViews.set(w.id, entry);
       }
       const key = w.carrying ?? '';

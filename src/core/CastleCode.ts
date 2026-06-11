@@ -1,4 +1,5 @@
 import type { BuildingDefId } from '../data/buildings';
+import type { SoldierTypeId } from '../data/soldiers';
 import type { TechId } from '../data/techs';
 
 /**
@@ -13,7 +14,7 @@ export interface CastleSnapshot {
   seed: number;
   overrides: [number, number, number][];
   buildings: { d: BuildingDefId; x: number; y: number; r: 0 | 1; l: number }[];
-  soldiers: { x: number; y: number }[];
+  soldiers: { x: number; y: number; t?: SoldierTypeId }[];
   techs: TechId[];
 }
 

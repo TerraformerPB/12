@@ -480,6 +480,78 @@ const unitBuilders = {
   },
 };
 
+unitBuilders.knight = function knight(c, p) {
+  const g = gait(p);
+  ellipse(c, 0, 1, 6.5, 2.8, '#000', 0.3);
+  unitLegs(c, g, '#3a3d44');
+  // armored body
+  poly(c, [[-5, -4 + g.bob], [5, -4 + g.bob], [4, -14 + g.bob], [-4, -14 + g.bob]],
+    grad(c, [[0, '#c4cad4'], [1, '#8d949f']]), { stroke: OUTLINE, sw: 1.2 });
+  // big kite shield
+  poly(c, [[-7.5, -13 + g.bob + g.arm * 0.3], [-3.5, -13 + g.bob + g.arm * 0.3], [-3.5, -8 + g.bob + g.arm * 0.3], [-5.5, -4.5 + g.bob + g.arm * 0.3], [-7.5, -8 + g.bob + g.arm * 0.3]],
+    '#9e3a32', { stroke: OUTLINE, sw: 1 });
+  line(c, [-5.5, -12 + g.bob], [-5.5, -6 + g.bob], '#e3b341', 1.2);
+  // sword
+  line(c, [5, -10 + g.bob], [10, -20 + g.bob - g.arm], '#d8dde4', 2);
+  line(c, [5.5, -11 + g.bob], [7, -9.5 + g.bob], '#54381f', 2);
+  // head + great helm with plume
+  circle(c, 0, -17 + g.bob, 3.6, '#cfd4dc', { stroke: OUTLINE, sw: 1 });
+  rect(c, -3.6, -19.5 + g.bob, 7.2, 3.4, '#aab0ba', { stroke: OUTLINE });
+  line(c, [-1, -16.5 + g.bob], [1, -16.5 + g.bob], '#22252a', 1.6);
+  c.body.push(`<path d="M 0 ${-21 + g.bob} Q 5 ${-26 + g.bob} 8 ${-22 + g.bob}" fill="none" stroke="#c23b3b" stroke-width="2.4" stroke-linecap="round"/>`);
+  return 28;
+};
+
+unitBuilders.cart = function cart(c, p) {
+  const g = gait(p);
+  ellipse(c, 2, 1, 13, 4, '#000', 0.3);
+  // ox in front (right side)
+  poly(c, [[8, -2 + g.bob * 0.5], [16, -2 + g.bob * 0.5], [17, -8 + g.bob * 0.5], [7, -8 + g.bob * 0.5]],
+    grad(c, [[0, '#9c7a55'], [1, '#75583a']]), { stroke: OUTLINE, sw: 1.1 });
+  // ox legs
+  line(c, [9.5 + g.leg * 0.6, 0], [9.5, -3], '#5d4326', 1.8);
+  line(c, [14.5 - g.leg * 0.6, 0], [14.5, -3], '#5d4326', 1.8);
+  // head + horns
+  circle(c, 17.5, -8.5 + g.bob * 0.5, 2.8, '#8a684a', { stroke: OUTLINE, sw: 1 });
+  line(c, [16, -10.5], [14.5, -12.5], '#e8e0cf', 1.4);
+  line(c, [19, -10.5], [20.5, -12.5], '#e8e0cf', 1.4);
+  // yoke
+  line(c, [7, -6], [2, -6], '#54381f', 1.6);
+  // wagon bed
+  poly(c, [[-10, -3.5], [3, -3.5], [3, -10], [-10, -10]],
+    grad(c, [[0, '#a87f4f'], [1, '#7d5c36']]), { stroke: OUTLINE, sw: 1.2 });
+  line(c, [-10, -6.8], [3, -6.8], '#5d4326', 1);
+  // cargo sacks
+  circle(c, -6, -12, 3, '#d9c79a', { stroke: OUTLINE, sw: 1 });
+  circle(c, -1.5, -12.5, 3.2, '#c9b384', { stroke: OUTLINE, sw: 1 });
+  // wheel (rotates with phase)
+  const wa = (p < 0 ? 0 : p) * Math.PI * 2;
+  circle(c, -3.5, -1.5, 4.6, '#6e5436', { stroke: OUTLINE, sw: 1.4 });
+  line(c, [-3.5 - Math.cos(wa) * 3.6, -1.5 - Math.sin(wa) * 3.6], [-3.5 + Math.cos(wa) * 3.6, -1.5 + Math.sin(wa) * 3.6], '#3a2a18', 1.2);
+  line(c, [-3.5 - Math.sin(wa) * 3.6, -1.5 + Math.cos(wa) * 3.6], [-3.5 + Math.sin(wa) * 3.6, -1.5 - Math.cos(wa) * 3.6], '#3a2a18', 1.2);
+  return 17;
+};
+
+unitBuilders.ram = function ram(c, p) {
+  ellipse(c, 0, 1, 14, 4.5, '#000', 0.32);
+  // wheels
+  const wa = (p < 0 ? 0 : p) * Math.PI * 2;
+  for (const wx of [-9, 8]) {
+    circle(c, wx, -1.5, 5, '#4a3826', { stroke: OUTLINE, sw: 1.5 });
+    line(c, [wx - Math.cos(wa) * 3.8, -1.5 - Math.sin(wa) * 3.8], [wx + Math.cos(wa) * 3.8, -1.5 + Math.sin(wa) * 3.8], '#2b2018', 1.2);
+  }
+  // covered hull
+  poly(c, [[-14, -4], [14, -4], [10, -16], [-10, -16]],
+    grad(c, [[0, '#7d6342'], [1, '#54422a']]), { stroke: OUTLINE, sw: 1.4 });
+  poly(c, [[-10, -16], [10, -16], [0, -22]], grad(c, [[0, '#8d7350'], [1, '#6a5436']]), { stroke: OUTLINE, sw: 1.2 });
+  for (const t of [-6, 0, 6]) line(c, [t, -4], [t * 0.75, -16], '#3f3120', 1, 0.7);
+  // swinging ram head (faces the direction of travel: +x)
+  const sw = Math.sin((p < 0 ? 0 : p) * Math.PI * 2) * 2.5;
+  line(c, [14, -9], [20 + sw, -7], '#54381f', 3);
+  circle(c, [21 + sw][0], -6.6, 2.6, '#8d949f', { stroke: OUTLINE, sw: 1.2 });
+  return 24;
+};
+
 const UNIT_FRAMES = 4;
 
 // footprints per def (must match src/data/buildings.ts)

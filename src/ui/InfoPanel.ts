@@ -1,10 +1,6 @@
 import { events } from '../core/EventBus';
-import {
-  LOCAL_STORE_CAP,
-  RESOURCE_IDS,
-  RESOURCE_INFO,
-  SOLDIER_RECRUIT_COST,
-} from '../data/config';
+import { LOCAL_STORE_CAP, RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
+import { SOLDIER_TYPE_IDS, getSoldierType } from '../data/soldiers';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Soldier } from '../entities/Soldier';
@@ -53,17 +49,25 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   demolishBtn.className = 'demolish';
   demolishBtn.textContent = 'Abreißen (50% zurück)';
 
-  const recruitCostText = RESOURCE_IDS.filter((r) => (SOLDIER_RECRUIT_COST[r] ?? 0) > 0)
-    .map((r) => `${RESOURCE_INFO[r].icon} ${SOLDIER_RECRUIT_COST[r]}`)
-    .join('  ');
-  const recruitBtn = document.createElement('button');
-  recruitBtn.textContent = `Soldat rekrutieren (${recruitCostText})`;
+  // One recruit button per soldier type (data-driven).
+  const recruitBtns: HTMLButtonElement[] = SOLDIER_TYPE_IDS.map((typeId) => {
+    const type = getSoldierType(typeId);
+    const costText = RESOURCE_IDS.filter((r) => (type.cost[r] ?? 0) > 0)
+      .map((r) => `${RESOURCE_INFO[r].icon} ${type.cost[r]}`)
+      .join(' ');
+    const btn = document.createElement('button');
+    btn.textContent = `${typeId === 'knight' ? '🛡️' : '⚔️'} ${type.name} (${costText})`;
+    btn.addEventListener('click', () => {
+      if (current) game.recruitSoldier(current.id, typeId);
+    });
+    return btn;
+  });
 
   const dismissBtn = document.createElement('button');
   dismissBtn.className = 'demolish';
   dismissBtn.textContent = 'Entlassen';
 
-  buttons.append(closeBtn, recruitBtn, dismissBtn, repairBtn, upgradeBtn, demolishBtn);
+  buttons.append(closeBtn, ...recruitBtns, dismissBtn, repairBtn, upgradeBtn, demolishBtn);
   panel.append(title, desc, stats, staffRow, buttons);
   uiRoot.appendChild(panel);
 
@@ -135,9 +139,6 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     staffMinus.disabled = b.assignedWorkers === 0;
     staffPlus.disabled = b.assignedWorkers >= b.workersRequired;
   };
-  recruitBtn.addEventListener('click', () => {
-    if (current) game.recruitSoldier(current.id);
-  });
   dismissBtn.addEventListener('click', () => {
     if (currentSoldier) game.dismissSoldier(currentSoldier.id);
   });
@@ -208,7 +209,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       building.level > 1 ? `${building.def.name} ⭐${building.level}` : building.def.name;
     desc.textContent = building.def.description;
     demolishBtn.hidden = building.def.isWarehouse === true;
-    recruitBtn.hidden = building.def.recruitsSoldiers !== true;
+    for (const b of recruitBtns) b.hidden = building.def.recruitsSoldiers !== true;
     dismissBtn.hidden = true;
     updateActions(building);
     renderStats(building);
@@ -233,7 +234,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     desc.textContent = 'Tippe auf eine freie Stelle der Karte, um ihn dorthin zu schicken.';
     stats.replaceChildren();
     demolishBtn.hidden = true;
-    recruitBtn.hidden = true;
+    for (const b of recruitBtns) b.hidden = true;
     upgradeBtn.hidden = true;
     repairBtn.hidden = true;
     staffRow.hidden = true;

@@ -14,6 +14,8 @@ export interface EnemyDef {
   attackInterval: number;
   /** Attack reach in tiles; melee when omitted. */
   range?: number;
+  /** Siege vehicles ignore soldiers and only batter buildings. */
+  ignoresSoldiers?: boolean;
   /** Placeholder art parameters. */
   art: { color: number; radius: number };
 }
@@ -47,6 +49,16 @@ export const ENEMY_DEFS = {
     range: 4.5,
     art: { color: 0x3e5a46, radius: 6 },
   },
+  ram: {
+    id: 'ram',
+    name: 'Rammbock',
+    hp: 130,
+    speed: 0.7,
+    damage: 25,
+    attackInterval: 3,
+    ignoresSoldiers: true,
+    art: { color: 0x5a4632, radius: 10 },
+  },
 } as const satisfies Record<string, Omit<EnemyDef, 'id'> & { id: string }>;
 
 export type EnemyDefId = keyof typeof ENEMY_DEFS;
@@ -64,5 +76,8 @@ export function waveComposition(n: number, raiders: number): { defId: EnemyDefId
   // Ranged skirmishers from wave 4 on.
   const skirmishers = Math.floor((n - 1) / 3);
   if (skirmishers > 0) parts.push({ defId: 'skirmisher', count: skirmishers });
+  // Battering rams from wave 6 on.
+  const rams = n >= 6 ? 1 + Math.floor((n - 6) / 3) : 0;
+  if (rams > 0) parts.push({ defId: 'ram', count: rams });
   return parts;
 }

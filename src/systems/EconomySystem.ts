@@ -1,12 +1,15 @@
 import { events } from '../core/EventBus';
 import {
+  CARTS_PER_STABLE,
+  CART_CAPACITY,
+  CART_SPEED,
+  FOREST_WOOD_PER_TILE,
   RESOURCE_IDS,
   START_WORKERS,
   TICK_RATE,
   WORKER_SPEED,
   type ResourceId,
 } from '../data/config';
-import { FOREST_WOOD_PER_TILE } from '../data/config';
 import { Building } from '../entities/Building';
 import { Worker, type Job } from '../entities/Worker';
 import { Terrain, type IsoGrid, type Point } from '../world/IsoGrid';
@@ -91,7 +94,6 @@ export interface EconomyContext {
   fellForestTile(building: Building): void;
 }
 
-const SPEED_PER_TICK = WORKER_SPEED / TICK_RATE;
 /** Ticks to wait before retrying a job whose path could not be found. */
 const JOB_RETRY_TICKS = 2 * TICK_RATE;
 
@@ -163,6 +165,7 @@ export class EconomySystem {
       }
     }
     this.syncWorkerCount();
+    this.syncCartCount();
     this.generateJobs();
     this.assignJobs();
     this.advanceWorkers();
@@ -174,17 +177,19 @@ export class EconomySystem {
     const { workers } = this.ctx;
     const total = this.workerTarget();
     const warehouse = this.ctx.getWarehouse();
-    while (workers.length < total && warehouse) {
+    const footCount = (): number => workers.filter((w) => !w.isCart).length;
+    while (footCount() < total && warehouse) {
       // Spawn on the front-most access tiles so idle carriers stay visible.
       const tiles = warehouse.accessTiles(this.ctx.grid).sort((a, b) => b.x + b.y - (a.x + a.y));
       const spawn = tiles[workers.length % Math.max(1, tiles.length)] ?? tiles[0];
       if (!spawn) break;
       workers.push(new Worker(this.ctx.nextEntityId(), spawn.x, spawn.y));
     }
-    let excess = workers.length - total;
+    let excess = footCount() - total;
     if (excess > 0) {
       for (const w of workers) {
         if (excess <= 0) break;
+        if (w.isCart) continue;
         if (w.job === null && !w.pendingDespawn) {
           w.pendingDespawn = true;
           excess--;
@@ -192,6 +197,7 @@ export class EconomySystem {
       }
       // If all are busy, the flag is set once they finish their job.
       for (let i = workers.length - 1; i >= 0 && excess > 0; i--) {
+        if (workers[i].isCart) continue;
         if (!workers[i].pendingDespawn && workers[i].job !== null) {
           workers[i].pendingDespawn = true;
           excess--;
@@ -201,6 +207,30 @@ export class EconomySystem {
     for (let i = workers.length - 1; i >= 0; i--) {
       if (workers[i].pendingDespawn && workers[i].job === null) {
         workers.splice(i, 1);
+      }
+    }
+  }
+
+  /** Ox carts come from stables; they cost no population. */
+  private syncCartCount(): void {
+    const { workers } = this.ctx;
+    let stables = 0;
+    for (const b of this.ctx.buildings.values()) if (b.defId === 'stable') stables++;
+    const target = stables * CARTS_PER_STABLE;
+    const carts = workers.filter((w) => w.isCart);
+    if (carts.length < target) {
+      const stable = [...this.ctx.buildings.values()].find((b) => b.defId === 'stable');
+      const spawn = stable
+        ?.accessTiles(this.ctx.grid)
+        .sort((a, b) => b.x + b.y - (a.x + a.y))[0];
+      if (spawn) workers.push(new Worker(this.ctx.nextEntityId(), spawn.x, spawn.y, true));
+    } else if (carts.length > target) {
+      for (const cart of carts) {
+        if (carts.length - workers.filter((w) => w.isCart && w.pendingDespawn).length <= target) break;
+        if (!cart.pendingDespawn && cart.job === null) {
+          cart.pendingDespawn = true;
+          break;
+        }
       }
     }
   }
@@ -238,27 +268,33 @@ export class EconomySystem {
 
   /** Hand queued jobs to idle workers; deliveries have priority. */
   private assignJobs(): void {
-    const idle = this.ctx.workers.filter(
+    const free = this.ctx.workers.filter(
       (w) => w.job === null && w.phase !== 'returning' && !w.pendingDespawn,
     );
-    if (idle.length === 0) return;
-    for (const queue of [this.deliverQueue, this.pickupQueue]) {
-      for (let i = 0; i < queue.length && idle.length > 0; ) {
+    // Carts only haul warehouse pickups (their capacity shines there);
+    // foot carriers do deliveries first, then help with pickups.
+    const idleCarriers = free.filter((w) => !w.isCart);
+    const idleCarts = free.filter((w) => w.isCart);
+    const assign = (queue: QueuedJob[], pool: Worker[]): void => {
+      for (let i = 0; i < queue.length && pool.length > 0; ) {
         const entry = queue[i];
         if (entry.notBefore > this.tickCount) {
           i++;
           continue;
         }
-        const worker = idle[idle.length - 1];
+        const worker = pool[pool.length - 1];
         if (this.startJob(worker, entry.job)) {
-          idle.pop();
+          pool.pop();
           queue.splice(i, 1);
         } else {
           entry.notBefore = this.tickCount + JOB_RETRY_TICKS;
           i++;
         }
       }
-    }
+    };
+    assign(this.deliverQueue, idleCarriers);
+    assign(this.pickupQueue, idleCarts);
+    assign(this.pickupQueue, idleCarriers);
   }
 
   /** Route the worker to the job's first stop. Returns false if unreachable. */
@@ -286,7 +322,8 @@ export class EconomySystem {
       }
       const tile = worker.tile;
       const roadBonus = this.ctx.grid.speedFactorAt(tile.x, tile.y);
-      const arrived = worker.step(SPEED_PER_TICK * roadBonus * this.ctx.getSpeedFactor());
+      const base = (worker.isCart ? CART_SPEED : WORKER_SPEED) / TICK_RATE;
+      const arrived = worker.step(base * roadBonus * this.ctx.getSpeedFactor());
       if (!arrived) continue;
       this.onArrival(worker);
     }
@@ -309,9 +346,14 @@ export class EconomySystem {
             this.finishJob(worker);
             return;
           }
-          source.outputStore--;
+          // Carts opportunistically top up with unreserved output.
+          const extra = worker.isCart
+            ? Math.min(CART_CAPACITY - 1, Math.max(0, source.unclaimedOutput() - 1))
+            : 0;
+          source.outputStore -= 1 + extra;
           source.reservedOutput = Math.max(0, source.reservedOutput - 1);
           worker.carrying = job.resource;
+          worker.carryingCount = 1 + extra;
           if (!warehouse) {
             this.finishJob(worker);
             return;
@@ -335,6 +377,7 @@ export class EconomySystem {
             return;
           }
           worker.carrying = job.resource;
+          worker.carryingCount = 1;
           const path = this.pathTo(worker.tile, target);
           if (!path) {
             // Target unreachable: return the unit to stock.
@@ -352,8 +395,9 @@ export class EconomySystem {
       case 'toDropoff': {
         const job = worker.job;
         if (job?.kind === 'pickup') {
-          if (worker.carrying) this.ctx.store.add(worker.carrying, 1);
+          if (worker.carrying) this.ctx.store.add(worker.carrying, Math.max(1, worker.carryingCount));
           worker.carrying = null;
+          worker.carryingCount = 0;
           worker.job = null;
           worker.phase = 'idle'; // already at the warehouse
         } else if (job) {
@@ -362,6 +406,7 @@ export class EconomySystem {
             target.inputStore++;
             target.incomingInput = Math.max(0, target.incomingInput - 1);
             worker.carrying = null;
+            worker.carryingCount = 0;
           } else if (worker.carrying) {
             // Target demolished mid-delivery: carry the unit back.
             worker.job = null;
@@ -377,8 +422,9 @@ export class EconomySystem {
       case 'returning': {
         // Arrived back at the warehouse; deposit anything still carried.
         if (worker.carrying) {
-          this.ctx.store.add(worker.carrying, 1);
+          this.ctx.store.add(worker.carrying, Math.max(1, worker.carryingCount));
           worker.carrying = null;
+          worker.carryingCount = 0;
         }
         worker.phase = 'idle';
         return;

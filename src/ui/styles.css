@@ -458,6 +458,47 @@ button:active {
   color: var(--ui-accent);
 }
 
+/* --- Main menu & stats --- */
+
+.main-title {
+  margin: 0 0 2px;
+  font-size: 30px;
+}
+
+.stats-panel {
+  position: absolute;
+  top: calc(56px + var(--safe-top));
+  right: 10px;
+  width: min(86vw, 320px);
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.stats-panel h3 {
+  margin: 0 0 6px;
+}
+
+.stats-panel .row {
+  padding: 1.5px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-panel .stats-section {
+  margin-top: 8px;
+  font-weight: 700;
+  color: var(--ui-accent);
+}
+
+.stats-panel button {
+  margin-top: 10px;
+  width: 100%;
+}
+
 /* --- Burg-Duell --- */
 
 .duel-card {

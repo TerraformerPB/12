@@ -51,3 +51,29 @@ describe('duel army', () => {
     expect(army.length).toBe(DUEL_ARMY_CAP);
   });
 });
+
+describe('phase 11 data', () => {
+  it('exposes both soldier types with sane stats', async () => {
+    const { getSoldierType } = await import('../src/data/soldiers');
+    const soldier = getSoldierType('soldier');
+    const knight = getSoldierType('knight');
+    expect(knight.hp).toBeGreaterThan(soldier.hp);
+    expect(knight.damage).toBeGreaterThan(soldier.damage);
+    expect((knight.cost.weapons ?? 0) > (soldier.cost.weapons ?? 0)).toBe(true);
+  });
+
+  it('adds battering rams from wave 6 that ignore soldiers', async () => {
+    const { waveComposition, getEnemyDef } = await import('../src/data/enemies');
+    expect(waveComposition(5, 10).map((p) => p.defId)).not.toContain('ram');
+    expect(waveComposition(6, 12).map((p) => p.defId)).toContain('ram');
+    expect(getEnemyDef('ram').ignoresSoldiers).toBe(true);
+  });
+
+  it('wall and gate upgrade into stronger variants', async () => {
+    const { getDef } = await import('../src/data/buildings');
+    expect(getDef('wall').upgradesTo).toBe('wallStrong');
+    expect(getDef('gate').upgradesTo).toBe('gateIron');
+    expect(getDef('wallStrong').maxHp).toBeGreaterThan(getDef('wall').maxHp ?? 0);
+    expect(getDef('gateIron').passable).toBe(true);
+  });
+});

@@ -144,6 +144,19 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Burg-Upload und Replays — das Code-Format (`core/CastleCode.ts`) ist
   dafür bereits das Übertragungs-Payload.
 
+- **Phase 11 (✓) — Komfort & Vielfalt:** Hauptmenü beim Start (Weiterspielen /
+  Neues Spiel / Burg-Duell, bester Lauf), Schnellzugriff im HUD (📊 Übersicht),
+  Übersichts-Panel mit Warenbeständen + geschätzter Netto-Produktion pro
+  Minute, Bevölkerungsaufschlüsselung und Gebäudeliste. Neue Ausbauformen:
+  Mauer → Verstärkte Mauer, Tor → Eisentor. Neue Einheit **Ritter**
+  (Elite-Soldat: 70 LP, 8 Schaden; kostet Brot+Waffen+Bier — zweiter
+  Rekrutier-Button in der Kaserne, datengetrieben in `data/soldiers.ts`).
+  Fahrzeuge: **Ochsenkarren** vom neuen Stall (transportiert 3 Waren pro
+  Fahrt, kostet keine Bevölkerung, animiertes Gespann mit drehenden Rädern)
+  und gegnerischer **Rammbock** ab Welle 6 (ignoriert Soldaten, zertrümmert
+  Gebäude — Türme/Ritter müssen ihn stoppen). Savegame v8 (migriert
+  verlustfrei).
+
 ## Echte Grafiken einbinden
 
 Das Spiel rendert Gebäude über gebackene Texturen mit einem Drop-in-Override:
