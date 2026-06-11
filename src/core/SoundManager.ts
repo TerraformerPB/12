@@ -75,11 +75,22 @@ function synth(
  * no third-party assets. Real recorded sounds can replace single entries
  * in `defs` later without touching any call site.
  */
+const MUTE_KEY = 'burgspiel.muted';
+
 export class SoundManager {
   private sounds = new Map<SoundId, Howl>();
+  private ambient: Howl | null = null;
   private muted = false;
   /** Per-id throttle so rapid combat doesn't stack dozens of plays. */
   private lastPlayed = new Map<SoundId, number>();
+
+  constructor() {
+    try {
+      this.muted = localStorage.getItem(MUTE_KEY) === '1';
+    } catch {
+      this.muted = false;
+    }
+  }
 
   async preload(): Promise<void> {
     const defs: Record<SoundId, Float32Array> = {
@@ -96,6 +107,18 @@ export class SoundManager {
     for (const [id, samples] of Object.entries(defs) as [SoundId, Float32Array][]) {
       this.sounds.set(id, new Howl({ src: [toWavDataUri(samples)], format: ['wav'] }));
     }
+    this.ambient = new Howl({
+      src: [toWavDataUri(ambientLoop())],
+      format: ['wav'],
+      loop: true,
+      volume: 0.16,
+    });
+  }
+
+  /** Begin the looping background ambience (no-op while muted). */
+  startAmbient(): void {
+    if (this.muted || !this.ambient || this.ambient.playing()) return;
+    this.ambient.play();
   }
 
   play(id: SoundId): void {
@@ -108,5 +131,42 @@ export class SoundManager {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
+    try {
+      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+    } catch {
+      // ignore
+    }
+    if (muted) this.ambient?.pause();
+    else this.startAmbient();
   }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+}
+
+/**
+ * Seamless 6-second ambience: a soft A-minor-ish pad whose envelope is
+ * zero at the loop boundaries, plus faint wind noise under the same
+ * envelope so the loop point is inaudible.
+ */
+function ambientLoop(): Float32Array {
+  const duration = 6;
+  const n = SAMPLE_RATE * duration;
+  const out = new Float32Array(n);
+  const freqs = [110, 165, 220, 330]; // whole cycles within 6 s → no click
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    const env = Math.sin((Math.PI * i) / n) ** 2;
+    let v = 0;
+    for (let k = 0; k < freqs.length; k++) {
+      v += Math.sin(2 * Math.PI * freqs[k] * t) * (0.5 / (k + 1));
+    }
+    // Faint wind: noise through a crude one-pole lowpass.
+    v += (Math.random() * 2 - 1) * 0.12;
+    out[i] = v * env * 0.28;
+  }
+  // Smooth the noise component cheaply.
+  for (let i = 1; i < n; i++) out[i] = out[i - 1] * 0.6 + out[i] * 0.4;
+  return out;
 }
