@@ -33,6 +33,8 @@ export interface GameEvents {
     seconds: number;
     trophyDelta: number;
   };
+  'duel:onlineResult': { opponentId: number; username: string; victory: boolean };
+  'online:openMenu': void;
   'morale:changed': { morale: number };
   'season:changed': { season: number; label: string };
   'game:victory': { scenario: string; kills: number };

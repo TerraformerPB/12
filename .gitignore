@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.local
 .DS_Store
+
+# Backend-Laufzeitdaten
+server-data/
+server/dist/

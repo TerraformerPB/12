@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burgspiel · Admin</title>
+<style>
+  :root { --bg:#141821; --card:#1b202a; --border:rgba(255,255,255,.12); --text:#e8e6df;
+          --dim:#9aa0ab; --accent:#d8a548; --danger:#d4574e; --ok:#5fbf6a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+  header h1 { margin:0; font-size:18px; color:var(--accent); }
+  header .spacer { flex:1; }
+  main { padding:20px; max-width:1000px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  input { background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--text);
+          border-radius:8px; padding:9px 12px; font:inherit; margin-right:8px; }
+  button { background:rgba(255,255,255,.08); border:1px solid var(--border); color:var(--text);
+           border-radius:8px; padding:8px 12px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.danger { border-color:var(--danger); color:#ff9d96; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
+  th { color:var(--dim); font-weight:600; }
+  .stats { display:flex; gap:14px; flex-wrap:wrap; }
+  .stat { background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:10px;
+          padding:10px 16px; min-width:110px; }
+  .stat b { display:block; font-size:22px; color:var(--accent); }
+  .banned { color:var(--danger); }
+  .admin { color:var(--accent); }
+  #msg { color:var(--danger); min-height:18px; font-size:13px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏰 Burgspiel · Admin-Dashboard</h1>
+  <div class="spacer"></div>
+  <span id="who" class="admin"></span>
+  <button id="logout" hidden>Abmelden</button>
+</header>
+<main>
+  <div class="card" id="loginCard">
+    <h3>Anmelden (Admin-Konto)</h3>
+    <input id="user" placeholder="Name" autocomplete="username">
+    <input id="pass" placeholder="Passwort" type="password" autocomplete="current-password">
+    <button id="loginBtn">Anmelden</button>
+    <p id="msg"></p>
+  </div>
+
+  <div id="panel" hidden>
+    <div class="card">
+      <h3>Statistik</h3>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="card">
+      <h3>Nutzer</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Rolle</th><th>🏆</th><th>Duelle</th><th>Beste Wellen</th><th>Status</th><th>Aktionen</th></tr></thead>
+        <tbody id="users"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let token = localStorage.getItem('burgspiel.admin.token') || '';
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.status);
+  return body;
+}
+
+async function refresh() {
+  const me = await api('/api/me');
+  if (me.user.role !== 'admin') throw new Error('Dieses Konto ist kein Admin');
+  $('who').textContent = '👑 ' + me.user.username;
+  $('loginCard').hidden = true;
+  $('panel').hidden = false;
+  $('logout').hidden = false;
+
+  const stats = await api('/api/admin/stats');
+  $('stats').innerHTML = [
+    ['Nutzer', stats.users], ['Gesperrt', stats.banned], ['Duelle gesamt', stats.duelsTotal],
+    ['Duelle (24h)', stats.duelsToday], ['Burgen', stats.castles],
+  ].map(([l, v]) => `<div class="stat"><b>${v}</b>${l}</div>`).join('');
+
+  const { users } = await api('/api/admin/users');
+  $('users').innerHTML = users.map((u) => `
+    <tr>
+      <td>${u.id}</td>
+      <td>${u.username}</td>
+      <td class="${u.role === 'admin' ? 'admin' : ''}">${u.role}</td>
+      <td>${u.trophies}</td>
+      <td>${u.wins ?? u.duelWins}S / ${u.losses ?? u.duelLosses}N</td>
+      <td>${u.bestWaves}</td>
+      <td class="${u.banned ? 'banned' : ''}">${u.banned ? 'gesperrt' : 'aktiv'}</td>
+      <td>
+        <button data-act="${u.banned ? 'unban' : 'ban'}" data-id="${u.id}">${u.banned ? 'Entsperren' : 'Sperren'}</button>
+        <button data-act="${u.role === 'admin' ? 'demote' : 'promote'}" data-id="${u.id}">${u.role === 'admin' ? 'Zu Spieler' : 'Zu Admin'}</button>
+        <button class="danger" data-act="delete" data-id="${u.id}">Löschen</button>
+      </td>
+    </tr>`).join('');
+}
+
+$('loginBtn').addEventListener('click', async () => {
+  $('msg').textContent = '';
+  try {
+    const r = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: $('user').value, password: $('pass').value }),
+    });
+    token = r.token;
+    localStorage.setItem('burgspiel.admin.token', token);
+    await refresh();
+  } catch (e) { $('msg').textContent = e.message; }
+});
+
+$('logout').addEventListener('click', () => {
+  token = '';
+  localStorage.removeItem('burgspiel.admin.token');
+  location.reload();
+});
+
+$('users').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  const { act, id } = btn.dataset;
+  try {
+    if (act === 'delete') {
+      if (!confirm('Nutzer ' + id + ' wirklich löschen?')) return;
+      await api('/api/admin/users/' + id, { method: 'DELETE' });
+    } else {
+      await api('/api/admin/users/' + id + '/' + act, { method: 'POST' });
+    }
+    await refresh();
+  } catch (e) { alert(e.message); }
+});
+
+if (token) refresh().catch(() => { token = ''; localStorage.removeItem('burgspiel.admin.token'); });
+</script>
+</body>
+</html>

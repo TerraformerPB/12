@@ -66,6 +66,7 @@ import { createDuelMenu } from '../ui/DuelMenu';
 import { createMainMenu } from '../ui/MainMenu';
 import { createStatsPanel } from '../ui/StatsPanel';
 import { createMarketPanel } from '../ui/MarketPanel';
+import { createOnlineMenu } from '../ui/OnlineMenu';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
 import {
@@ -93,7 +94,8 @@ import {
   type DuelBudgetId,
 } from '../data/duel';
 import { DuelAI } from '../systems/DuelAI';
-import { recordDuel } from './DuelRating';
+import { loadDuelRating, recordDuel } from './DuelRating';
+import { encodeCastle } from './CastleCode';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
 import { DevRewardedAdProvider, type RewardedAdProvider } from '../monetization/Ads';
@@ -153,6 +155,8 @@ export class Game {
   duelDeployType: SoldierTypeId | null = null;
   private duelLevel: DuelAiLevelId = 'normal';
   private duelSpawnCount = 0;
+  /** Matched player when the running duel is an online match. */
+  private onlineOpponent: { id: number; username: string } | null = null;
   /** Capturable resource depots on the duel battlefield. */
   duelNodes: { x: number; y: number; resource: ResourceId; icon: string; owner: 'none' | 'player' | 'foe' }[] = [];
   private duelBackup: SaveData | null = null;
@@ -189,6 +193,7 @@ export class Game {
     createMainMenu(uiRoot, this);
     this.statsPanel = createStatsPanel(uiRoot, this);
     this.marketPanel = createMarketPanel(uiRoot, this);
+    createOnlineMenu(uiRoot, this);
     createToast(uiRoot);
     if (Capacitor.isNativePlatform()) {
       const admob = new AdmobRewardedAdProvider();
@@ -700,6 +705,8 @@ export class Game {
     this.duelNodes = [];
     this.duelDeployType = null;
     this.duelBackup = null;
+    const opponent = this.onlineOpponent;
+    this.onlineOpponent = null;
     if (backup) this.loadFromData(backup);
     this.setPhase('playing');
     if (outcome === 'aborted') {
@@ -708,8 +715,48 @@ export class Game {
       // Trophies are the offline rating — the future match system's MMR.
       const { delta } = recordDuel(outcome === 'victory', this.duelLevel);
       events.emit('duel:ended', { ...stats, trophyDelta: delta });
+      // Online matches additionally settle the server-side Elo.
+      if (opponent) {
+        events.emit('duel:onlineResult', {
+          opponentId: opponent.id,
+          username: opponent.username,
+          victory: outcome === 'victory',
+        });
+      }
       this.sound.play(outcome === 'victory' ? 'horn' : 'gameover');
     }
+  }
+
+  /** Compact shareable snapshot of the current castle (server upload). */
+  exportCastleCode(): string {
+    return encodeCastle({
+      seed: this.seed,
+      overrides: this.grid.terrainOverrides(),
+      buildings: [...this.buildings.values()].map((b) => ({
+        d: b.defId,
+        x: b.x,
+        y: b.y,
+        r: b.rotated ? 1 : 0,
+        l: b.level,
+      })),
+      soldiers: this.soldiers.map((s) => ({ x: s.tile.x, y: s.tile.y, t: s.typeId })),
+      techs: [...this.techs],
+    });
+  }
+
+  /**
+   * Online match: a mirror duel played against the matched player — the
+   * AI takes their seat, its difficulty scales with the rating gap. The
+   * result settles the server-side Elo via 'duel:onlineResult'.
+   */
+  startOnlineDuel(opponent: { id: number; username: string; trophies: number }): boolean {
+    const own = loadDuelRating().trophies;
+    const level: DuelAiLevelId =
+      opponent.trophies - own > 100 ? 'schwer' : own - opponent.trophies > 100 ? 'leicht' : 'normal';
+    if (!this.startMirrorDuel('mittel', level)) return false;
+    this.onlineOpponent = { id: opponent.id, username: opponent.username };
+    events.emit('toast:show', { message: `🌍 Online-Duell gegen ${opponent.username}!` });
+    return true;
   }
 
   private emitDuelStatus(): void {

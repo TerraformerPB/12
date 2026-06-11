@@ -78,11 +78,16 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
   scoresBtn.className = 'menu-btn';
   scoresBtn.textContent = '🏆 Bestenliste';
 
+  const onlineBtn = document.createElement('button');
+  onlineBtn.className = 'menu-btn';
+  onlineBtn.textContent = '🌐 Online';
+  onlineBtn.addEventListener('click', () => events.emit('online:openMenu', undefined));
+
   const settingsBtn = document.createElement('button');
   settingsBtn.className = 'menu-btn';
   settingsBtn.textContent = '⚙️ Einstellungen';
 
-  buttons.append(continueBtn, newBtn, scenarioRow, duelBtn, scoresBtn, settingsBtn);
+  buttons.append(continueBtn, newBtn, scenarioRow, duelBtn, onlineBtn, scoresBtn, settingsBtn);
 
   const footer = document.createElement('div');
   footer.className = 'menu-footer';
