@@ -24,6 +24,9 @@ export interface GameEvents {
   'tutorial:changed': { text: string | null };
   'wave:status': { wave: number; nextInSeconds: number; enemiesAlive: number; kills: number };
   'game:over': { wavesSurvived: number; kills: number };
+  'duel:openMenu': void;
+  'duel:status': { queued: number; alive: number };
+  'duel:ended': { victory: boolean; unitsLost: number; buildingsDestroyed: number; seconds: number };
 }
 
 type Handler<P> = (payload: P) => void;
