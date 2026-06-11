@@ -111,6 +111,29 @@ export const DUEL_NODES: { x: number; y: number; resource: ResourceId; icon: str
   { x: 21, y: 31, resource: 'weapons', icon: '⚔️' },
 ];
 
+/**
+ * Cleared-to-grass rectangles for a duel map: both castle grounds, every
+ * depot patch and three guaranteed lanes between the castles — random
+ * rivers must never cut the halves apart (melee units have to be able to
+ * reach the enemy keep).
+ */
+export function duelClearRects(
+  mapW: number,
+  mapH: number,
+): { x: number; y: number; w: number; h: number }[] {
+  const cy = Math.floor(mapH / 2);
+  return [
+    { x: 2, y: cy - 6, w: 10, h: 13 },
+    { x: mapW - 12, y: cy - 6, w: 10, h: 13 },
+    ...DUEL_NODES.flatMap((n) => [
+      { x: n.x - 2, y: n.y - 2, w: 5, h: 5 },
+      { x: mapW - 1 - (n.x + 2), y: n.y - 2, w: 5, h: 5 },
+    ]),
+    { x: 11, y: cy - 1, w: mapW - 22, h: 3 },
+    ...DUEL_NODES.map((n) => ({ x: 11, y: n.y - 1, w: mapW - 22, h: 3 })),
+  ];
+}
+
 /** Compute an attack army from resources and soldiers. Pure. */
 export function computeArmy(
   resources: Record<ResourceId, number>,

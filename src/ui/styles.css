@@ -447,6 +447,10 @@ button:active {
   max-width: min(92vw, 380px);
 }
 
+.scenario-row[hidden] {
+  display: none;
+}
+
 .scenario-btn {
   flex: 1;
   display: flex;
@@ -480,6 +484,112 @@ button:active {
 }
 
 /* --- Main menu & stats --- */
+
+/* --- Main menu (store-ready title screen) --- */
+
+.main-menu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: calc(20px + var(--safe-top)) 16px calc(20px + var(--safe-bottom));
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(216, 165, 72, 0.18), transparent 55%),
+    linear-gradient(180deg, rgba(10, 13, 20, 0.88) 0%, rgba(13, 17, 26, 0.94) 60%, rgba(8, 10, 15, 0.97) 100%);
+  text-align: center;
+}
+
+.main-menu[hidden] {
+  display: none;
+}
+
+.menu-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.menu-crest {
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 18px rgba(216, 165, 72, 0.35));
+  animation: crest-bob 4s ease-in-out infinite;
+}
+
+@keyframes crest-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.menu-title {
+  margin: 8px 0 0;
+  font-size: 42px;
+  letter-spacing: 2px;
+  color: var(--ui-accent);
+  text-shadow: 0 2px 16px rgba(216, 165, 72, 0.35);
+}
+
+.menu-tagline {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--ui-text-dim);
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(86vw, 300px);
+}
+
+.menu-btn {
+  width: 100%;
+  padding: 13px 16px;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--ui-border);
+}
+
+.menu-btn-primary {
+  background: rgba(216, 165, 72, 0.18);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  font-weight: 700;
+}
+
+.menu-footer {
+  position: absolute;
+  bottom: calc(10px + var(--safe-bottom));
+  font-size: 11px;
+  color: var(--ui-text-dim);
+  opacity: 0.7;
+}
+
+.menu-dialog {
+  z-index: 30;
+}
+
+.menu-scores {
+  text-align: left;
+  font-size: 13px;
+  min-width: 240px;
+  margin-bottom: 8px;
+}
+
+.menu-scores-section {
+  margin-top: 10px;
+  font-weight: 700;
+  color: var(--ui-accent);
+}
+
+.menu-scores-row {
+  padding: 2px 0;
+  color: var(--ui-text);
+}
 
 .main-title {
   margin: 0 0 2px;
