@@ -1,6 +1,7 @@
 import {
   BUILDING_DEFAULT_HP,
   BUILDING_MAX_LEVEL,
+  CONSTRUCTION_TIME_PER_TILE,
   LOCAL_STORE_CAP,
   TICK_RATE,
   UPGRADE_HP_BONUS,
@@ -30,6 +31,10 @@ export interface BuildingSave {
   level: number;
   /** Since save version 7. */
   harvestProgress: number;
+  /** Since save version 9 (construction sites). */
+  underConstruction: boolean;
+  materialsRemaining: Partial<Record<ResourceId, number>>;
+  buildTicks: number;
 }
 
 /**
@@ -64,6 +69,14 @@ export class Building {
   harvestProgress = 0;
   /** Production stalled by missing surroundings (e.g. no forest left). */
   productionHalted = false;
+  /** Construction site: waiting for materials, then building up. */
+  underConstruction = false;
+  /** Materials still to be delivered before building starts. */
+  materialsRemaining: Partial<Record<ResourceId, number>> = {};
+  /** Remaining build time once materials arrived. */
+  buildTicks = 0;
+  /** Material units currently on their way (transient). */
+  incomingMaterials = 0;
 
   // Transient reservation counters (recomputed from worker jobs on load).
   /** Output units already promised to a pickup job. */
@@ -91,6 +104,7 @@ export class Building {
 
   /** Carrier capacity provided (huts grow with their level). */
   get populationBonus(): number {
+    if (this.underConstruction) return 0;
     const base = this.def.population ?? 0;
     return base === 0 ? 0 : base + UPGRADE_HUT_POPULATION * (this.level - 1);
   }
@@ -141,12 +155,27 @@ export class Building {
     return 1 + UPGRADE_SPEED_BONUS * (this.level - 1);
   }
 
+  /** Total construction time derived from the footprint area. */
+  get totalBuildTicks(): number {
+    return Math.round(this.w * this.h * CONSTRUCTION_TIME_PER_TILE * TICK_RATE);
+  }
+
+  /** Sum of materials still missing on a construction site. */
+  materialsMissing(): number {
+    let sum = 0;
+    for (const r of Object.keys(this.materialsRemaining) as ResourceId[]) {
+      sum += this.materialsRemaining[r] ?? 0;
+    }
+    return sum;
+  }
+
   /** Advance production by one logic tick, scaled by assigned workers. */
-  tickProduction(): void {
+  tickProduction(extFactor = 1): void {
+    if (this.underConstruction) return;
     const recipe = this.def.recipe;
     if (!recipe) return;
     if (this.productionHalted) return;
-    const speed = this.staffingFactor * this.levelFactor;
+    const speed = this.staffingFactor * this.levelFactor * extFactor;
     if (speed <= 0) return;
 
     if (!this.active) {
@@ -169,6 +198,7 @@ export class Building {
 
   /** How many input units may still be requested from the warehouse. */
   inputDemand(): number {
+    if (this.underConstruction) return 0;
     const recipe = this.def.recipe;
     if (!recipe?.input) return 0;
     return Math.max(0, LOCAL_STORE_CAP - this.inputStore - this.incomingInput);
@@ -249,6 +279,9 @@ export class Building {
       assignedWorkers: this.assignedWorkers,
       level: this.level,
       harvestProgress: this.harvestProgress,
+      underConstruction: this.underConstruction,
+      materialsRemaining: { ...this.materialsRemaining },
+      buildTicks: this.buildTicks,
     };
   }
 
@@ -262,6 +295,9 @@ export class Building {
     b.hp = Math.min(s.hp, b.maxHp);
     b.assignedWorkers = s.assignedWorkers;
     b.harvestProgress = s.harvestProgress;
+    b.underConstruction = s.underConstruction;
+    b.materialsRemaining = { ...s.materialsRemaining };
+    b.buildTicks = s.buildTicks;
     return b;
   }
 }

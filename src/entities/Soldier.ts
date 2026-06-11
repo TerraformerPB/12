@@ -1,3 +1,4 @@
+import { VETERAN_BONUS, VETERAN_THRESHOLDS } from '../data/config';
 import { getSoldierType, type SoldierTypeDef, type SoldierTypeId } from '../data/soldiers';
 import type { Point } from '../world/IsoGrid';
 import { Unit } from './Unit';
@@ -13,6 +14,8 @@ export interface SoldierSave {
   anchor: Point;
   /** Since save version 8. */
   typeId: SoldierTypeId;
+  /** Since save version 9 (veteran ranks). */
+  kills: number;
 }
 
 /**
@@ -28,6 +31,8 @@ export class Soldier extends Unit {
   mode: 'command' | 'guard' = 'guard';
   readonly typeId: SoldierTypeId;
   hp: number;
+  /** Lifetime kills; thresholds promote the soldier (veteran ranks). */
+  kills = 0;
   /** Guard post: combat chases start and end here. */
   anchor: Point;
   /** Enemy currently engaged, null while guarding. */
@@ -48,6 +53,23 @@ export class Soldier extends Unit {
     return getSoldierType(this.typeId);
   }
 
+  /** Veteran rank 0–3 from kills. */
+  get rank(): number {
+    let rank = 0;
+    for (const t of VETERAN_THRESHOLDS) if (this.kills >= t) rank++;
+    return rank;
+  }
+
+  /** Max hp including the veteran bonus. */
+  get maxHp(): number {
+    return Math.round(this.def.hp * (1 + VETERAN_BONUS * this.rank));
+  }
+
+  /** Damage including the veteran bonus. */
+  get attackDamage(): number {
+    return this.def.damage * (1 + VETERAN_BONUS * this.rank);
+  }
+
   toSave(): SoldierSave {
     return {
       id: this.id,
@@ -57,12 +79,14 @@ export class Soldier extends Unit {
       hp: this.hp,
       anchor: { ...this.anchor },
       typeId: this.typeId,
+      kills: this.kills,
     };
   }
 
   static fromSave(s: SoldierSave): { soldier: Soldier; target: Point | null } {
     const soldier = new Soldier(s.id, s.x, s.y, s.typeId);
-    soldier.hp = Math.min(s.hp, soldier.def.hp);
+    soldier.kills = s.kills;
+    soldier.hp = Math.min(s.hp, soldier.maxHp);
     soldier.anchor = { ...s.anchor };
     return { soldier, target: s.target };
   }

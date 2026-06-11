@@ -50,6 +50,7 @@ export interface CombatContext {
   /** Research multipliers. */
   towerDamageFactor(): number;
   soldierDamageFactor(): number;
+  towerRangeBonus(): number;
 }
 
 /**
@@ -136,6 +137,23 @@ export class CombatSystem {
         this.repathEnemy(enemy);
         continue;
       }
+      // Ranged siege engines stop as soon as a blocking building along
+      // their path comes into range (they outrange towers).
+      if (enemy.def.range) {
+        const ahead = enemy.peekPath(Math.ceil(enemy.def.range) + 2);
+        for (const wp of ahead) {
+          const occ = this.ctx.grid.inBounds(wp.x, wp.y)
+            ? this.ctx.grid.occupantAt(wp.x, wp.y)
+            : NO_OCCUPANT;
+          if (occ !== NO_OCCUPANT) {
+            if (Math.hypot(wp.x - enemy.x, wp.y - enemy.y) <= enemy.def.range) {
+              enemy.attackTargetId = occ;
+            }
+            break;
+          }
+        }
+        if (enemy.attackTargetId !== null) continue;
+      }
       const occupant = this.ctx.grid.inBounds(next.x, next.y)
         ? this.ctx.grid.occupantAt(next.x, next.y)
         : NO_OCCUPANT;
@@ -188,7 +206,7 @@ export class CombatSystem {
         s.clearPath();
         if (s.attackCooldown <= 0) {
           s.attackCooldown = SOLDIER_ATTACK_TICKS;
-          this.damageEnemy(target, s.def.damage * this.ctx.soldierDamageFactor());
+          this.damageEnemy(target, s.attackDamage * this.ctx.soldierDamageFactor(), s);
         }
       } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
         s.lastRepath = this.tickCount;
@@ -232,7 +250,7 @@ export class CombatSystem {
 
   private tickTowers(): void {
     for (const b of this.ctx.buildings.values()) {
-      if (b.defId !== 'tower') continue;
+      if (b.defId !== 'tower' || b.underConstruction) continue;
       const cooldown = this.towerCooldowns.get(b.id) ?? 0;
       if (cooldown > 0) {
         this.towerCooldowns.set(b.id, cooldown - 1);
@@ -240,7 +258,8 @@ export class CombatSystem {
       }
       const center = b.center;
       let target: Enemy | null = null;
-      let bestDist = TOWER_RANGE + UPGRADE_TOWER_RANGE_BONUS * (b.level - 1);
+      let bestDist =
+        TOWER_RANGE + UPGRADE_TOWER_RANGE_BONUS * (b.level - 1) + this.ctx.towerRangeBonus();
       for (const e of this.ctx.enemies) {
         const d = Math.hypot(e.x - center.x, e.y - center.y);
         if (d <= bestDist) {
@@ -259,11 +278,16 @@ export class CombatSystem {
 
   // --- Damage & deaths ----------------------------------------------------------
 
-  private damageEnemy(enemy: Enemy, amount: number): void {
+  private damageEnemy(enemy: Enemy, amount: number, killer?: Soldier): void {
     enemy.hp -= amount;
     if (enemy.hp <= 0) {
       const idx = this.ctx.enemies.indexOf(enemy);
       if (idx !== -1) this.ctx.enemies.splice(idx, 1);
+      if (killer) {
+        const before = killer.rank;
+        killer.kills++;
+        if (killer.rank > before) this.ctx.playSound('horn'); // promotion!
+      }
       this.ctx.onEnemyKilled();
       this.ctx.playSound('death');
     } else {

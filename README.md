@@ -157,21 +157,32 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Gebäude — Türme/Ritter müssen ihn stoppen). Savegame v8 (migriert
   verlustfrei).
 
-- **Phase 12 (in Arbeit) — Komplexität & Tiefe:** Plan:
-  1. **Verbrauch & Moral** — Bevölkerung isst laufend (Brot/Fisch); Hunger
-     senkt Moral und Arbeitstempo, Nahrungsvielfalt (inkl. Bier) hebt sie.
-  2. **Baustellen** — Gebäude brauchen Materiallieferung durch Träger und
-     Bauzeit statt Instant-Bau; Straßen/Karren beeinflussen Reaktionszeit.
-  3. **Veteranen & Belagerung** — Soldaten sammeln Ränge über Kills;
-     neue Gegner: Katapult (überreicht Türme) und Kriegsherr-Boss
-     (jede 10. Welle).
-  4. **Markt, Gold & Steuern** — Marktplatz handelt Waren gegen das neue
-     Gut Gold; Steuer-Regler erzeugt Gold, kostet Moral.
-  5. **Jahreszeiten** — 4er-Zyklus mit Karten-Tönung: Winter stoppt Farmen
-     und erhöht Verbrauch, Herbst beschleunigt die Ernte.
-  6. **Szenarien & Tech-Zweige** — Spielziele mit Sieg-Screen (Endlos,
-     10 Wellen überleben, Gold-Ziel) im Hauptmenü; Forschungs-Stufen mit
-     Voraussetzungen und exklusiven Zweigen (Militär vs. Handel).
+- **Phase 12 (✓) — Komplexität & Tiefe:**
+  1. **Verbrauch & Moral (✓)** — Bevölkerung und Soldaten essen alle 15 s
+     (Brot, dann Fisch); Hunger senkt die Moral (😊 im HUD), Sattheit und
+     Nahrungsvielfalt (Brot/Fisch/Bier) heben sie. Moral skaliert das
+     Arbeitstempo aller Träger (0,75×–1,25×).
+  2. **Baustellen (✓)** — Gebäude entstehen nicht mehr instant: Träger/Karren
+     liefern erst die Baukosten an die Baustelle (transparenter Sprite +
+     gelber Fortschrittsbalken), dann läuft die Bauzeit (2,5 s pro Tile).
+     Straßen/Brücken bleiben Instant-Bau; Info-Panel zeigt fehlendes Material.
+  3. **Veteranen & Belagerung (✓)** — Soldaten sammeln Kills und steigen bei
+     3/8/15 Kills im Rang (goldene Pips, +10% LP/Schaden pro Rang, Fanfare).
+     Neue Gegner: **Katapult** ab Welle 8 (Reichweite 7 — überreicht Türme,
+     beschießt Gebäude aus der Distanz) und **Kriegsherr**-Boss jede
+     10. Welle (420 LP).
+  4. **Markt, Gold & Steuern (✓)** — neues Gut **Gold 🪙**; der Marktplatz
+     öffnet ein Handels-Panel (5er-Batches kaufen/verkaufen, Kauf = 2×
+     Verkaufspreis) plus Steuer-Regler (4 Stufen: Gold pro Kopf gegen Moral).
+  5. **Jahreszeiten (✓)** — 180-s-Zyklus mit Karten-Tönung und HUD-Chip:
+     Herbst beschleunigt Farmen (+50%), Winter stoppt sie und erhöht den
+     Nahrungsbedarf (+50%).
+  6. **Szenarien & Tech-Zweige (✓)** — Hauptmenü-Szenariowahl (Endlos /
+     Zehn Wellen / Goldrausch) mit 🏆-Sieg-Screen; Forschungs-Tier-2 mit
+     Voraussetzungen und exklusiven Zweigen: **Militärdoktrin** (+1
+     Turm-Reichweite, braucht Kampftraining) vs. **Handelsgilde** (bessere
+     Marktpreise, braucht Freibier) — nur einer pro Lauf. Savegame v9
+     (migriert verlustfrei).
   Bewusst auf später verschoben: Turm-Garnison, zugefrorener Fluss,
   dynamische Marktpreise, Soldaten-Sold, Zufallsereignisse, Achievements.
 

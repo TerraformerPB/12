@@ -39,15 +39,28 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 
-  events.on('game:over', ({ wavesSurvived, kills }) => {
-    stats.textContent = `Überstandene Wellen: ${wavesSurvived} · Besiegte Gegner: ${kills}`;
+  const renderScores = (): void => {
     scoreList.replaceChildren();
     for (const s of loadScores()) {
       const li = document.createElement('li');
       li.textContent = `${s.waves} Wellen · ${s.kills} Gegner (${s.date})`;
       scoreList.appendChild(li);
     }
+  };
+
+  events.on('game:over', ({ wavesSurvived, kills }) => {
+    heading.textContent = '💀 Die Burg ist gefallen';
+    stats.textContent = `Überstandene Wellen: ${wavesSurvived} · Besiegte Gegner: ${kills}`;
+    renderScores();
     reviveBtn.hidden = !game.canRevive();
+    overlay.hidden = false;
+  });
+
+  events.on('game:victory', ({ scenario, kills }) => {
+    heading.textContent = '🏆 Sieg!';
+    stats.textContent = `Szenario „${scenario}“ geschafft · Besiegte Gegner: ${kills}`;
+    renderScores();
+    reviveBtn.hidden = true;
     overlay.hidden = false;
   });
 }

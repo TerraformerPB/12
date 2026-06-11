@@ -67,7 +67,11 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   dismissBtn.className = 'demolish';
   dismissBtn.textContent = 'Entlassen';
 
-  buttons.append(closeBtn, ...recruitBtns, dismissBtn, repairBtn, upgradeBtn, demolishBtn);
+  const tradeBtn = document.createElement('button');
+  tradeBtn.textContent = '🪙 Handeln';
+  tradeBtn.addEventListener('click', () => game.marketPanel?.open());
+
+  buttons.append(closeBtn, ...recruitBtns, dismissBtn, tradeBtn, repairBtn, upgradeBtn, demolishBtn);
   panel.append(title, desc, stats, staffRow, buttons);
   uiRoot.appendChild(panel);
 
@@ -103,6 +107,17 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   /** Refresh the action buttons that depend on live building state. */
   const updateActions = (b: Building): void => {
     updateStaffRow(b);
+    tradeBtn.hidden = b.defId !== 'market' || b.underConstruction;
+    for (const btn of recruitBtns) {
+      btn.hidden = b.def.recruitsSoldiers !== true || b.underConstruction;
+    }
+    if (b.underConstruction) {
+      // Sites can only be cancelled; everything else unlocks on completion.
+      upgradeBtn.hidden = true;
+      repairBtn.hidden = true;
+      staffRow.hidden = true;
+      return;
+    }
     const costLine = (cost: Partial<Record<(typeof RESOURCE_IDS)[number], number>>): string =>
       RESOURCE_IDS.filter((r) => (cost[r] ?? 0) > 0)
         .map((r) => `${RESOURCE_INFO[r].icon} ${cost[r]}`)
@@ -162,6 +177,17 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       stats.appendChild(row);
     };
 
+    if (b.underConstruction) {
+      const missing = RESOURCE_IDS.filter((r) => (b.materialsRemaining[r] ?? 0) > 0)
+        .map((r) => `${RESOURCE_INFO[r].icon} ${b.materialsRemaining[r]}`)
+        .join(' ');
+      if (missing) {
+        addRow(`🚧 Wartet auf Material: ${missing}`);
+      } else {
+        addRow('🚧 Bau läuft …', 1 - b.buildTicks / Math.max(1, b.totalBuildTicks));
+      }
+      return;
+    }
     if (b.hp < b.maxHp) {
       addRow(`❤️ ${b.hp}/${b.maxHp}`, b.hp / b.maxHp);
     }
@@ -235,6 +261,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     stats.replaceChildren();
     demolishBtn.hidden = true;
     for (const b of recruitBtns) b.hidden = true;
+    tradeBtn.hidden = true;
     upgradeBtn.hidden = true;
     repairBtn.hidden = true;
     staffRow.hidden = true;

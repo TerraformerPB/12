@@ -3,7 +3,7 @@ import { decodeCastle, encodeCastle, type CastleSnapshot } from '../src/core/Cas
 import { DUEL_ARMY_CAP, computeArmy } from '../src/data/duel';
 
 const RES = {
-  wood: 0, stone: 0, ore: 0, weapons: 0, wheat: 0, flour: 0, bread: 0, fish: 0, beer: 0,
+  wood: 0, stone: 0, ore: 0, weapons: 0, wheat: 0, flour: 0, bread: 0, fish: 0, beer: 0, gold: 0,
 };
 
 describe('castle codes', () => {

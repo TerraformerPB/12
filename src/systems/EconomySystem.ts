@@ -92,6 +92,9 @@ export interface EconomyContext {
   getSpeedFactor(): number;
   /** A lumberjack consumed enough wood — fell one adjacent forest tile. */
   fellForestTile(building: Building): void;
+  /** Seasonal farm multiplier (autumn boost, winter standstill). */
+  getFarmFactor(): number;
+  onConstructionFinished(building: Building): void;
 }
 
 /** Ticks to wait before retrying a job whose path could not be found. */
@@ -154,8 +157,19 @@ export class EconomySystem {
       if (b.def.placement === 'adjacentForest' && b.def.recipe) {
         b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Forest) === null;
       }
+      // Construction sites: build up once all materials arrived.
+      if (b.underConstruction) {
+        if (b.materialsMissing() === 0) {
+          b.buildTicks--;
+          if (b.buildTicks <= 0) {
+            b.underConstruction = false;
+            this.ctx.onConstructionFinished(b);
+          }
+        }
+        continue;
+      }
       const before = b.outputStore;
-      b.tickProduction();
+      b.tickProduction(b.defId === 'farm' ? this.ctx.getFarmFactor() : 1);
       if (b.outputStore > before && b.def.placement === 'adjacentForest') {
         b.harvestProgress++;
         if (b.harvestProgress >= FOREST_WOOD_PER_TILE) {
@@ -251,6 +265,24 @@ export class EconomySystem {
           notBefore: 0,
         });
       }
+      // Construction materials are hauled from the warehouse stock.
+      if (b.underConstruction) {
+        for (const res of Object.keys(b.materialsRemaining) as (keyof typeof b.materialsRemaining)[]) {
+          while (
+            (b.materialsRemaining[res] ?? 0) > 0 &&
+            this.outstandingMaterials(b, res) < (b.materialsRemaining[res] ?? 0) &&
+            this.ctx.store.available(res) > 0
+          ) {
+            b.incomingMaterials++;
+            this.ctx.store.reserve(res);
+            this.deliverQueue.push({
+              job: { kind: 'deliver', buildingId: b.id, resource: res },
+              notBefore: 0,
+            });
+          }
+        }
+        continue;
+      }
       // Deliveries: fill processor input from warehouse stock.
       const input = b.inputResource();
       if (input) {
@@ -264,6 +296,18 @@ export class EconomySystem {
         }
       }
     }
+  }
+
+  /** Material units already promised to a site for one resource. */
+  private outstandingMaterials(b: Building, res: string): number {
+    let n = 0;
+    for (const q of this.deliverQueue) {
+      if (q.job.buildingId === b.id && q.job.resource === res) n++;
+    }
+    for (const w of this.ctx.workers) {
+      if (w.job?.kind === 'deliver' && w.job.buildingId === b.id && w.job.resource === res) n++;
+    }
+    return n;
   }
 
   /** Hand queued jobs to idle workers; deliveries have priority. */
@@ -403,8 +447,14 @@ export class EconomySystem {
         } else if (job) {
           const target = this.ctx.buildings.get(job.buildingId);
           if (target) {
-            target.inputStore++;
-            target.incomingInput = Math.max(0, target.incomingInput - 1);
+            if (target.underConstruction) {
+              const left = target.materialsRemaining[job.resource] ?? 0;
+              if (left > 0) target.materialsRemaining[job.resource] = left - 1;
+              target.incomingMaterials = Math.max(0, target.incomingMaterials - 1);
+            } else {
+              target.inputStore++;
+              target.incomingInput = Math.max(0, target.incomingInput - 1);
+            }
             worker.carrying = null;
             worker.carryingCount = 0;
           } else if (worker.carrying) {
@@ -494,6 +544,9 @@ export class EconomySystem {
           worker.phase = worker.carrying ? 'returning' : 'idle';
         } else if (job.kind === 'pickup') {
           if (worker.phase === 'toPickup') building.reservedOutput++;
+        } else if (building.underConstruction) {
+          building.incomingMaterials++;
+          if (worker.phase === 'toPickup') this.ctx.store.reserve(job.resource);
         } else {
           building.incomingInput++;
           if (worker.phase === 'toPickup') this.ctx.store.reserve(job.resource);

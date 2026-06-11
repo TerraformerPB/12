@@ -97,6 +97,8 @@ export interface BuildContext {
   grid: IsoGrid;
   store: ResourceStore;
   placeBuilding(defId: BuildingDefId, gx: number, gy: number, rotated: boolean): void;
+  /** Instant builds (roads) pay at placement; sites pay via deliveries. */
+  paysUpFront(defId: BuildingDefId): boolean;
 }
 
 /**
@@ -185,7 +187,8 @@ export class BuildSystem {
       events.emit('toast:show', { message: missing });
       return false;
     }
-    this.ctx.store.pay(def.cost);
+    // Construction sites are paid through carrier deliveries instead.
+    if (this.ctx.paysUpFront(ghost.defId)) this.ctx.store.pay(def.cost);
     this.ctx.placeBuilding(ghost.defId, ghost.gx, ghost.gy, ghost.rotated);
     // Stay in build mode so several buildings can be placed in a row;
     // refresh validity for the spot just built on.

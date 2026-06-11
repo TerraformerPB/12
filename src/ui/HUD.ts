@@ -28,6 +28,8 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
 
   for (const r of RESOURCE_IDS) addChip(r, RESOURCE_INFO[r].icon, RESOURCE_INFO[r].label);
   addChip('population', '👷', 'Bevölkerung (genutzt/gesamt)');
+  addChip('morale', '😊', 'Moral der Bevölkerung (beeinflusst das Arbeitstempo)');
+  addChip('season', '📅', 'Jahreszeit');
   addChip('wave', '⚔️', 'Nächste Welle / Gegner');
 
   const spacer = document.createElement('div');
@@ -67,6 +69,8 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
   events.on('population:changed', ({ used, total }) => {
     update('population', `${used}/${total}`);
   });
+  events.on('morale:changed', ({ morale }) => update('morale', String(morale)));
+  events.on('season:changed', ({ label }) => update('season', label));
   events.on('wave:status', ({ wave, nextInSeconds, enemiesAlive }) => {
     if (enemiesAlive > 0) {
       update('wave', `W${wave} · ${enemiesAlive}`);

@@ -6,7 +6,7 @@
 
 // --- Resources -------------------------------------------------------------
 
-export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer'] as const;
+export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'gold'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
 
 export interface ResourceInfo {
@@ -26,6 +26,7 @@ export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
   bread: { label: 'Brot', icon: '🥖', color: 0xc07a3a },
   fish: { label: 'Fisch', icon: '🐟', color: 0x7fb6d9 },
   beer: { label: 'Bier', icon: '🍺', color: 0xd9a441 },
+  gold: { label: 'Gold', icon: '🪙', color: 0xe3b341 },
 };
 
 // --- Simulation ------------------------------------------------------------
@@ -96,6 +97,7 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   bread: 2,
   fish: 0,
   beer: 0,
+  gold: 0,
 };
 
 // --- Roads (phase 4) -------------------------------------------------------------
@@ -186,8 +188,50 @@ export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917
 /** Must be false in the store release. */
 export const ADMOB_USE_TEST_ADS = true;
 
+// --- Consumption & morale (phase 12) -------------------------------------------------
+
+/** Seconds between meals. */
+export const FOOD_INTERVAL = 15;
+/** Food units eaten per meal: population × this (rounded up) … */
+export const FOOD_PER_POP = 0.25;
+/** … plus one per soldier (they eat heartily). */
+export const FOOD_PER_SOLDIER = 1;
+export const MORALE_START = 70;
+export const MORALE_HUNGER_PENALTY = 6;
+export const MORALE_FED_BONUS = 2;
+/** Extra morale when ≥2 food kinds (bread/fish/beer) are in stock. */
+export const MORALE_VARIETY_BONUS = 1;
+/** Worker speed = MORALE_SPEED_BASE + morale/100 × MORALE_SPEED_SPAN. */
+export const MORALE_SPEED_BASE = 0.75;
+export const MORALE_SPEED_SPAN = 0.5;
+/** Morale lost per tax level at every meal interval. */
+export const MORALE_TAX_PENALTY = 1.5;
+/** Gold per population per tax level at every meal interval. */
+export const TAX_GOLD_PER_POP = 0.15;
+
+// --- Construction sites (phase 12) ----------------------------------------------------
+
+/** Build time per footprint tile once materials arrived, in seconds. */
+export const CONSTRUCTION_TIME_PER_TILE = 2.5;
+
+// --- Veterans (phase 12) ---------------------------------------------------------------
+
+/** Kills needed for ranks 1..3. */
+export const VETERAN_THRESHOLDS = [3, 8, 15] as const;
+/** Damage/hp bonus per rank. */
+export const VETERAN_BONUS = 0.1;
+
+// --- Seasons (phase 12) ------------------------------------------------------------------
+
+/** Seconds per season (Frühling → Sommer → Herbst → Winter). */
+export const SEASON_LENGTH = 180;
+/** Farm output multiplier in autumn. */
+export const AUTUMN_FARM_BONUS = 1.5;
+/** Food consumption multiplier in winter (farms stand still). */
+export const WINTER_FOOD_FACTOR = 1.5;
+
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const AUTOSAVE_INTERVAL_MS = 30_000;

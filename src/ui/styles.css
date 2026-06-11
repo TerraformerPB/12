@@ -440,6 +440,27 @@ button:active {
   color: #ff9d96;
 }
 
+/* Scenario picker inside the main menu card. */
+.scenario-row {
+  display: flex;
+  gap: 8px;
+  max-width: min(92vw, 380px);
+}
+
+.scenario-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  font-size: 13px;
+}
+
+.scenario-desc {
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
 .gameover-stats {
   margin: 0 0 10px;
   color: var(--ui-text-dim);
@@ -497,6 +518,32 @@ button:active {
 .stats-panel button {
   margin-top: 10px;
   width: 100%;
+}
+
+/* --- Marktplatz --- */
+
+.market-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.market-label {
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-panel .market-row button {
+  margin-top: 0;
+  width: auto;
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 12px;
+}
+
+.market-panel .market-row button.researched {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 
 /* --- Burg-Duell --- */
