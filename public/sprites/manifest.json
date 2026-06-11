@@ -90,5 +90,67 @@
       "anchorY": 168,
       "scale": 0.5
     }
+  },
+  "units": {
+    "worker": {
+      "frames": [
+        "unit_worker_0.png",
+        "unit_worker_1.png",
+        "unit_worker_2.png",
+        "unit_worker_3.png",
+        "unit_worker_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 50,
+      "scale": 0.5
+    },
+    "soldier": {
+      "frames": [
+        "unit_soldier_0.png",
+        "unit_soldier_1.png",
+        "unit_soldier_2.png",
+        "unit_soldier_3.png",
+        "unit_soldier_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 56,
+      "scale": 0.5
+    },
+    "raider": {
+      "frames": [
+        "unit_raider_0.png",
+        "unit_raider_1.png",
+        "unit_raider_2.png",
+        "unit_raider_3.png",
+        "unit_raider_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 54,
+      "scale": 0.5
+    },
+    "brute": {
+      "frames": [
+        "unit_brute_0.png",
+        "unit_brute_1.png",
+        "unit_brute_2.png",
+        "unit_brute_3.png",
+        "unit_brute_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 68,
+      "scale": 0.5
+    },
+    "skirmisher": {
+      "frames": [
+        "unit_skirmisher_0.png",
+        "unit_skirmisher_1.png",
+        "unit_skirmisher_2.png",
+        "unit_skirmisher_3.png",
+        "unit_skirmisher_4.png"
+      ],
+      "anchorX": 32,
+      "anchorY": 54,
+      "scale": 0.5
+    }
   }
 }

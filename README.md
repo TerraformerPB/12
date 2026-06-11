@@ -127,6 +127,10 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   (Fernkampf, ab Welle 4, eigene Pfeil-Projektile). Lokale Bestenliste im
   Game-Over-Screen (Top 5). Repo-Hygiene: GitHub-Actions-CI (Tests + Build),
   vitest 4 (npm audit: 0 Findings), Debug-Handle nicht mehr im Store-Build.
+  Animierte Einheiten-Sprites (Träger, Soldat, alle Gegnertypen: Idle + 4
+  Lauf-Frames, Blickrichtungs-Spiegelung, Fracht-Kiste in Warenfarbe) über
+  die "units"-Sektion des Sprite-Manifests, mit Vektor-Fallback. Nahtloser
+  synthetisierter Ambient-Loop + Ton-Schalter im Pausenmenü (persistiert).
 - **Phase 10 (Konzept) — Burg-Duell (PvP):** Asynchroner 1-gegen-1-Modus im
   Clash-of-Clans-Stil: Man greift den Burg-Schnappschuss eines anderen
   Spielers an, aber statt Karten/Truppen direkt zu steuern, schickt das

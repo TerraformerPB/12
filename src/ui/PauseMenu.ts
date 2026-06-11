@@ -17,6 +17,14 @@ export function createPauseMenu(uiRoot: HTMLElement, game: Game): void {
   resumeBtn.textContent = 'Weiterspielen';
   resumeBtn.addEventListener('click', () => game.setPhase('playing'));
 
+  const soundBtn = document.createElement('button');
+  const soundLabel = (): string => (game.sound.isMuted() ? '🔇 Ton: aus' : '🔊 Ton: an');
+  soundBtn.textContent = soundLabel();
+  soundBtn.addEventListener('click', () => {
+    game.sound.setMuted(!game.sound.isMuted());
+    soundBtn.textContent = soundLabel();
+  });
+
   const newGameBtn = document.createElement('button');
   newGameBtn.className = 'danger';
   const NEW_GAME_LABEL = 'Neues Spiel';
@@ -31,7 +39,7 @@ export function createPauseMenu(uiRoot: HTMLElement, game: Game): void {
     game.restartNewGame();
   });
 
-  card.append(heading, resumeBtn, newGameBtn);
+  card.append(heading, resumeBtn, soundBtn, newGameBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 

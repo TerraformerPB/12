@@ -28,6 +28,7 @@ import {
 } from './placeholders';
 import { rotatedFootprint } from '../systems/BuildSystem';
 import { BuildingSprites } from './BuildingSprites';
+import { UnitSprites, unitFrame, type UnitSpriteSet } from './UnitSprites';
 
 /** World-space bounding box used for culling. */
 interface Bounds {
@@ -46,20 +47,16 @@ interface BuildingViewEntry {
   lastLevel: number;
 }
 
-interface WorkerViewEntry {
-  view: Graphics;
-  lastCarrying: string | null;
-}
-
-interface SoldierViewEntry {
-  view: Graphics;
-  lastSelected: boolean;
-  lastHp: number;
-}
-
-interface EnemyViewEntry {
-  view: Graphics;
-  lastHp: number;
+interface UnitViewEntry {
+  view: Container;
+  /** Animated sprite when real art exists, otherwise null (gfx fallback). */
+  sprite: Sprite | null;
+  /** Fallback drawing or overlay (cargo, hp bar, selection ring). */
+  gfx: Graphics;
+  set: UnitSpriteSet | null;
+  lastFrame: number;
+  facing: number;
+  lastKey: string;
 }
 
 /** Everything the renderer needs to draw one frame. */
@@ -100,9 +97,10 @@ export class WorldRenderer {
   private chunkCols = 0;
   private buildingSprites = new BuildingSprites();
   private buildingViews = new Map<number, BuildingViewEntry>();
-  private workerViews = new Map<number, WorkerViewEntry>();
-  private soldierViews = new Map<number, SoldierViewEntry>();
-  private enemyViews = new Map<number, EnemyViewEntry>();
+  private unitSprites = new UnitSprites();
+  private workerViews = new Map<number, UnitViewEntry>();
+  private soldierViews = new Map<number, UnitViewEntry>();
+  private enemyViews = new Map<number, UnitViewEntry>();
   private projectileView!: Graphics;
   private ghostView!: Graphics;
   private ghostKey = '';
@@ -125,6 +123,7 @@ export class WorldRenderer {
     this.app.ticker.stop(); // frames are rendered manually from the game loop
     root.appendChild(this.app.canvas);
     await this.buildingSprites.loadExternal();
+    await this.unitSprites.load();
 
     this.world = new Container();
     this.terrainLayer = new Container();
@@ -224,9 +223,9 @@ export class WorldRenderer {
   /** Remove all building/unit views (new game / load). */
   clearEntities(): void {
     for (const entry of this.buildingViews.values()) entry.view.destroy({ children: true });
-    for (const entry of this.workerViews.values()) entry.view.destroy();
-    for (const entry of this.soldierViews.values()) entry.view.destroy();
-    for (const entry of this.enemyViews.values()) entry.view.destroy();
+    for (const entry of this.workerViews.values()) entry.view.destroy({ children: true });
+    for (const entry of this.soldierViews.values()) entry.view.destroy({ children: true });
+    for (const entry of this.enemyViews.values()) entry.view.destroy({ children: true });
     this.buildingViews.clear();
     this.workerViews.clear();
     this.soldierViews.clear();
@@ -234,6 +233,56 @@ export class WorldRenderer {
     this.projectileView?.clear();
     this.ghostKey = '';
     this.selectionKey = '';
+  }
+
+  /** Create a unit view: animated sprite if art exists, plus overlay gfx. */
+  private createUnitEntry(spriteId: string): UnitViewEntry {
+    const set = this.unitSprites.get(spriteId);
+    const view = new Container();
+    let sprite: Sprite | null = null;
+    if (set) {
+      sprite = new Sprite(set.textures[0]);
+      sprite.anchor.set(set.anchorU, set.anchorV);
+      sprite.scale.set(set.scale);
+      view.addChild(sprite);
+    }
+    const gfx = new Graphics();
+    view.addChild(gfx);
+    this.objectLayer.addChild(view);
+    return { view, sprite, gfx, set, lastFrame: -1, facing: 1, lastKey: '' };
+  }
+
+  /** Position + animate a unit view; returns interpolated grid coords. */
+  private placeUnit(
+    entry: UnitViewEntry,
+    prevX: number,
+    prevY: number,
+    x: number,
+    y: number,
+    alpha: number,
+    offsetX = 0,
+  ): { fx: number; fy: number } {
+    const fx = prevX + (x - prevX) * alpha;
+    const fy = prevY + (y - prevY) * alpha;
+    const moving = prevX !== x || prevY !== y;
+    const p = gridToScreen(fx, fy);
+    entry.view.position.set(p.x + offsetX, p.y + walkBob(fx, fy, moving));
+    entry.view.zIndex = fx + fy + 0.5;
+    if (entry.sprite && entry.set) {
+      const frame = unitFrame(entry.set, fx, fy, moving);
+      if (frame !== entry.lastFrame) {
+        entry.sprite.texture = entry.set.textures[frame];
+        entry.lastFrame = frame;
+      }
+      // Face the walking direction (screen x): art faces right by default.
+      if (moving) {
+        const dxScreen = (x - prevX) - (y - prevY);
+        if (dxScreen < -0.001) entry.facing = -1;
+        else if (dxScreen > 0.001) entry.facing = 1;
+      }
+      entry.sprite.scale.set(entry.set.scale * entry.facing, entry.set.scale);
+    }
+    return { fx, fy };
   }
 
   /** Render one frame. `alpha` interpolates worker movement between ticks. */
@@ -256,25 +305,24 @@ export class WorldRenderer {
       liveIds.add(e.id);
       let entry = this.enemyViews.get(e.id);
       if (!entry) {
-        const view = new Graphics();
-        drawEnemy(view, e.def.art, e.hp / e.def.hp);
-        this.objectLayer.addChild(view);
-        entry = { view, lastHp: e.hp };
+        entry = this.createUnitEntry(e.defId);
         this.enemyViews.set(e.id, entry);
       }
-      if (entry.lastHp !== e.hp) {
-        drawEnemy(entry.view, e.def.art, e.hp / e.def.hp);
-        entry.lastHp = e.hp;
+      const key = `${e.hp}`;
+      if (entry.lastKey !== key) {
+        entry.lastKey = key;
+        if (entry.sprite) {
+          entry.gfx.clear();
+          drawHpBar(entry.gfx, 0, -e.def.art.radius * 2 - 13, 18, e.hp / e.def.hp);
+        } else {
+          drawEnemy(entry.gfx, e.def.art, e.hp / e.def.hp);
+        }
       }
-      const fx = e.prevX + (e.x - e.prevX) * alpha;
-      const fy = e.prevY + (e.y - e.prevY) * alpha;
-      const p = gridToScreen(fx, fy);
-      entry.view.position.set(p.x, p.y + walkBob(fx, fy, e.prevX !== e.x || e.prevY !== e.y));
-      entry.view.zIndex = fx + fy + 0.5;
+      this.placeUnit(entry, e.prevX, e.prevY, e.x, e.y, alpha);
     }
     for (const [id, entry] of this.enemyViews) {
       if (!liveIds.has(id)) {
-        entry.view.destroy();
+        entry.view.destroy({ children: true });
         this.enemyViews.delete(id);
       }
     }
@@ -301,27 +349,28 @@ export class WorldRenderer {
       liveIds.add(s.id);
       let entry = this.soldierViews.get(s.id);
       if (!entry) {
-        const view = new Graphics();
-        drawSoldier(view, false, s.hp / SOLDIER_HP);
-        this.objectLayer.addChild(view);
-        entry = { view, lastSelected: false, lastHp: s.hp };
+        entry = this.createUnitEntry('soldier');
         this.soldierViews.set(s.id, entry);
       }
       const selected = state.selectedSoldierId === s.id;
-      if (entry.lastSelected !== selected || entry.lastHp !== s.hp) {
-        drawSoldier(entry.view, selected, s.hp / SOLDIER_HP);
-        entry.lastSelected = selected;
-        entry.lastHp = s.hp;
+      const key = `${selected}:${s.hp}`;
+      if (entry.lastKey !== key) {
+        entry.lastKey = key;
+        entry.gfx.clear();
+        if (entry.sprite) {
+          if (selected) {
+            entry.gfx.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
+          }
+          drawHpBar(entry.gfx, 0, -26, 18, s.hp / SOLDIER_HP);
+        } else {
+          drawSoldier(entry.gfx, selected, s.hp / SOLDIER_HP);
+        }
       }
-      const fx = s.prevX + (s.x - s.prevX) * alpha;
-      const fy = s.prevY + (s.y - s.prevY) * alpha;
-      const p = gridToScreen(fx, fy);
-      entry.view.position.set(p.x, p.y + walkBob(fx, fy, s.prevX !== s.x || s.prevY !== s.y));
-      entry.view.zIndex = fx + fy + 0.5;
+      this.placeUnit(entry, s.prevX, s.prevY, s.x, s.y, alpha);
     }
     for (const [id, entry] of this.soldierViews) {
       if (!liveIds.has(id)) {
-        entry.view.destroy();
+        entry.view.destroy({ children: true });
         this.soldierViews.delete(id);
       }
     }
@@ -404,28 +453,31 @@ export class WorldRenderer {
       liveIds.add(w.id);
       let entry = this.workerViews.get(w.id);
       if (!entry) {
-        const view = new Graphics();
-        drawWorker(view, null);
-        this.objectLayer.addChild(view);
-        entry = { view, lastCarrying: null };
+        entry = this.createUnitEntry('worker');
         this.workerViews.set(w.id, entry);
       }
-      if (entry.lastCarrying !== w.carrying) {
-        drawWorker(entry.view, w.carrying ? RESOURCE_INFO[w.carrying].color : null);
-        entry.lastCarrying = w.carrying;
+      const key = w.carrying ?? '';
+      if (entry.lastKey !== key) {
+        entry.lastKey = key;
+        entry.gfx.clear();
+        if (entry.sprite) {
+          if (w.carrying) {
+            // Cargo crate on the shoulder, tinted by resource.
+            entry.gfx
+              .rect(2, -21, 7, 6)
+              .fill(RESOURCE_INFO[w.carrying].color)
+              .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+          }
+        } else {
+          drawWorker(entry.gfx, w.carrying ? RESOURCE_INFO[w.carrying].color : null);
+        }
       }
-      // Interpolated fractional grid position → world position.
-      const fx = w.prevX + (w.x - w.prevX) * alpha;
-      const fy = w.prevY + (w.y - w.prevY) * alpha;
-      const p = gridToScreen(fx, fy);
-      const bob = walkBob(fx, fy, w.prevX !== w.x || w.prevY !== w.y);
       // Small per-id offset so idle carriers on the same tile don't stack.
-      entry.view.position.set(p.x + ((w.id * 37) % 13) - 6, p.y + ((w.id * 53) % 7) - 3 + bob);
-      entry.view.zIndex = fx + fy + 0.5; // bias: in front of the tile they stand on
+      this.placeUnit(entry, w.prevX, w.prevY, w.x, w.y, alpha, ((w.id * 37) % 13) - 6);
     }
     for (const [id, entry] of this.workerViews) {
       if (!liveIds.has(id)) {
-        entry.view.destroy();
+        entry.view.destroy({ children: true });
         this.workerViews.delete(id);
       }
     }

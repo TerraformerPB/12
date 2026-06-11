@@ -143,6 +143,8 @@ export class Game {
     });
 
     this.setPhase('playing');
+    // Howler delays actual playback until the first user gesture.
+    this.sound.startAmbient();
   }
 
   // --- World setup -----------------------------------------------------------

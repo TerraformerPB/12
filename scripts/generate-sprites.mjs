@@ -389,6 +389,99 @@ const builders = {
   },
 };
 
+// --- units (idle + 4 walk frames, anchor at the feet) ---------------------------
+
+/** Limb swing for walk phase p in [0..1); idle when p < 0. */
+function gait(p) {
+  if (p < 0) return { leg: 0, arm: 0, bob: 0 };
+  const s = Math.sin(p * Math.PI * 2);
+  return { leg: s * 3.2, arm: -s * 2.6, bob: -Math.abs(s) * 1.2 };
+}
+
+function unitLegs(c, g, color) {
+  // Two short legs, offset opposite ways while walking.
+  poly(c, [[-2.5 + g.leg, 0], [-0.5 + g.leg, 0], [-0.5, -5], [-2.5, -5]], color, { stroke: OUTLINE, sw: 1 });
+  poly(c, [[0.5 - g.leg, 0], [2.5 - g.leg, 0], [2.5, -5], [0.5, -5]], color, { stroke: OUTLINE, sw: 1 });
+}
+
+const unitBuilders = {
+  worker(c, p) {
+    const g = gait(p);
+    ellipse(c, 0, 1, 6, 2.6, '#000', 0.28);
+    unitLegs(c, g, '#6b4f33');
+    // tunic
+    poly(c, [[-4.5, -4 + g.bob], [4.5, -4 + g.bob], [3.5, -13 + g.bob], [-3.5, -13 + g.bob]],
+      grad(c, [[0, '#f4e8cd'], [1, '#cdbb97']]), { stroke: OUTLINE, sw: 1.1 });
+    // arms
+    line(c, [-4, -11.5 + g.bob], [-5, -6 + g.bob + g.arm], '#e6d7b5', 2);
+    line(c, [4, -11.5 + g.bob], [5, -6 + g.bob - g.arm], '#e6d7b5', 2);
+    // head + hood
+    circle(c, 0, -16 + g.bob, 3.6, '#e8c39a', { stroke: OUTLINE, sw: 1 });
+    poly(c, [[-3.8, -17 + g.bob], [3.8, -17 + g.bob], [0, -21.5 + g.bob]], '#b59c72', { stroke: OUTLINE, sw: 1 });
+    return 23;
+  },
+  soldier(c, p) {
+    const g = gait(p);
+    ellipse(c, 0, 1, 6, 2.6, '#000', 0.28);
+    unitLegs(c, g, '#5a3a2a');
+    // spear behind
+    line(c, [5.5, 0], [8.5, -24 + g.bob], '#54381f', 1.8);
+    poly(c, [[8.5, -24 + g.bob], [10.5, -20.5 + g.bob], [7, -21 + g.bob]], '#b9c0cc');
+    // tunic
+    poly(c, [[-4.5, -4 + g.bob], [4.5, -4 + g.bob], [3.5, -13 + g.bob], [-3.5, -13 + g.bob]],
+      grad(c, [[0, '#c25247'], [1, '#8e3a33']]), { stroke: OUTLINE, sw: 1.1 });
+    // shield on left arm
+    ellipse(c, -5.5, -8.5 + g.bob + g.arm * 0.4, 2.8, 3.8, '#7a5230');
+    circle(c, -5.5, -8.5 + g.bob + g.arm * 0.4, 1, '#caa66a');
+    // head + helmet
+    circle(c, 0, -16 + g.bob, 3.6, '#e8c39a', { stroke: OUTLINE, sw: 1 });
+    poly(c, [[-4, -16.5 + g.bob], [4, -16.5 + g.bob], [2.6, -21 + g.bob], [-2.6, -21 + g.bob]], '#b9c0cc', { stroke: OUTLINE, sw: 1 });
+    rect(c, -0.7, -16.5 + g.bob, 1.4, 2.6, '#b9c0cc');
+    return 26;
+  },
+  raider(c, p) {
+    const g = gait(p);
+    ellipse(c, 0, 1, 6, 2.6, '#000', 0.28);
+    unitLegs(c, g, '#2e2333');
+    poly(c, [[-5, -4 + g.bob], [5, -4 + g.bob], [3.8, -13.5 + g.bob], [-3.8, -13.5 + g.bob]],
+      grad(c, [[0, '#5b4263'], [1, '#3a2b42']]), { stroke: OUTLINE, sw: 1.1 });
+    line(c, [4, -11 + g.bob], [7.5, -16 + g.bob - g.arm], '#888f99', 2); // crude blade
+    circle(c, 0, -16.5 + g.bob, 3.8, '#cdb39a', { stroke: OUTLINE, sw: 1 });
+    poly(c, [[-3, -19 + g.bob], [-6, -23.5 + g.bob], [-1.5, -20.5 + g.bob]], '#1f1524');
+    poly(c, [[3, -19 + g.bob], [6, -23.5 + g.bob], [1.5, -20.5 + g.bob]], '#1f1524');
+    return 25;
+  },
+  brute(c, p) {
+    const g = gait(p);
+    ellipse(c, 0, 1, 8, 3.4, '#000', 0.3);
+    unitLegs(c, g, '#3a2424');
+    poly(c, [[-7, -4 + g.bob], [7, -4 + g.bob], [5.5, -17 + g.bob], [-5.5, -17 + g.bob]],
+      grad(c, [[0, '#7a4040'], [1, '#4e2828']]), { stroke: OUTLINE, sw: 1.3 });
+    // club over the shoulder
+    line(c, [5, -14 + g.bob], [11, -24 + g.bob - g.arm], '#54381f', 3);
+    circle(c, 11.5, -25 + g.bob - g.arm, 3.4, '#6e5436', { stroke: OUTLINE, sw: 1 });
+    circle(c, 0, -21 + g.bob, 4.6, '#cdb39a', { stroke: OUTLINE, sw: 1.1 });
+    poly(c, [[-4, -24 + g.bob], [-8, -29 + g.bob], [-2, -25.5 + g.bob]], '#1f1524');
+    poly(c, [[4, -24 + g.bob], [8, -29 + g.bob], [2, -25.5 + g.bob]], '#1f1524');
+    return 32;
+  },
+  skirmisher(c, p) {
+    const g = gait(p);
+    ellipse(c, 0, 1, 6, 2.6, '#000', 0.28);
+    unitLegs(c, g, '#2c3e30');
+    poly(c, [[-4.5, -4 + g.bob], [4.5, -4 + g.bob], [3.5, -13 + g.bob], [-3.5, -13 + g.bob]],
+      grad(c, [[0, '#52735a'], [1, '#33493a']]), { stroke: OUTLINE, sw: 1.1 });
+    // bow
+    c.body.push(`<path d="M 6 ${-18 + g.bob} Q 10.5 ${-11 + g.bob} 6 ${-4 + g.bob}" fill="none" stroke="#54381f" stroke-width="1.8"/>`);
+    line(c, [6, -18 + g.bob], [6, -4 + g.bob], '#d8d8d8', 0.8);
+    circle(c, 0, -16 + g.bob, 3.6, '#cdb39a', { stroke: OUTLINE, sw: 1 });
+    poly(c, [[-3.6, -17 + g.bob], [3.6, -17 + g.bob], [0, -21 + g.bob]], '#2c3e30', { stroke: OUTLINE, sw: 1 });
+    return 25;
+  },
+};
+
+const UNIT_FRAMES = 4;
+
 // footprints per def (must match src/data/buildings.ts)
 const FOOTPRINTS = {
   warehouse: [2, 2], lumberjack: [2, 2], quarry: [2, 2], mine: [2, 2], smithy: [2, 2],
@@ -424,6 +517,30 @@ async function main() {
     };
     console.log(`${id}.png (${width}x${height} @2x)`);
   }
+  // Units: idle frame + walk cycle frames, anchor at the feet.
+  manifest.units = {};
+  for (const [id, build] of Object.entries(unitBuilders)) {
+    const files = [];
+    let anchor = null;
+    for (let f = 0; f <= UNIT_FRAMES; f++) {
+      gradCounter = 0;
+      const c = ctx();
+      const top = build(c, f === 0 ? -1 : (f - 1) / UNIT_FRAMES);
+      const minX = -16;
+      const width = 32;
+      const minY = -top - 2;
+      const height = top + 2 + 6;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}"><defs>${c.defs.join('')}</defs>${c.body.join('')}</svg>`;
+      await page.setContent(`<style>body{margin:0;display:inline-block}</style>${svg}`);
+      const file = `unit_${id}_${f}.png`;
+      await page.locator('svg').screenshot({ omitBackground: true, path: join(OUT, file) });
+      files.push(file);
+      anchor = { x: (0 - minX) * 2, y: (0 - minY) * 2 };
+    }
+    manifest.units[id] = { frames: files, anchorX: anchor.x, anchorY: anchor.y, scale: 0.5 };
+    console.log(`unit ${id}: ${files.length} frames`);
+  }
+
   writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   await browser.close();
   console.log('manifest.json written');
