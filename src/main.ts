@@ -16,8 +16,11 @@ async function main(): Promise<void> {
 
   const game = new Game();
   await game.init(gameRoot, uiRoot);
-  // Debug handle for the browser console and automated smoke tests.
-  (window as { __game?: Game } & Window).__game = game;
+  // Debug handle for the browser console and automated smoke tests;
+  // not exposed in the native store build.
+  if (!Capacitor.isNativePlatform()) {
+    (window as { __game?: Game } & Window).__game = game;
+  }
   game.handleResize(window.innerWidth, window.innerHeight);
   window.addEventListener('resize', () => {
     game.handleResize(window.innerWidth, window.innerHeight);
