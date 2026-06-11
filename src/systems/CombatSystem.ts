@@ -51,6 +51,8 @@ export interface CombatContext {
   towerDamageFactor(): number;
   soldierDamageFactor(): number;
   towerRangeBonus(): number;
+  /** Duel: the opposing castle's warehouse (march target), else null. */
+  getFoeWarehouse(): Building | null;
 }
 
 /**
@@ -187,13 +189,17 @@ export class CombatSystem {
   private tickSoldierCombat(): void {
     for (const s of this.ctx.soldiers) {
       if (s.attackCooldown > 0) s.attackCooldown--;
+      if (s.mode === 'advance') {
+        this.tickAdvance(s);
+        continue;
+      }
       if (s.mode !== 'guard') continue; // player orders override combat
 
       const target = this.acquireSoldierTarget(s);
       if (!target) {
         s.combatTargetId = null;
         // Duel: with no enemy units around, besiege the opposing castle.
-        if (this.engageFoeBuilding(s)) continue;
+        if (this.engageFoeBuilding(s, s.anchor)) continue;
         // Walk back to the guard post after a fight.
         if (!s.hasPath() && (s.tile.x !== s.anchor.x || s.tile.y !== s.anchor.y)) {
           const path = findPath(this.ctx.grid, s.tile, [s.anchor]);
@@ -219,14 +225,17 @@ export class CombatSystem {
     }
   }
 
-  /** Duel: nearest foe building with a footprint tile in anchor aggro range. */
-  private nearestFoeBuilding(s: Soldier): { building: Building; dist: number } | null {
+  /** Duel: nearest foe building with a footprint tile in range of `origin`. */
+  private nearestFoeBuilding(
+    s: Soldier,
+    origin: { x: number; y: number },
+  ): { building: Building; dist: number } | null {
     let best: Building | null = null;
     let bestDist = Infinity;
     for (const b of this.ctx.buildings.values()) {
       if (b.owner !== 'foe') continue;
       for (const t of b.footprintTiles()) {
-        if (Math.hypot(t.x - s.anchor.x, t.y - s.anchor.y) > SOLDIER_AGGRO_RANGE) continue;
+        if (Math.hypot(t.x - origin.x, t.y - origin.y) > SOLDIER_AGGRO_RANGE) continue;
         const d = Math.hypot(t.x - s.x, t.y - s.y);
         if (d < bestDist) {
           bestDist = d;
@@ -238,8 +247,8 @@ export class CombatSystem {
   }
 
   /** March to and strike the nearest foe building. True while engaged. */
-  private engageFoeBuilding(s: Soldier): boolean {
-    const found = this.nearestFoeBuilding(s);
+  private engageFoeBuilding(s: Soldier, origin: { x: number; y: number }): boolean {
+    const found = this.nearestFoeBuilding(s, origin);
     if (!found) return false;
     const { building, dist } = found;
     if (dist <= MELEE_RANGE + 0.45) {
@@ -257,6 +266,65 @@ export class CombatSystem {
       else return false; // walled off — stand down until something opens
     }
     return true;
+  }
+
+  /**
+   * Clash-style deployed unit: fights enemies and foe buildings around its
+   * own position, otherwise keeps marching on the foe warehouse.
+   */
+  private tickAdvance(s: Soldier): void {
+    // 1) Enemy units crossing the lane.
+    let foe: Enemy | null = null;
+    let foeDist = SOLDIER_AGGRO_RANGE;
+    for (const e of this.ctx.enemies) {
+      const d = Math.hypot(e.x - s.x, e.y - s.y);
+      if (d < foeDist) {
+        foe = e;
+        foeDist = d;
+      }
+    }
+    if (foe) {
+      if (foeDist <= MELEE_RANGE) {
+        s.clearPath();
+        if (s.attackCooldown <= 0) {
+          s.attackCooldown = SOLDIER_ATTACK_TICKS;
+          this.damageEnemy(foe, s.attackDamage * this.ctx.soldierDamageFactor(), s);
+        }
+      } else if (this.tickCount - s.lastRepath >= CHASE_REPATH_TICKS) {
+        s.lastRepath = this.tickCount;
+        const path = findPath(this.ctx.grid, s.tile, [foe.tile]);
+        if (path) s.setPath(path);
+      }
+      return;
+    }
+    // 2) Foe buildings around the current position (walls first).
+    if (this.engageFoeBuilding(s, s)) return;
+    // 3) March on the foe warehouse (or its nearest standing building).
+    if (s.hasPath() || this.tickCount - s.lastRepath < CHASE_REPATH_TICKS) return;
+    s.lastRepath = this.tickCount;
+    const warehouse = this.ctx.getFoeWarehouse();
+    if (!warehouse) return;
+    const path = findPath(this.ctx.grid, s.tile, warehouse.accessTiles(this.ctx.grid));
+    if (path) {
+      s.setPath(path);
+      return;
+    }
+    // Warehouse walled in: head for the closest foe building instead.
+    let nearest: Building | null = null;
+    let nearestDist = Infinity;
+    for (const b of this.ctx.buildings.values()) {
+      if (b.owner !== 'foe') continue;
+      const c = b.center;
+      const d = Math.hypot(c.x - s.x, c.y - s.y);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = b;
+      }
+    }
+    if (nearest) {
+      const p = findPath(this.ctx.grid, s.tile, nearest.accessTiles(this.ctx.grid));
+      if (p) s.setPath(p);
+    }
   }
 
   /** Nearest living enemy within aggro range of the soldier's anchor. */

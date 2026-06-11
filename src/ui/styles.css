@@ -595,6 +595,43 @@ button:active {
   display: none;
 }
 
+/* Clash-style deployment cards during a duel. */
+.duel-deploy {
+  position: absolute;
+  bottom: calc(56px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.duel-deploy[hidden] {
+  display: none;
+}
+
+.duel-card-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.duel-card-btn.selected {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.duel-card-btn.unaffordable {
+  opacity: 0.45;
+}
+
 /* --- Dev rewarded-ad placeholder --- */
 
 .ad-overlay {

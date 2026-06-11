@@ -1,6 +1,7 @@
 import { events } from '../core/EventBus';
-import { DUEL_BUDGETS, DUEL_BUDGET_IDS } from '../data/duel';
+import { DUEL_BUDGETS, DUEL_BUDGET_IDS, DUEL_DEPLOY_COSTS } from '../data/duel';
 import { RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
+import { getSoldierType } from '../data/soldiers';
 import type { Game } from '../core/Game';
 
 /**
@@ -24,8 +25,10 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
   intro.className = 'gameover-stats';
   intro.textContent =
     'Gespiegelte Karte, gleiche Burg, gleiches Budget für beide Seiten. ' +
-    'Baue Wirtschaft und Truppen auf und zerstöre das gegnerische Lagerhaus, ' +
-    'bevor deins fällt. Dein Spielstand bleibt unberührt.';
+    'Setze Truppen direkt aufs Feld (Karten unten) — bezahlt aus deinem ' +
+    'Vorrat. Erobere die Rohstoff-Lager auf dem Schlachtfeld für Nachschub ' +
+    'und zerstöre das gegnerische Lagerhaus, bevor deins fällt. ' +
+    'Dein Spielstand bleibt unberührt.';
 
   const budgetLabel = document.createElement('div');
   budgetLabel.className = 'duel-label';
@@ -82,6 +85,51 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
     hudText.textContent = `🏰 Du ${ownHp}% · Gegner ${foeHp}% 🏰 · Feinde im Feld: ${foes}`;
   });
 
+  // --- deployment bar (Clash-style unit cards) ---
+  const deploy = document.createElement('div');
+  deploy.className = 'duel-deploy';
+  deploy.hidden = true;
+  const deployCards = new Map<'soldier' | 'knight', HTMLButtonElement>();
+  const refreshCards = (): void => {
+    for (const [typeId, btn] of deployCards) {
+      btn.classList.toggle('selected', game.duelDeployType === typeId);
+      btn.classList.toggle('unaffordable', !game.store.canAfford(DUEL_DEPLOY_COSTS[typeId]));
+    }
+  };
+  for (const typeId of ['soldier', 'knight'] as const) {
+    const type = getSoldierType(typeId);
+    const cost = DUEL_DEPLOY_COSTS[typeId];
+    const btn = document.createElement('button');
+    btn.className = 'duel-card-btn';
+    const name = document.createElement('span');
+    name.textContent = `${typeId === 'knight' ? '🛡️' : '⚔️'} ${type.name}`;
+    const costEl = document.createElement('span');
+    costEl.className = 'scenario-desc';
+    costEl.textContent = RESOURCE_IDS.filter((r) => (cost[r] ?? 0) > 0)
+      .map((r) => `${RESOURCE_INFO[r].icon} ${cost[r]}`)
+      .join(' ');
+    btn.append(name, costEl);
+    btn.addEventListener('click', () => {
+      game.setDuelDeploy(typeId);
+      refreshCards();
+    });
+    deploy.appendChild(btn);
+    deployCards.set(typeId, btn);
+  }
+  const deployHint = document.createElement('span');
+  deployHint.className = 'duel-label';
+  deployHint.textContent = 'Karte wählen, dann auf deine Hälfte tippen';
+  deploy.appendChild(deployHint);
+  uiRoot.appendChild(deploy);
+
+  events.on('duel:status', () => {
+    deploy.hidden = !game.duelMode;
+    refreshCards();
+  });
+  events.on('resources:changed', () => {
+    if (game.duelMode) refreshCards();
+  });
+
   // --- result ---
   const result = document.createElement('div');
   result.className = 'pause-overlay';
@@ -100,6 +148,7 @@ export function createDuelMenu(uiRoot: HTMLElement, game: Game): void {
 
   events.on('duel:ended', ({ victory, unitsLost, buildingsDestroyed, seconds }) => {
     hud.hidden = true;
+    deploy.hidden = true;
     resultHeading.textContent = victory ? '🏆 Burg erobert!' : '💀 Burg verloren';
     resultStats.textContent = `Feinde besiegt: ${unitsLost} · Gegnerische Gebäude zerstört: ${buildingsDestroyed} · Dauer: ${seconds}s`;
     result.hidden = false;

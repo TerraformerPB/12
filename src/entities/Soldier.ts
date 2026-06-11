@@ -27,8 +27,10 @@ export class Soldier extends Unit {
   /**
    * command: marching on a player order (no combat until arrival).
    * guard:   holding the anchor, auto-engaging nearby enemies.
+   * advance: duel deployment — marches at the foe castle on its own,
+   *          fighting whatever crosses its path (Clash-style).
    */
-  mode: 'command' | 'guard' = 'guard';
+  mode: 'command' | 'guard' | 'advance' = 'guard';
   readonly typeId: SoldierTypeId;
   hp: number;
   /** Lifetime kills; thresholds promote the soldier (veteran ranks). */

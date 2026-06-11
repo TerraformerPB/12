@@ -178,6 +178,19 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   Bewusst auf später verschoben: Turm-Garnison, zugefrorener Fluss,
   dynamische Marktpreise, Soldaten-Sold, Zufallsereignisse, Achievements.
 
+- **Phase 14 (✓) — Burg-Duell im Clash-Stil:** Im Duell gibt es keine
+  Produktion mehr — Rohstoffe kommen ausschließlich aus dem Start-Budget
+  (Inventar) und von **eroberbaren Rohstoff-Lagern** auf dem Schlachtfeld
+  (4 Flaggen, gespiegelt: 🥖 Brot und ⚔️ Waffen; wer als einziger Einheiten
+  in der Nähe hat, erobert das Lager und bekommt alle 6 s Nachschub — bis
+  der Gegner es zurückerobert). Truppen werden Clash-Royale-artig über
+  **Karten** direkt auf der eigenen Kartenhälfte abgesetzt (Soldat 3 Brot,
+  Ritter 5 Waffen + 2 Brot) und marschieren selbstständig auf die Gegnerburg
+  zu — kämpfen unterwegs gegen feindliche Trupps, reißen Mauern ein und
+  belagern die Burg (`mode: 'advance'`). Türme/Mauern können weiterhin über
+  das Baumenü gesetzt werden (instant, aus dem Budget). Die KI bezahlt ihre
+  Trupps aus demselben Budget plus Lager-Einnahmen.
+
 - **Phase 13 (✓) — Burg-Duell als gespiegeltes 1-gegen-1 + Start-Balancing:**
   Mehr Startressourcen (140 Holz / 50 Stein / 8 Brot / 4 Fisch), damit trotz
   Baustellen-System Mauern und Türme vor Welle 1 stehen. Das Burg-Duell ist
