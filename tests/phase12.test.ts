@@ -92,14 +92,14 @@ describe('scenarios (phase 12)', () => {
 
   it('survive10 is won after ten survived waves', () => {
     const isWon = getScenario('survive10').isWon!;
-    expect(isWon({ wavesSurvived: 9, gold: 0 })).toBe(false);
-    expect(isWon({ wavesSurvived: 10, gold: 0 })).toBe(true);
+    expect(isWon({ wavesSurvived: 9, gold: 0, prestige: 0 })).toBe(false);
+    expect(isWon({ wavesSurvived: 10, gold: 0, prestige: 0 })).toBe(true);
   });
 
   it('goldRush is won at 300 gold', () => {
     const isWon = getScenario('goldRush').isWon!;
-    expect(isWon({ wavesSurvived: 0, gold: 299 })).toBe(false);
-    expect(isWon({ wavesSurvived: 0, gold: 300 })).toBe(true);
+    expect(isWon({ wavesSurvived: 0, gold: 299, prestige: 0 })).toBe(false);
+    expect(isWon({ wavesSurvived: 0, gold: 300, prestige: 0 })).toBe(true);
   });
 
   it('every scenario id resolves to a definition', () => {
@@ -160,5 +160,110 @@ describe('savegame migration v8 → v9 (phase 12)', () => {
     expect(migrated!.resources.gold).toBe(0);
     expect(migrated!.buildings[0].underConstruction).toBe(false);
     expect(migrated!.soldiers[0].kills).toBe(0);
+  });
+});
+
+describe('empire scenario (phase 18)', () => {
+  it('ranks unlock with prestige and stay ordered', async () => {
+    const { RANKS, nextRank, rankFor } = await import('../src/data/ranks');
+    expect(rankFor(0).name).toBe('Bauer');
+    expect(rankFor(60).name).toBe('Bürger');
+    expect(rankFor(99999).name).toBe('Herzog');
+    for (let i = 1; i < RANKS.length; i++) {
+      expect(RANKS[i].prestige).toBeGreaterThan(RANKS[i - 1].prestige);
+      expect(RANKS[i].index).toBe(i);
+    }
+    expect(nextRank(0)!.name).toBe('Bürger');
+    expect(nextRank(99999)).toBeNull();
+  });
+
+  it('every rank-gated building references an existing rank', async () => {
+    const { BUILDING_DEFS } = await import('../src/data/buildings');
+    const { RANKS } = await import('../src/data/ranks');
+    for (const def of Object.values(BUILDING_DEFS)) {
+      const rank = (def as { requiredRank?: number }).requiredRank ?? 0;
+      expect(rank).toBeGreaterThanOrEqual(0);
+      expect(rank).toBeLessThan(RANKS.length);
+    }
+  });
+
+  it('faction prices premium their cravings and discount their own goods', async () => {
+    const { factionPrice, bestExport, relationStatus } = await import('../src/data/factions');
+    const { SELL_PRICE } = await import('../src/data/market');
+    expect(factionPrice('seestadt', 'cloth')).toBeGreaterThan(SELL_PRICE.cloth!);
+    expect(factionPrice('seestadt', 'fish')).toBeLessThan(SELL_PRICE.fish!);
+    expect(bestExport('seestadt')).toBe('cloth');
+    expect(relationStatus(10)).toContain('Krieg');
+    expect(relationStatus(80)).toContain('Verbündet');
+  });
+
+  it('diplomacy: gifts raise relations, decay pulls them down, war raids and peace works', async () => {
+    const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
+    const { ResourceStore } = await import('../src/systems/EconomySystem');
+    const { TICK_RATE, RELATION_START, GIFT_RELATION_GAIN } = await import('../src/data/config');
+    const store = new ResourceStore({ gold: 500, bread: 100 });
+    let raids = 0;
+    const diplo = new DiplomacySystem({
+      store,
+      spawnRaid: (s) => { raids++; return s; },
+      onCaravanReturned: () => {},
+    });
+    // gift
+    expect(diplo.sendGift('eichwald')).toBe(true);
+    expect(diplo.relations.eichwald).toBe(RELATION_START + GIFT_RELATION_GAIN);
+    // decay after a minute
+    for (let i = 0; i < 60 * TICK_RATE; i++) diplo.tick();
+    expect(diplo.relations.eichwald).toBeLessThan(RELATION_START + GIFT_RELATION_GAIN);
+    // war: drop below threshold → prompt raid
+    diplo.adjustRelation('steinfaust', -45);
+    expect(diplo.atWar('steinfaust')).toBe(true);
+    diplo.tick();
+    expect(raids).toBe(1);
+    // no caravans while at war
+    expect(diplo.sendCaravan('steinfaust', 'bread')).toBe(false);
+    // peace restores relations and stops raids
+    expect(diplo.offerPeace('steinfaust')).toBe(true);
+    expect(diplo.atWar('steinfaust')).toBe(false);
+  });
+
+  it('caravans return with faction-priced gold and better relations', async () => {
+    const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
+    const { ResourceStore } = await import('../src/systems/EconomySystem');
+    const { CARAVAN_BATCH, CARAVAN_TRAVEL_SECONDS, TICK_RATE } = await import('../src/data/config');
+    const { factionPrice } = await import('../src/data/factions');
+    const store = new ResourceStore({ bread: 50 });
+    let prestige = 0;
+    const diplo = new DiplomacySystem({
+      store,
+      spawnRaid: () => 0,
+      onCaravanReturned: () => { prestige++; },
+    });
+    expect(diplo.sendCaravan('eichwald', 'bread')).toBe(true);
+    expect(store.get('bread')).toBe(50 - CARAVAN_BATCH);
+    const before = diplo.relations.eichwald;
+    for (let i = 0; i <= CARAVAN_TRAVEL_SECONDS * TICK_RATE; i++) diplo.tick();
+    expect(store.get('gold')).toBe(Math.round(CARAVAN_BATCH * factionPrice('eichwald', 'bread')));
+    expect(diplo.relations.eichwald).toBeGreaterThan(before);
+    expect(prestige).toBe(1);
+    expect(diplo.caravans.length).toBe(0);
+  });
+
+  it('migrates v9 saves: wool/cloth and empire defaults', async () => {
+    const { migrateSave } = await import('../src/core/SaveManager');
+    // minimal v9 record
+    const data = {
+      saveVersion: 9, seed: 1, nextEntityId: 1,
+      resources: { wood: 1, stone: 0, ore: 0, weapons: 0, wheat: 0, flour: 0, bread: 0, fish: 0, beer: 0, gold: 0 },
+      buildings: [], workers: [], soldiers: [], enemies: [],
+      wave: { number: 0, nextInSeconds: 60, kills: 0 },
+      techs: [], tutorialStep: 0, terrainOverrides: [],
+      morale: 70, taxLevel: 0, seasonTicks: 0, scenarioId: 'endless',
+    } as never;
+    const migrated = migrateSave(data);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.resources.wool).toBe(0);
+    expect(migrated!.resources.cloth).toBe(0);
+    expect(migrated!.prestige).toBe(0);
+    expect(migrated!.diplomacy).toBeNull();
   });
 });

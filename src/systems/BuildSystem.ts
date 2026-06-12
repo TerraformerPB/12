@@ -99,6 +99,8 @@ export interface BuildContext {
   placeBuilding(defId: BuildingDefId, gx: number, gy: number, rotated: boolean): void;
   /** Instant builds (roads) pay at placement; sites pay via deliveries. */
   paysUpFront(defId: BuildingDefId): boolean;
+  /** German reason the building is locked (rank gate), or null. */
+  lockedReason(defId: BuildingDefId): string | null;
 }
 
 /**
@@ -176,6 +178,12 @@ export class BuildSystem {
     const ghost = this.ghost;
     if (!ghost) return false;
     const def = getDef(ghost.defId);
+
+    const locked = this.ctx.lockedReason(ghost.defId);
+    if (locked) {
+      events.emit('toast:show', { message: locked });
+      return false;
+    }
 
     const placement = checkPlacement(this.ctx.grid, def, ghost.gx, ghost.gy, ghost.rotated);
     if (!placement.ok) {

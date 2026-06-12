@@ -41,7 +41,7 @@ function sampleData(): SaveData {
     saveVersion: SAVE_VERSION,
     seed: 1234567,
     nextEntityId: 10,
-    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9, fish: 5, beer: 1, gold: 7 },
+    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9, fish: 5, beer: 1, wool: 0, cloth: 0, gold: 7 },
     buildings: [new Building(1, 'warehouse', 23, 23, false).toSave(), mill.toSave()],
     workers: [worker.toSave()],
     soldiers: [soldier.toSave()],
@@ -54,6 +54,8 @@ function sampleData(): SaveData {
     taxLevel: 1,
     seasonTicks: 1234,
     scenarioId: 'endless',
+    prestige: 0,
+    diplomacy: null,
   };
 }
 

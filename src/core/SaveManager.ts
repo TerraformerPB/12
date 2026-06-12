@@ -5,6 +5,7 @@ import type { SoldierSave } from '../entities/Soldier';
 import type { WorkerSave } from '../entities/Worker';
 import type { TechId } from '../data/techs';
 import type { WaveSave } from '../systems/WaveSystem';
+import type { DiplomacySave } from '../systems/DiplomacySystem';
 
 /** Complete serialized game state. Versioned for future migrations. */
 export interface SaveData {
@@ -30,6 +31,9 @@ export interface SaveData {
   taxLevel: number;
   seasonTicks: number;
   scenarioId: string;
+  /** Since save version 10 (empire scenario). */
+  prestige: number;
+  diplomacy: DiplomacySave | null;
 }
 
 /**
@@ -78,6 +82,14 @@ export function migrateSave(data: SaveData): SaveData | null {
     }
     for (const s of data.soldiers) s.kills = 0;
     data.saveVersion = 9;
+  }
+  if (data.saveVersion === 9) {
+    // v9 → v10: empire scenario (wool/cloth, prestige, diplomacy).
+    data.resources.wool = data.resources.wool ?? 0;
+    data.resources.cloth = data.resources.cloth ?? 0;
+    data.prestige = 0;
+    data.diplomacy = null;
+    data.saveVersion = 10;
   }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }

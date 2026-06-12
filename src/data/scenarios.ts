@@ -3,6 +3,8 @@
 export interface ScenarioView {
   wavesSurvived: number;
   gold: number;
+  /** Empire scenario: accumulated prestige. */
+  prestige: number;
 }
 
 export interface ScenarioDef {
@@ -31,6 +33,12 @@ export const SCENARIOS = {
     name: 'Goldrausch',
     description: 'Horte 300 Gold (Marktplatz!).',
     isWon: (v) => v.gold >= 300,
+  },
+  empire: {
+    id: 'empire',
+    name: 'Wirtschaft',
+    description: 'Keine Wellen — Diplomatie, Handel & Ränge. Werde Herzog!',
+    isWon: (v) => v.prestige >= 1200,
   },
 } as const satisfies Record<string, Omit<ScenarioDef, 'id'> & { id: string }>;
 

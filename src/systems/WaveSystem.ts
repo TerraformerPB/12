@@ -66,6 +66,31 @@ export class WaveSystem {
     this.emitStatus(true);
   }
 
+  /**
+   * Faction raid (empire scenario): spawn a war party of the given
+   * strength immediately, outside the wave timer. Returns units spawned.
+   */
+  spawnRaid(strength: number): number {
+    const before = this.ctx.enemies.length;
+    const spawnPoints = this.pickSpawnPoints(Math.min(3, 1 + Math.floor(strength / 5)));
+    if (spawnPoints.length === 0) return 0;
+    let i = 0;
+    for (const part of waveComposition(Math.ceil(strength / 2), strength)) {
+      for (let k = 0; k < part.count; k++, i++) {
+        const base = spawnPoints[i % spawnPoints.length];
+        this.ctx.enemies.push(
+          new Enemy(
+            this.ctx.nextEntityId(),
+            base.x + (Math.random() - 0.5) * 0.8,
+            base.y + (Math.random() - 0.5) * 0.8,
+            part.defId,
+          ),
+        );
+      }
+    }
+    return this.ctx.enemies.length - before;
+  }
+
   private spawnWave(n: number): void {
     const spawnPoints = this.pickSpawnPoints(Math.min(3, 1 + Math.floor(n / 3)));
     if (spawnPoints.length === 0) return; // map edge fully blocked — skip wave

@@ -193,6 +193,30 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   kommt, wird daraus das echte Match-System (Gegner-Suche nach Pokalen,
   Burg-Upload statt lokaler KI hinter demselben `DuelAI`-Interface).
 
+- **Phase 18 (✓) — Wirtschaftssimulator (Extra-Modus 'Wirtschaft'):** Vierter
+  Spielmodus neben Endlos/Zehn Wellen/Goldrausch und dem Duell — als
+  eigenständiges Szenario, die bestehenden Modi bleiben unverändert.
+  **Kein Wellen-Defense:** Es gibt keine geplanten Angriffswellen mehr;
+  Krieg ist ausschließlich die Folge schlechter Beziehungen. Drei
+  **Nachbar-Fraktionen** (🌳 Grafschaft Eichwald, ⚓ Hansebund Seestadt,
+  ⛰️ Bergclan Steinfaust) mit Beziehungswerten 0–100: Beziehungen verfallen
+  langsam Richtung neutral und wollen gepflegt werden (🎁 Geschenke,
+  🐪 Handel); unter 20 erklärt die Fraktion den Krieg und überfällt die
+  Burg in wachsenden Raubzügen, bis man 🕊️ Tribut zahlt. **Karawanenhandel**
+  mit Fraktionspreisen: Jede Fraktion zahlt Aufschläge auf Waren, die sie
+  begehrt (Seestadt: Tuch ×2,0), und Abschläge auf eigene Güter — Karawanen
+  sind 40 s unterwegs und bringen Gold, Beziehung und Prestige.
+  **Ränge & Freischaltung:** Prestige fließt aus Bevölkerung, erfüllten
+  Luxusbedürfnissen und Handel; sechs Ränge (Bauer → Bürger → Händler →
+  Ratsherr → Graf → Herzog) schalten Gebäude frei (Markt/Brauerei/Schäferei
+  ab Bürger, Schmiede/Stall/Weberei ab Händler, verstärkte Mauern/Eisentor
+  ab Ratsherr); Herzog (1200 Prestige) gewinnt das Szenario.
+  **Tiefere Wirtschaft:** neue Kette Schäferei → 🐑 Wolle → Weberei →
+  🧵 Tuch; die Bevölkerung verlangt neben Nahrung Luxusgüter (Bier, Tuch)
+  — erfüllte Bedürfnisse heben Moral und Prestige (Anno-artige
+  Bedürfnisstufen). HUD zeigt 👑 Rang + Prestige statt Wellen-Timer und
+  das 🤝-Diplomatie-Panel (Beziehungen, Aktionen, Karawanen). Savegame v10.
+
 - **Phase 17 (✓) — Online-Backend (Accounts, Bestenlisten, Matchmaking, Admin):**
   Vollständiges Backend in `server/` — bewusst **dependency-frei** (reines
   `node:http`, läuft überall mit Node 18+, keine nativen Builds):
