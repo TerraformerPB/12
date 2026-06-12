@@ -138,6 +138,25 @@ export function drawTerrainTile(
       ]).fill(PALETTE.rockTop);
       break;
     }
+    case Terrain.Ore: {
+      // Rock lump with glinting ore speckles so veins stand out on the map.
+      g.poly(diamond(cx, cy)).fill(shade(PALETTE.rock, 0.7));
+      const lift = 7;
+      g.poly([
+        cx,
+        cy - HALF_H / 2 - lift,
+        cx + HALF_W / 2,
+        cy - lift / 2,
+        cx,
+        cy + HALF_H / 2 - lift / 4,
+        cx - HALF_W / 2,
+        cy - lift / 2,
+      ]).fill(shade(PALETTE.rockTop, 0.85));
+      for (const [dx, dy] of [[-8, -6], [5, -9], [-2, -2], [9, -3], [-11, 1]] as const) {
+        g.circle(cx + dx, cy + dy - lift / 2, 1.7).fill(0xe3b341);
+      }
+      break;
+    }
   }
 }
 

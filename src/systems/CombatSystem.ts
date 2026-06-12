@@ -400,7 +400,7 @@ export class CombatSystem {
 
   private tickTowers(): void {
     for (const b of this.ctx.buildings.values()) {
-      if (b.defId !== 'tower' || b.underConstruction) continue;
+      if (b.def.shoots !== true || b.underConstruction) continue;
       const cooldown = this.towerCooldowns.get(b.id) ?? 0;
       if (cooldown > 0) {
         this.towerCooldowns.set(b.id, cooldown - 1);

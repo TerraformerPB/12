@@ -93,6 +93,50 @@ export function generateTerrain(grid: IsoGrid, seed: number): void {
   const ring = TERRAIN_SAFE_RADIUS + 2;
   blob(cx + ring, cy - 2, TERRAIN_FOREST_CLUSTER_MAX, Terrain.Forest);
   blob(cx + 2, cy + ring, TERRAIN_ROCK_CLUSTER_MAX, Terrain.Rock);
+
+  seedOreDeposits(grid, rng);
+}
+
+/**
+ * Ore veins (phase 20): the cores of rock clusters turn into ore — a rock
+ * tile whose orthogonal neighbours are all rock/ore is deep enough to hold
+ * a vein. Mines must be built next to ore and deplete it back to rock.
+ * Only rock becomes ore (both blocked), so older saves keep loading.
+ */
+function seedOreDeposits(grid: IsoGrid, rng: () => number): void {
+  const isHard = (x: number, y: number): boolean => {
+    if (!grid.inBounds(x, y)) return false;
+    const t = grid.terrainAt(x, y);
+    return t === Terrain.Rock || t === Terrain.Ore;
+  };
+  const cores: { x: number; y: number }[] = [];
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      if (
+        grid.terrainAt(x, y) === Terrain.Rock &&
+        isHard(x - 1, y) && isHard(x + 1, y) && isHard(x, y - 1) && isHard(x, y + 1)
+      ) {
+        cores.push({ x, y });
+      }
+    }
+  }
+  for (const c of cores) grid.setTerrain(c.x, c.y, Terrain.Ore);
+  if (cores.length >= 3) return;
+  // Sparse map: promote a few random rock tiles with at least two hard
+  // neighbours so every map has mineable veins.
+  const candidates: { x: number; y: number }[] = [];
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      if (grid.terrainAt(x, y) !== Terrain.Rock) continue;
+      const n = [isHard(x - 1, y), isHard(x + 1, y), isHard(x, y - 1), isHard(x, y + 1)]
+        .filter(Boolean).length;
+      if (n >= 2) candidates.push({ x, y });
+    }
+  }
+  for (let i = cores.length; i < 3 && candidates.length > 0; i++) {
+    const pick = candidates.splice(Math.floor(rng() * candidates.length), 1)[0];
+    grid.setTerrain(pick.x, pick.y, Terrain.Ore);
+  }
 }
 
 /**

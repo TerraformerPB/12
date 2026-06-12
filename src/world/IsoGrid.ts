@@ -66,6 +66,8 @@ export const Terrain = {
   Water: 2,
   /** Trees: walkable but slow, not buildable; lumberjacks need adjacency. */
   Forest: 3,
+  /** Ore vein: blocked like rock; mines need adjacency and deplete it. */
+  Ore: 4,
 } as const;
 export type Terrain = (typeof Terrain)[keyof typeof Terrain];
 

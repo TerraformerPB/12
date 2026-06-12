@@ -70,6 +70,9 @@ export function checkPlacement(
   if (def.placement === PlacementRule.AdjacentWater) {
     return requireAdjacent(Terrain.Water, 'Muss am Wasser stehen');
   }
+  if (def.placement === PlacementRule.AdjacentOre) {
+    return requireAdjacent(Terrain.Ore, 'Muss an einer Erzader stehen');
+  }
   return { ok: true };
 }
 
