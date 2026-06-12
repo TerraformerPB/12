@@ -1,13 +1,24 @@
 import { events } from '../core/EventBus';
 import {
+  ALLY_PRICE_BONUS,
   CARAVAN_BATCH,
   CARAVAN_RELATION_GAIN,
   CARAVAN_TRAVEL_SECONDS,
+  CONTRACT_AMOUNT_MAX,
+  CONTRACT_AMOUNT_MIN,
+  CONTRACT_CHANCE_PER_MIN,
+  CONTRACT_DURATION_SECONDS,
+  CONTRACT_RELATION_GAIN,
+  CONTRACT_RELATION_PENALTY,
+  CONTRACT_REWARD_FACTOR,
   GIFT_GOLD_COST,
   GIFT_RELATION_GAIN,
+  PRICE_RECOVERY_PER_MIN,
+  PRICE_SATURATION_PER_BATCH,
   RAID_BASE_STRENGTH,
   RAID_INTERVAL_SECONDS,
   RAID_STRENGTH_GROWTH,
+  RELATION_ALLY_THRESHOLD,
   RELATION_DECAY_PER_MIN,
   RELATION_REST,
   RELATION_START,
@@ -17,7 +28,7 @@ import {
   TRIBUTE_RELATION,
   type ResourceId,
 } from '../data/config';
-import { FACTION_IDS, factionPrice, getFaction, type FactionId } from '../data/factions';
+import { FACTION_IDS, FACTIONS, factionPrice, getFaction, type FactionId } from '../data/factions';
 import type { ResourceStore } from './EconomySystem';
 
 export interface CaravanState {
@@ -28,11 +39,23 @@ export interface CaravanState {
   ticksLeft: number;
 }
 
+export interface ContractState {
+  factionId: FactionId;
+  resource: ResourceId;
+  amount: number;
+  /** Gold paid on delivery (computed when posted). */
+  reward: number;
+  ticksLeft: number;
+}
+
 export interface DiplomacySave {
   relations: Record<FactionId, number>;
   caravans: CaravanState[];
   raidCooldowns: Record<FactionId, number>;
   raidCounts: Record<FactionId, number>;
+  /** Since phase 19 (older v10 saves restore with defaults). */
+  saturation?: Record<FactionId, Partial<Record<ResourceId, number>>>;
+  contracts?: ContractState[];
 }
 
 export interface DiplomacyContext {
@@ -41,6 +64,8 @@ export interface DiplomacyContext {
   spawnRaid(strength: number): number;
   /** Caravans grant prestige on return. */
   onCaravanReturned(gold: number): void;
+  /** Fulfilled delivery contracts grant extra prestige. */
+  onContractFulfilled(): void;
 }
 
 /**
@@ -52,6 +77,10 @@ export class DiplomacySystem {
   private ctx: DiplomacyContext;
   relations: Record<FactionId, number>;
   caravans: CaravanState[] = [];
+  /** Open delivery requests, at most one per faction. */
+  contracts: ContractState[] = [];
+  /** Market saturation per faction and good (dynamic prices). */
+  private saturation: Record<FactionId, Partial<Record<ResourceId, number>>>;
   private raidCooldowns: Record<FactionId, number>;
   private raidCounts: Record<FactionId, number>;
   private tickCount = 0;
@@ -70,6 +99,21 @@ export class DiplomacySystem {
       FactionId,
       number
     >;
+    this.saturation = Object.fromEntries(FACTION_IDS.map((f) => [f, {}])) as Record<
+      FactionId,
+      Partial<Record<ResourceId, number>>
+    >;
+  }
+
+  /**
+   * Effective gold per unit when selling to a faction right now: the base
+   * faction price, dampened by market saturation (every sold batch floods
+   * the market, recovery takes minutes) and boosted for allies.
+   */
+  effectivePrice(id: FactionId, resource: ResourceId): number {
+    const sat = this.saturation[id][resource] ?? 0;
+    const ally = this.relations[id] >= RELATION_ALLY_THRESHOLD ? ALLY_PRICE_BONUS : 1;
+    return (factionPrice(id, resource) * ally) / (1 + sat);
   }
 
   atWar(id: FactionId): boolean {
@@ -90,13 +134,41 @@ export class DiplomacySystem {
           this.setRelation(f, this.relations[f] - RELATION_DECAY_PER_MIN);
         }
       }
+      // Saturated markets recover and factions occasionally post requests.
+      for (const f of FACTION_IDS) {
+        const sat = this.saturation[f];
+        for (const r of Object.keys(sat) as ResourceId[]) {
+          sat[r] = Math.max(0, (sat[r] ?? 0) - PRICE_RECOVERY_PER_MIN);
+          if (sat[r] === 0) delete sat[r];
+        }
+        if (
+          !this.atWar(f) &&
+          !this.contracts.some((c) => c.factionId === f) &&
+          Math.random() < CONTRACT_CHANCE_PER_MIN
+        ) {
+          this.postContract(f);
+        }
+      }
+    }
+    // Contracts expire with a relation penalty.
+    for (let i = this.contracts.length - 1; i >= 0; i--) {
+      const c = this.contracts[i];
+      if (--c.ticksLeft > 0) continue;
+      this.contracts.splice(i, 1);
+      this.setRelation(c.factionId, this.relations[c.factionId] - CONTRACT_RELATION_PENALTY);
+      events.emit('toast:show', {
+        message: `📜 Auftrag von ${getFaction(c.factionId).name} verfallen — Beziehung leidet`,
+      });
     }
     // Caravans travel and return with gold.
     for (let i = this.caravans.length - 1; i >= 0; i--) {
       const c = this.caravans[i];
       if (--c.ticksLeft > 0) continue;
       this.caravans.splice(i, 1);
-      const gold = Math.round(c.amount * factionPrice(c.factionId, c.resource));
+      // Price is settled on arrival — and the sale saturates the market.
+      const gold = Math.round(c.amount * this.effectivePrice(c.factionId, c.resource));
+      this.saturation[c.factionId][c.resource] =
+        (this.saturation[c.factionId][c.resource] ?? 0) + PRICE_SATURATION_PER_BATCH;
       this.ctx.store.add('gold', gold);
       this.setRelation(c.factionId, this.relations[c.factionId] + CARAVAN_RELATION_GAIN);
       this.ctx.onCaravanReturned(gold);
@@ -172,6 +244,55 @@ export class DiplomacySystem {
     return true;
   }
 
+  /** Post a delivery request for a good the faction craves. */
+  private postContract(id: FactionId): void {
+    const craved = (Object.keys(FACTIONS[id].buys) as ResourceId[]).filter(
+      (r) => ((FACTIONS[id].buys as Partial<Record<ResourceId, number>>)[r] ?? 1) > 1,
+    );
+    if (craved.length === 0) return;
+    const resource = craved[Math.floor(Math.random() * craved.length)];
+    const amount =
+      CONTRACT_AMOUNT_MIN +
+      Math.floor(Math.random() * (CONTRACT_AMOUNT_MAX - CONTRACT_AMOUNT_MIN + 1));
+    const reward = Math.round(amount * factionPrice(id, resource) * CONTRACT_REWARD_FACTOR);
+    this.contracts.push({
+      factionId: id,
+      resource,
+      amount,
+      reward,
+      ticksLeft: CONTRACT_DURATION_SECONDS * TICK_RATE,
+    });
+    events.emit('diplomacy:changed', undefined);
+    events.emit('toast:show', {
+      message: `📜 ${getFaction(id).name} sucht ${amount}× ${resource === 'bread' ? '🥖' : ''} Ware — gut bezahlt!`,
+    });
+  }
+
+  /** Deliver an open contract straight from the warehouse stock. */
+  fulfillContract(id: FactionId): boolean {
+    const idx = this.contracts.findIndex((c) => c.factionId === id);
+    if (idx === -1) return false;
+    const c = this.contracts[idx];
+    if (this.ctx.store.get(c.resource) < c.amount) {
+      events.emit('toast:show', { message: `Nicht genug Ware (${c.amount} nötig)` });
+      return false;
+    }
+    this.contracts.splice(idx, 1);
+    this.ctx.store.pay({ [c.resource]: c.amount });
+    this.ctx.store.add('gold', c.reward);
+    this.setRelation(id, this.relations[id] + CONTRACT_RELATION_GAIN);
+    this.ctx.onContractFulfilled();
+    events.emit('toast:show', {
+      message: `📜 Auftrag erfüllt: +${c.reward} 🪙 von ${getFaction(id).name}`,
+    });
+    return true;
+  }
+
+  /** Open contract of a faction, if any. */
+  contractOf(id: FactionId): ContractState | null {
+    return this.contracts.find((c) => c.factionId === id) ?? null;
+  }
+
   private setRelation(id: FactionId, value: number): void {
     const before = this.relations[id];
     const wasAtWar = this.atWar(id);
@@ -198,6 +319,10 @@ export class DiplomacySystem {
       caravans: this.caravans.map((c) => ({ ...c })),
       raidCooldowns: { ...this.raidCooldowns },
       raidCounts: { ...this.raidCounts },
+      saturation: Object.fromEntries(
+        FACTION_IDS.map((f) => [f, { ...this.saturation[f] }]),
+      ) as Record<FactionId, Partial<Record<ResourceId, number>>>,
+      contracts: this.contracts.map((c) => ({ ...c })),
     };
   }
 
@@ -208,6 +333,8 @@ export class DiplomacySystem {
       this.raidCounts[f] = save.raidCounts?.[f] ?? 0;
     }
     this.caravans = (save.caravans ?? []).map((c) => ({ ...c }));
+    for (const f of FACTION_IDS) this.saturation[f] = { ...(save.saturation?.[f] ?? {}) };
+    this.contracts = (save.contracts ?? []).map((c) => ({ ...c }));
     events.emit('diplomacy:changed', undefined);
   }
 }

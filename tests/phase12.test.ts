@@ -207,6 +207,7 @@ describe('empire scenario (phase 18)', () => {
       store,
       spawnRaid: (s) => { raids++; return s; },
       onCaravanReturned: () => {},
+      onContractFulfilled: () => {},
     });
     // gift
     expect(diplo.sendGift('eichwald')).toBe(true);
@@ -237,6 +238,7 @@ describe('empire scenario (phase 18)', () => {
       store,
       spawnRaid: () => 0,
       onCaravanReturned: () => { prestige++; },
+      onContractFulfilled: () => {},
     });
     expect(diplo.sendCaravan('eichwald', 'bread')).toBe(true);
     expect(store.get('bread')).toBe(50 - CARAVAN_BATCH);
@@ -265,5 +267,91 @@ describe('empire scenario (phase 18)', () => {
     expect(migrated!.resources.cloth).toBe(0);
     expect(migrated!.prestige).toBe(0);
     expect(migrated!.diplomacy).toBeNull();
+  });
+});
+
+describe('empire depth (phase 19)', () => {
+  async function makeDiplo(initial: Partial<Record<string, number>> = {}) {
+    const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
+    const { ResourceStore } = await import('../src/systems/EconomySystem');
+    const store = new ResourceStore(initial as never);
+    let contracts = 0;
+    const diplo = new DiplomacySystem({
+      store,
+      spawnRaid: () => 0,
+      onCaravanReturned: () => {},
+      onContractFulfilled: () => { contracts++; },
+    });
+    return { diplo, store, fulfilled: () => contracts };
+  }
+
+  it('selling saturates the market and prices recover over time', async () => {
+    const { TICK_RATE, CARAVAN_TRAVEL_SECONDS, PRICE_SATURATION_PER_BATCH } =
+      await import('../src/data/config');
+    const { diplo, store } = await makeDiplo({ bread: 100 });
+    const fresh = diplo.effectivePrice('eichwald', 'bread');
+    diplo.sendCaravan('eichwald', 'bread');
+    for (let i = 0; i <= CARAVAN_TRAVEL_SECONDS * TICK_RATE; i++) diplo.tick();
+    const saturated = diplo.effectivePrice('eichwald', 'bread');
+    expect(saturated).toBeCloseTo(fresh / (1 + PRICE_SATURATION_PER_BATCH), 5);
+    expect(store.get('gold')).toBeGreaterThan(0);
+    // recovery: several minutes of ticking raise the price again
+    for (let i = 0; i < 4 * 60 * TICK_RATE; i++) diplo.tick();
+    expect(diplo.effectivePrice('eichwald', 'bread')).toBeGreaterThan(saturated);
+  });
+
+  it('allies pay a price premium', async () => {
+    const { ALLY_PRICE_BONUS } = await import('../src/data/config');
+    const { diplo } = await makeDiplo();
+    const neutral = diplo.effectivePrice('seestadt', 'cloth');
+    diplo.adjustRelation('seestadt', 40); // 90 → ally
+    expect(diplo.effectivePrice('seestadt', 'cloth')).toBeCloseTo(neutral * ALLY_PRICE_BONUS, 5);
+  });
+
+  it('contracts pay out, lift relations and grant prestige', async () => {
+    const { CONTRACT_RELATION_GAIN } = await import('../src/data/config');
+    const { diplo, store, fulfilled } = await makeDiplo({ bread: 100 });
+    // inject a deterministic contract instead of waiting for the random post
+    diplo.contracts.push({ factionId: 'eichwald', resource: 'bread', amount: 20, reward: 70, ticksLeft: 1000 });
+    const before = diplo.relations.eichwald;
+    expect(diplo.fulfillContract('eichwald')).toBe(true);
+    expect(store.get('gold')).toBe(70);
+    expect(store.get('bread')).toBe(80);
+    expect(diplo.relations.eichwald).toBe(before + CONTRACT_RELATION_GAIN);
+    expect(fulfilled()).toBe(1);
+    expect(diplo.contractOf('eichwald')).toBeNull();
+  });
+
+  it('expired contracts cost relation', async () => {
+    const { CONTRACT_RELATION_PENALTY } = await import('../src/data/config');
+    const { diplo } = await makeDiplo();
+    diplo.contracts.push({ factionId: 'steinfaust', resource: 'bread', amount: 10, reward: 30, ticksLeft: 2 });
+    const before = diplo.relations.steinfaust;
+    diplo.tick();
+    diplo.tick();
+    expect(diplo.contractOf('steinfaust')).toBeNull();
+    expect(diplo.relations.steinfaust).toBe(before - CONTRACT_RELATION_PENALTY);
+  });
+
+  it('saturation and contracts survive save/restore', async () => {
+    const { TICK_RATE, CARAVAN_TRAVEL_SECONDS } = await import('../src/data/config');
+    const a = await makeDiplo({ bread: 100 });
+    a.diplo.sendCaravan('eichwald', 'bread');
+    for (let i = 0; i <= CARAVAN_TRAVEL_SECONDS * TICK_RATE; i++) a.diplo.tick();
+    a.diplo.contracts.push({ factionId: 'seestadt', resource: 'cloth', amount: 12, reward: 99, ticksLeft: 500 });
+    const saved = a.diplo.toSave();
+    const b = await makeDiplo();
+    b.diplo.restore(saved);
+    expect(b.diplo.effectivePrice('eichwald', 'bread')).toBeCloseTo(
+      a.diplo.effectivePrice('eichwald', 'bread'), 5,
+    );
+    expect(b.diplo.contractOf('seestadt')?.reward).toBe(99);
+    // old v10 saves without the new fields restore with defaults
+    const legacy = { ...saved };
+    delete (legacy as Partial<typeof legacy>).saturation;
+    delete (legacy as Partial<typeof legacy>).contracts;
+    const c = await makeDiplo();
+    c.diplo.restore(legacy);
+    expect(c.diplo.contracts.length).toBe(0);
   });
 });
