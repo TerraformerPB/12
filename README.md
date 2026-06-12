@@ -193,6 +193,18 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   kommt, wird daraus das echte Match-System (Gegner-Suche nach Pokalen,
   Burg-Upload statt lokaler KI hinter demselben `DuelAI`-Interface).
 
+- **Phase 19 (✓) — Wirtschaftsmodus-Vertiefung:** **Dynamische Preise** —
+  jeder Karawanenverkauf sättigt den Markt der Fraktion für diese Ware
+  (Preis ÷ (1+Sättigung), Erholung über Minuten): Wer immer dasselbe
+  verkauft, verdient immer weniger und muss diversifizieren oder Fraktionen
+  rotieren. **Lieferaufträge** — Fraktionen stellen zufällig Anfragen nach
+  ihren Lieblingswaren (10–25 Stück, 5 Minuten Frist, Belohnung = Preis
+  ×1,6 + großer Beziehungs- und Prestigeschub); verfallene Aufträge kosten
+  Beziehung. **Bündnis-Bonus** — ab Beziehung 75 zahlen Verbündete +15 %
+  auf alle Karawanen. Alles im 🤝-Panel sichtbar (Live-Preise, Auftrag mit
+  Countdown und Liefern-Button); persistiert im Diplomatie-Save (alte
+  v10-Stände laden mit Defaults weiter).
+
 - **Phase 18 (✓) — Wirtschaftssimulator (Extra-Modus 'Wirtschaft'):** Vierter
   Spielmodus neben Endlos/Zehn Wellen/Goldrausch und dem Duell — als
   eigenständiges Szenario, die bestehenden Modi bleiben unverändert.

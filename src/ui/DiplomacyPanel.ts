@@ -5,7 +5,7 @@ import {
   RESOURCE_INFO,
   TRIBUTE_GOLD_COST,
 } from '../data/config';
-import { FACTION_IDS, bestExport, factionPrice, getFaction, relationStatus } from '../data/factions';
+import { FACTION_IDS, bestExport, getFaction, relationStatus } from '../data/factions';
 import { nextRank, rankFor } from '../data/ranks';
 import type { Game } from '../core/Game';
 
@@ -65,8 +65,28 @@ export function createDiplomacyPanel(uiRoot: HTMLElement, game: Game): { toggle(
 
       const desc = document.createElement('div');
       desc.className = 'row diplomacy-desc';
-      desc.textContent = faction.description;
+      desc.textContent =
+        relation >= 75 ? `${faction.description} · 🤝 Bündnis: +15% Preise` : faction.description;
       body.appendChild(desc);
+
+      // Open delivery contract of this faction.
+      const contract = game.diplomacy.contractOf(id);
+      if (contract) {
+        const cRow = document.createElement('div');
+        cRow.className = 'row market-row';
+        const label = document.createElement('span');
+        label.className = 'market-label contract-label';
+        label.textContent = `📜 ${contract.amount}×${RESOURCE_INFO[contract.resource].icon} in ${Math.ceil(contract.ticksLeft / 20 / 60)}min`;
+        const btn = document.createElement('button');
+        btn.textContent = `Liefern (+${contract.reward}🪙)`;
+        btn.disabled = game.store.get(contract.resource) < contract.amount;
+        btn.addEventListener('click', () => {
+          game.diplomacy.fulfillContract(id);
+          render();
+        });
+        cRow.append(label, btn);
+        body.appendChild(cRow);
+      }
 
       const row = document.createElement('div');
       row.className = 'row market-row';
@@ -86,8 +106,9 @@ export function createDiplomacyPanel(uiRoot: HTMLElement, game: Game): { toggle(
           game.diplomacy.sendGift(id);
           render();
         });
+        // Live price: saturation dampens, alliances boost.
         const ware = bestExport(id);
-        const gold = Math.round(CARAVAN_BATCH * factionPrice(id, ware));
+        const gold = Math.round(CARAVAN_BATCH * game.diplomacy.effectivePrice(id, ware));
         const caravanBtn = document.createElement('button');
         caravanBtn.textContent = `🐪 ${CARAVAN_BATCH}×${RESOURCE_INFO[ware].icon} (+${gold}🪙)`;
         caravanBtn.disabled = game.store.get(ware) < CARAVAN_BATCH;

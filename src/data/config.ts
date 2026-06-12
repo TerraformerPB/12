@@ -278,3 +278,25 @@ export const CARAVAN_RELATION_GAIN = 4;
 export const RAID_INTERVAL_SECONDS = 90;
 export const RAID_BASE_STRENGTH = 4;
 export const RAID_STRENGTH_GROWTH = 2;
+
+// --- Wirtschaftsmodus-Vertiefung (Phase 19) -----------------------------------------
+
+/** Dynamic prices: each sold batch saturates the faction's market … */
+export const PRICE_SATURATION_PER_BATCH = 0.3;
+/** … and saturation recovers per minute. */
+export const PRICE_RECOVERY_PER_MIN = 0.1;
+/** Allies (relation ≥ ally threshold) pay a premium on caravans. */
+export const ALLY_PRICE_BONUS = 1.15;
+
+/** Delivery contracts: chance per minute that a faction posts a request. */
+export const CONTRACT_CHANCE_PER_MIN = 0.5;
+/** Seconds until an open contract expires (relation penalty). */
+export const CONTRACT_DURATION_SECONDS = 300;
+/** Requested amount range. */
+export const CONTRACT_AMOUNT_MIN = 10;
+export const CONTRACT_AMOUNT_MAX = 25;
+/** Reward: faction price × this factor, paid instantly on delivery. */
+export const CONTRACT_REWARD_FACTOR = 1.6;
+export const CONTRACT_RELATION_GAIN = 10;
+export const CONTRACT_RELATION_PENALTY = 6;
+export const CONTRACT_PRESTIGE = 15;

@@ -16,6 +16,7 @@ import {
   LUXURY_CLOTH_PER_POP,
   PRESTIGE_LUXURY_BONUS,
   PRESTIGE_PER_CARAVAN,
+  CONTRACT_PRESTIGE,
   PRESTIGE_PER_POP,
   FOOD_PER_POP,
   FOOD_PER_SOLDIER,
@@ -344,6 +345,7 @@ export class Game {
       store,
       spawnRaid: (strength) => this.waveSystem.spawnRaid(strength),
       onCaravanReturned: () => this.addPrestige(PRESTIGE_PER_CARAVAN),
+      onContractFulfilled: () => this.addPrestige(CONTRACT_PRESTIGE),
     });
     store.emitChanged();
   }
