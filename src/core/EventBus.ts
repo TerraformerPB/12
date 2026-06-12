@@ -36,6 +36,8 @@ export interface GameEvents {
   'duel:onlineResult': { opponentId: number; username: string; victory: boolean };
   'online:openMenu': void;
   'morale:changed': { morale: number };
+  'diplomacy:changed': void;
+  'rank:changed': { rank: number; name: string; icon: string; prestige: number };
   'season:changed': { season: number; label: string };
   'game:victory': { scenario: string; kills: number };
 }

@@ -3,6 +3,7 @@ import type { ResourceId } from './config';
 /** Static base prices in gold per unit (phase 12; dynamic prices later). */
 export const SELL_PRICE: Partial<Record<ResourceId, number>> = {
   wood: 1, stone: 1, ore: 2, weapons: 4, wheat: 1, flour: 2, bread: 2, fish: 1, beer: 2,
+  wool: 2, cloth: 5,
 };
 /** Buying costs a markup over the sell price. */
 export const BUY_MARKUP = 2;

@@ -6,7 +6,7 @@
 
 // --- Resources -------------------------------------------------------------
 
-export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'gold'] as const;
+export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'wool', 'cloth', 'gold'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
 
 export interface ResourceInfo {
@@ -26,6 +26,8 @@ export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
   bread: { label: 'Brot', icon: '🥖', color: 0xc07a3a },
   fish: { label: 'Fisch', icon: '🐟', color: 0x7fb6d9 },
   beer: { label: 'Bier', icon: '🍺', color: 0xd9a441 },
+  wool: { label: 'Wolle', icon: '🐑', color: 0xe9e4d8 },
+  cloth: { label: 'Tuch', icon: '🧵', color: 0xb05a7a },
   gold: { label: 'Gold', icon: '🪙', color: 0xe3b341 },
 };
 
@@ -99,6 +101,8 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   bread: 8,
   fish: 4,
   beer: 0,
+  wool: 0,
+  cloth: 0,
   gold: 0,
 };
 
@@ -235,8 +239,42 @@ export const WINTER_FOOD_FACTOR = 1.5;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
 /** User-facing app version (keep in sync with package.json / build.gradle). */
 export const APP_VERSION = '0.1.0';
+
+// --- Wirtschaftssimulator (Phase 18, Szenario 'empire') ---------------------------
+
+/** Luxury demand per head and food interval (only in the empire scenario). */
+export const LUXURY_BEER_PER_POP = 0.12;
+export const LUXURY_CLOTH_PER_POP = 0.08;
+
+/** Prestige income per food interval. */
+export const PRESTIGE_PER_POP = 0.5;
+export const PRESTIGE_LUXURY_BONUS = 3;
+/** Prestige per returned trade caravan. */
+export const PRESTIGE_PER_CARAVAN = 5;
+
+/** Diplomacy: relations 0–100; war below the threshold. */
+export const RELATION_START = 50;
+export const RELATION_WAR_THRESHOLD = 20;
+export const RELATION_ALLY_THRESHOLD = 75;
+/** Relations slowly decay toward this resting point (per minute). */
+export const RELATION_REST = 40;
+export const RELATION_DECAY_PER_MIN = 1;
+/** Gift action: gold cost and relation gain. */
+export const GIFT_GOLD_COST = 15;
+export const GIFT_RELATION_GAIN = 8;
+/** Peace offer while at war: gold tribute and the relation it restores. */
+export const TRIBUTE_GOLD_COST = 60;
+export const TRIBUTE_RELATION = 35;
+/** Trade caravans: batch size, travel seconds, relation gain on return. */
+export const CARAVAN_BATCH = 15;
+export const CARAVAN_TRAVEL_SECONDS = 40;
+export const CARAVAN_RELATION_GAIN = 4;
+/** War: seconds between raids; raid strength grows per raid. */
+export const RAID_INTERVAL_SECONDS = 90;
+export const RAID_BASE_STRENGTH = 4;
+export const RAID_STRENGTH_GROWTH = 2;

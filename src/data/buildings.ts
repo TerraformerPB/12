@@ -67,6 +67,8 @@ export interface BuildingDef {
   recruitsSoldiers?: boolean;
   /** Hit points; BUILDING_DEFAULT_HP when omitted. */
   maxHp?: number;
+  /** Rank index required in the empire scenario (0/omitted = always). */
+  requiredRank?: number;
   /** Short German description for the info panel. */
   description: string;
   /** Placeholder art parameters; replaced by sprite atlas entries later. */
@@ -132,6 +134,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.Grass,
     recipe: { input: 'ore', output: 'weapons', duration: 5 },
     workersRequired: 1,
+    requiredRank: 2,
     description: 'Schmiedet 1 Erz zu 1 Waffe (5 Sekunden). Nötig für Soldaten.',
     art: { color: 0x55504e, height: 28 },
   },
@@ -191,6 +194,7 @@ export const BUILDING_DEFS = {
     footprint: { w: 2, h: 2 },
     cost: { wood: 45, stone: 15 },
     placement: PlacementRule.Grass,
+    requiredRank: 1,
     recipe: { input: 'wheat', output: 'beer', duration: 6 },
     workersRequired: 1,
     description: 'Braut 1 Weizen zu 1 Bier (6 Sekunden). Für Forschung.',
@@ -203,9 +207,36 @@ export const BUILDING_DEFS = {
     footprint: { w: 2, h: 2 },
     cost: { wood: 30, stone: 20 },
     placement: PlacementRule.Grass,
+    requiredRank: 1,
     description: 'Handelt Waren gegen Gold; hier wird auch die Steuer erhoben.',
     maxHp: 60,
     art: { color: 0xb3893c, height: 16 },
+  },
+  sheepFarm: {
+    id: 'sheepFarm',
+    category: 'economy',
+    name: 'Schäferei',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 35, stone: 5 },
+    placement: PlacementRule.Grass,
+    recipe: { output: 'wool', duration: 7 },
+    workersRequired: 1,
+    requiredRank: 1,
+    description: 'Schafe liefern alle 7 Sekunden 1 Wolle.',
+    art: { color: 0xd8d2c2, height: 18 },
+  },
+  weavery: {
+    id: 'weavery',
+    category: 'economy',
+    name: 'Weberei',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 45, stone: 20 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'wool', output: 'cloth', duration: 6 },
+    workersRequired: 2,
+    requiredRank: 2,
+    description: 'Webt 1 Wolle zu 1 Tuch (6 Sekunden). Luxusgut.',
+    art: { color: 0x9a5a74, height: 28 },
   },
   stable: {
     id: 'stable',
@@ -213,6 +244,7 @@ export const BUILDING_DEFS = {
     name: 'Stall',
     footprint: { w: 2, h: 2 },
     cost: { wood: 40, stone: 10 },
+    requiredRank: 2,
     placement: PlacementRule.Grass,
     description: 'Stellt einen Ochsenkarren: transportiert 3 Waren pro Fahrt.',
     maxHp: 60,
@@ -284,6 +316,7 @@ export const BUILDING_DEFS = {
     art: { color: 0x8a8f99, height: 34, material: 'stone' },
   },
   wallStrong: {
+    requiredRank: 3,
     id: 'wallStrong',
     category: 'defense',
     name: 'Verstärkte Mauer',
@@ -309,6 +342,7 @@ export const BUILDING_DEFS = {
     art: { color: 0xa08252, height: 30, material: 'stone' },
   },
   gateIron: {
+    requiredRank: 3,
     id: 'gateIron',
     category: 'defense',
     name: 'Eisentor',
@@ -363,6 +397,8 @@ export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
       'mill',
       'bakery',
       'brewery',
+      'sheepFarm',
+      'weavery',
       'smithy',
       'market',
       'stable',

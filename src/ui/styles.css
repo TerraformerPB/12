@@ -443,8 +443,13 @@ button:active {
 /* Scenario picker inside the main menu card. */
 .scenario-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   max-width: min(92vw, 380px);
+}
+
+.scenario-row .scenario-btn {
+  flex: 1 1 40%;
 }
 
 .scenario-row[hidden] {
@@ -571,6 +576,39 @@ button:active {
 
 .menu-dialog {
   z-index: 30;
+}
+
+/* --- Diplomatie (Wirtschaftsmodus) --- */
+
+.build-card.locked {
+  opacity: 0.45;
+}
+
+.relation-bar {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin: 3px 0 4px;
+}
+
+.relation-bar div {
+  height: 100%;
+  background: #c9b46a;
+  border-radius: 4px;
+}
+
+.relation-bar div.good {
+  background: var(--ui-ok);
+}
+
+.relation-bar div.war {
+  background: var(--ui-danger);
+}
+
+.diplomacy-desc {
+  color: var(--ui-text-dim);
+  font-size: 12px;
 }
 
 /* --- Online dialog --- */

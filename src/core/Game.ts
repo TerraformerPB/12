@@ -12,6 +12,11 @@ import { getSoldierType, type SoldierTypeId } from '../data/soldiers';
 import {
   AUTUMN_FARM_BONUS,
   FOOD_INTERVAL,
+  LUXURY_BEER_PER_POP,
+  LUXURY_CLOTH_PER_POP,
+  PRESTIGE_LUXURY_BONUS,
+  PRESTIGE_PER_CARAVAN,
+  PRESTIGE_PER_POP,
   FOOD_PER_POP,
   FOOD_PER_SOLDIER,
   MORALE_FED_BONUS,
@@ -67,6 +72,7 @@ import { createMainMenu } from '../ui/MainMenu';
 import { createStatsPanel } from '../ui/StatsPanel';
 import { createMarketPanel } from '../ui/MarketPanel';
 import { createOnlineMenu } from '../ui/OnlineMenu';
+import { createDiplomacyPanel } from '../ui/DiplomacyPanel';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
 import {
@@ -95,6 +101,8 @@ import {
 } from '../data/duel';
 import { DuelAI } from '../systems/DuelAI';
 import { loadDuelRating, recordDuel } from './DuelRating';
+import { DiplomacySystem } from '../systems/DiplomacySystem';
+import { RANKS, nextRank, rankFor } from '../data/ranks';
 import { encodeCastle } from './CastleCode';
 import { TUTORIAL_STEPS, type TutorialView } from '../data/tutorial';
 import { Capacitor } from '@capacitor/core';
@@ -143,6 +151,10 @@ export class Game {
   seasonTicks = 0;
   scenarioId: ScenarioId = 'endless';
   private victoryAnnounced = false;
+  /** Empire scenario: prestige drives the rank ladder. */
+  prestige = 0;
+  diplomacy!: DiplomacySystem;
+  private lastRankIndex = 0;
   /** Swapped for an AdMob-backed provider in the store build (phase 6). */
   ads!: RewardedAdProvider;
   private reviveUsed = false;
@@ -170,6 +182,7 @@ export class Game {
   selectedSoldierId: number | null = null;
   statsPanel: { toggle(): void } | null = null;
   marketPanel: { open(): void } | null = null;
+  diplomacyPanel: { toggle(): void } | null = null;
   /** True once the player has built anything beyond the starting warehouse. */
   hasProgress(): boolean {
     return this.buildings.size > 1 || this.waveSystem.waveNumber > 0;
@@ -193,6 +206,7 @@ export class Game {
     createMainMenu(uiRoot, this);
     this.statsPanel = createStatsPanel(uiRoot, this);
     this.marketPanel = createMarketPanel(uiRoot, this);
+    this.diplomacyPanel = createDiplomacyPanel(uiRoot, this);
     createOnlineMenu(uiRoot, this);
     createToast(uiRoot);
     if (Capacitor.isNativePlatform()) {
@@ -245,6 +259,8 @@ export class Game {
     this.taxLevel = 0;
     this.seasonTicks = 0;
     this.victoryAnnounced = false;
+    this.prestige = 0;
+    this.lastRankIndex = 0;
     this.reviveUsed = false;
     this.lostWarehouseSpot = null;
     this.grid = new IsoGrid(MAP_W, MAP_H);
@@ -322,6 +338,12 @@ export class Game {
       // else becomes a construction site supplied by carriers. Duels are
       // fast skirmishes: everything builds instantly there.
       paysUpFront: (defId) => getDef(defId).roadTier !== undefined || this.duelMode,
+      lockedReason: (defId) => this.buildLockReason(defId),
+    });
+    this.diplomacy = new DiplomacySystem({
+      store,
+      spawnRaid: (strength) => this.waveSystem.spawnRaid(strength),
+      onCaravanReturned: () => this.addPrestige(PRESTIGE_PER_CARAVAN),
     });
     store.emitChanged();
   }
@@ -343,8 +365,20 @@ export class Game {
     this.camera.centerOn(center.x, center.y);
     events.emit('techs:changed', { researched: [] });
     events.emit('morale:changed', { morale: Math.round(this.morale) });
+    this.lastRankEmit = '';
+    this.emitRank();
     this.checkTutorial(true);
     events.emit('game:loaded', undefined);
+  }
+
+  /** Wirtschaftssimulator: no waves, diplomacy decides war and peace. */
+  get empireMode(): boolean {
+    return this.scenarioId === 'empire' && !this.duelMode;
+  }
+
+  /** Current rank index (empire scenario). */
+  get rankIndex(): number {
+    return rankFor(this.prestige).index;
   }
 
   // --- Loop ------------------------------------------------------------------
@@ -367,7 +401,9 @@ export class Game {
     this.seasonTicks++;
     this.economy.tick();
     this.soldierSystem.tick();
-    this.waveSystem.tick();
+    // Empire: no scheduled waves — war is a diplomacy failure state.
+    if (this.empireMode) this.diplomacy.tick();
+    else this.waveSystem.tick();
     this.combatSystem.tick();
     if (this.tickCount % (FOOD_INTERVAL * TICK_RATE) === 0) this.foodAndTaxTick();
     // Tutorial conditions are cheap but need no per-tick precision.
@@ -427,7 +463,69 @@ export class Game {
       this.store.add('gold', Math.round(pop * TAX_GOLD_PER_POP * this.taxLevel));
       this.morale = Math.max(0, this.morale - MORALE_TAX_PENALTY * this.taxLevel);
     }
+    if (this.empireMode) this.luxuryAndPrestigeTick(pop);
     events.emit('morale:changed', { morale: Math.round(this.morale) });
+  }
+
+  /**
+   * Empire scenario: the population wants luxuries (beer, cloth) on top
+   * of food. Fulfilled needs lift morale and grant bonus prestige; the
+   * base prestige flow scales with population.
+   */
+  private luxuryAndPrestigeTick(pop: number): void {
+    let gained = pop * PRESTIGE_PER_POP;
+    for (const [resource, perPop] of [
+      ['beer', LUXURY_BEER_PER_POP],
+      ['cloth', LUXURY_CLOTH_PER_POP],
+    ] as const) {
+      const need = Math.ceil(pop * perPop);
+      if (need <= 0) continue;
+      const take = Math.min(need, this.store.get(resource));
+      if (take > 0) this.store.pay({ [resource]: take });
+      if (take >= need) {
+        gained += PRESTIGE_LUXURY_BONUS;
+        this.morale = Math.min(100, this.morale + 1);
+      }
+    }
+    this.addPrestige(gained);
+  }
+
+  /** Add prestige and announce rank promotions. */
+  addPrestige(amount: number): void {
+    this.prestige += amount;
+    const rank = rankFor(this.prestige);
+    if (rank.index !== this.lastRankIndex) {
+      this.lastRankIndex = rank.index;
+      this.sound.play('horn');
+      events.emit('toast:show', { message: `${rank.icon} Aufstieg: Du bist jetzt ${rank.name}!` });
+      events.emit('techs:changed', { researched: [...this.techs] }); // refresh build menu locks
+    }
+    this.emitRank();
+  }
+
+  private lastRankEmit = '';
+
+  private emitRank(): void {
+    const rank = rankFor(this.prestige);
+    const next = nextRank(this.prestige);
+    const key = `${rank.index}:${Math.floor(this.prestige)}:${next?.prestige ?? 0}`;
+    if (key === this.lastRankEmit) return;
+    this.lastRankEmit = key;
+    events.emit('rank:changed', {
+      rank: rank.index,
+      name: rank.name,
+      icon: rank.icon,
+      prestige: Math.floor(this.prestige),
+    });
+  }
+
+  /** Empire scenario gates some buildings behind ranks. */
+  buildLockReason(defId: BuildingDefId): string | null {
+    if (!this.empireMode) return null;
+    const required = getDef(defId).requiredRank ?? 0;
+    if (this.rankIndex >= required) return null;
+    const rank = RANKS[required];
+    return `${rank.icon} Erst ab Rang ${rank.name}`;
   }
 
   /** Worker speed scales with morale (0.75–1.25). */
@@ -475,6 +573,7 @@ export class Game {
         wavesSurvived:
           this.enemies.length === 0 ? this.waveSystem.waveNumber : this.waveSystem.waveNumber - 1,
         gold: this.store.get('gold'),
+        prestige: this.prestige,
       })
     ) {
       this.victoryAnnounced = true;
@@ -1244,6 +1343,8 @@ export class Game {
       taxLevel: this.taxLevel,
       seasonTicks: this.seasonTicks,
       scenarioId: this.scenarioId,
+      prestige: this.prestige,
+      diplomacy: this.empireMode ? this.diplomacy.toSave() : null,
     };
   }
 
@@ -1291,6 +1392,10 @@ export class Game {
     this.taxLevel = data.taxLevel;
     this.seasonTicks = data.seasonTicks;
     this.scenarioId = (data.scenarioId in SCENARIOS ? data.scenarioId : 'endless') as ScenarioId;
+    this.prestige = data.prestige ?? 0;
+    this.lastRankIndex = this.rankIndex;
+    if (data.diplomacy) this.diplomacy.restore(data.diplomacy);
+    this.emitRank();
     this.lastSeason = -1;
     events.emit('morale:changed', { morale: Math.round(this.morale) });
     this.tutorialStep = Math.min(data.tutorialStep, TUTORIAL_STEPS.length);

@@ -24,6 +24,7 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
   sheet.appendChild(content);
 
   const cards = new Map<string, HTMLButtonElement>();
+  const cardCostText = new Map<string, string>();
 
   for (const section of BUILD_MENU_SECTIONS) {
     const header = document.createElement('div');
@@ -54,6 +55,7 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
         (r) => `${RESOURCE_INFO[r].icon} ${def.cost[r]}`,
       );
       cost.textContent = costParts.length > 0 ? costParts.join('  ') : 'Gratis';
+      cardCostText.set(defId, cost.textContent);
 
       card.append(title, meta, cost);
       card.addEventListener('click', () => {
@@ -123,6 +125,18 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
   });
 
   uiRoot.appendChild(sheet);
+
+  // Rank gates (empire scenario): lock cards until the rank is reached.
+  const applyRankLocks = (): void => {
+    for (const [defId, card] of cards) {
+      const reason = game.buildLockReason(defId as Parameters<typeof getDef>[0]);
+      card.classList.toggle('locked', reason !== null);
+      const costEl = card.querySelector('.cost');
+      if (costEl) costEl.textContent = reason ?? cardCostText.get(defId) ?? '';
+    }
+  };
+  events.on('rank:changed', applyRankLocks);
+  events.on('game:loaded', applyRankLocks);
 
   // Mark cards the player currently cannot afford.
   events.on('resources:changed', () => {

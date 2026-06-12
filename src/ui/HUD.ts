@@ -31,10 +31,18 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
   addChip('morale', '😊', 'Moral der Bevölkerung (beeinflusst das Arbeitstempo)');
   addChip('season', '📅', 'Jahreszeit');
   addChip('wave', '⚔️', 'Nächste Welle / Gegner');
+  addChip('rank', '👑', 'Rang & Prestige (Wirtschaftsmodus)');
 
   const spacer = document.createElement('div');
   spacer.className = 'hud-spacer';
   bar.appendChild(spacer);
+
+  const diploBtn = document.createElement('button');
+  diploBtn.className = 'pause-btn';
+  diploBtn.textContent = '🤝';
+  diploBtn.setAttribute('aria-label', 'Diplomatie');
+  diploBtn.addEventListener('click', () => game.diplomacyPanel?.toggle());
+  bar.appendChild(diploBtn);
 
   const statsBtn = document.createElement('button');
   statsBtn.className = 'pause-btn';
@@ -70,6 +78,16 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
     update('population', `${used}/${total}`);
   });
   events.on('morale:changed', ({ morale }) => update('morale', String(morale)));
+  events.on('rank:changed', ({ name, prestige }) => update('rank', `${name} · ${prestige}`));
+  // Empire mode swaps the wave countdown for rank + diplomacy.
+  events.on('game:loaded', () => {
+    const empire = game.scenarioId === 'empire';
+    const waveChip = chips.get('wave');
+    const rankChip = chips.get('rank');
+    if (waveChip) waveChip.el.hidden = empire;
+    if (rankChip) rankChip.el.hidden = !empire;
+    diploBtn.hidden = !empire;
+  });
   events.on('season:changed', ({ label }) => update('season', label));
   events.on('wave:status', ({ wave, nextInSeconds, enemiesAlive }) => {
     if (enemiesAlive > 0) {
