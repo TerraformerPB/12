@@ -65,8 +65,14 @@ export const FOREST_MOVE_COST = 1.6;
 /** Wood a lumberjack harvests before one adjacent forest tile is felled. */
 export const FOREST_WOOD_PER_TILE = 10;
 /** Every N seconds a few forest tiles try to spread to adjacent grass. */
-export const FOREST_REGROW_INTERVAL = 20;
-export const FOREST_REGROW_ATTEMPTS = 3;
+export const FOREST_REGROW_INTERVAL = 10;
+export const FOREST_REGROW_ATTEMPTS = 6;
+/** Ore a mine extracts before one adjacent ore-vein tile turns to rock. */
+export const ORE_PER_TILE = 12;
+/** Extra local storage per building level above 1 (phase 20). */
+export const UPGRADE_LOCAL_STORE = 2;
+/** Market sell-price bonus per market level above 1. */
+export const UPGRADE_MARKET_PRICE_BONUS = 0.05;
 
 // --- Camera / input ----------------------------------------------------------
 
@@ -239,7 +245,7 @@ export const WINTER_FOOD_FACTOR = 1.5;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
 /** User-facing app version (keep in sync with package.json / build.gradle). */

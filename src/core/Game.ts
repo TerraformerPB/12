@@ -80,6 +80,8 @@ import {
   FOREST_REGROW_ATTEMPTS,
   FOREST_REGROW_INTERVAL,
   UPGRADE_COST_FACTOR,
+  UPGRADE_MARKET_PRICE_BONUS,
+  VETERAN_THRESHOLDS,
 } from '../data/config';
 import { recordScore } from './Highscores';
 import {
@@ -292,6 +294,7 @@ export class Game {
         (this.techs.has('freeBeer') ? TECH_EFFECTS.freeBeerSpeed : 1) *
         this.moraleSpeedFactor(),
       fellForestTile: (b) => this.fellForest(b),
+      depleteOreTile: (b) => this.depleteOre(b),
       getFarmFactor: () => (this.season === 2 ? AUTUMN_FARM_BONUS : this.season === 3 ? 0 : 1),
       onConstructionFinished: (b) => {
         this.sound.play('place');
@@ -539,10 +542,21 @@ export class Game {
     this.taxLevel = Math.max(0, Math.min(3, level));
   }
 
+  /** Best finished market level (level upgrades improve sell prices). */
+  private bestMarketLevel(): number {
+    let best = 0;
+    for (const b of this.buildings.values()) {
+      if (b.defId === 'market' && !b.underConstruction) best = Math.max(best, b.level);
+    }
+    return best;
+  }
+
   /** Market trade: positive = sell to the market, negative = buy. */
   trade(resource: ResourceId, amount: number): void {
     if (this.duelMode || resource === 'gold') return;
-    const sellFactor = this.techs.has('tradeGuild') ? TRADE_GUILD_SELL_FACTOR : 1;
+    const marketBonus = 1 + UPGRADE_MARKET_PRICE_BONUS * Math.max(0, this.bestMarketLevel() - 1);
+    const sellFactor =
+      (this.techs.has('tradeGuild') ? TRADE_GUILD_SELL_FACTOR : 1) * marketBonus;
     const buyFactor = this.techs.has('tradeGuild') ? TRADE_GUILD_BUY_FACTOR : 1;
     const base = SELL_PRICE[resource] ?? 0;
     if (base <= 0) return;
@@ -879,6 +893,17 @@ export class Game {
     this.renderer.rebuildChunkAt(this.grid, tile.x, tile.y);
   }
 
+  /** A mine emptied one adjacent ore vein — it turns to plain rock. */
+  private depleteOre(b: Building): void {
+    const tile = b.adjacentTerrainTile(this.grid, Terrain.Ore);
+    if (!tile) return;
+    this.grid.setTerrain(tile.x, tile.y, Terrain.Rock);
+    this.renderer.rebuildChunkAt(this.grid, tile.x, tile.y);
+    if (b.adjacentTerrainTile(this.grid, Terrain.Ore) === null) {
+      events.emit('toast:show', { message: '⛏️ Erzader erschöpft — die Mine steht still' });
+    }
+  }
+
   /** A few forest tiles try to spread onto free grass. */
   private regrowForest(): void {
     const forest: Point[] = [];
@@ -1095,7 +1120,10 @@ export class Game {
       return;
     }
     this.store.pay(type.cost);
-    this.soldiers.push(new Soldier(this.nextId++, spawn.x, spawn.y, typeId));
+    const soldier = new Soldier(this.nextId++, spawn.x, spawn.y, typeId);
+    // Veteran training: higher-level barracks field pre-promoted recruits.
+    if (barracks.level >= 2) soldier.kills = VETERAN_THRESHOLDS[barracks.level - 2];
+    this.soldiers.push(soldier);
     this.sound.play('place');
     events.emit('toast:show', { message: `${type.name} rekrutiert` });
   }
@@ -1111,12 +1139,18 @@ export class Game {
 
   // --- Building management -------------------------------------------------------
 
-  private addBuilding(defId: BuildingDefId, gx: number, gy: number, rotated: boolean): Building {
+  private addBuilding(
+    defId: BuildingDefId,
+    gx: number,
+    gy: number,
+    rotated: boolean,
+    forceInstant = false,
+  ): Building {
     const b = new Building(this.nextId++, defId, gx, gy, rotated);
-    // Roads, the starting warehouse and duel castles appear instantly;
-    // everything else starts as a construction site awaiting materials.
+    // Roads, the starting warehouse, duel castles and def-swap upgrades
+    // appear instantly; everything else is a supplied construction site.
     const instant =
-      b.def.roadTier !== undefined || b.def.isWarehouse === true || this.duelMode;
+      forceInstant || b.def.roadTier !== undefined || b.def.isWarehouse === true || this.duelMode;
     if (!instant && Object.keys(b.def.cost).length > 0) {
       b.underConstruction = true;
       b.materialsRemaining = { ...b.def.cost };
@@ -1198,22 +1232,44 @@ export class Game {
    * every other building rises one level (more hp, faster production,
    * stronger towers, larger huts).
    */
+  /** Def-swap upgrade cost: target cost minus the old building's refund. */
+  defUpgradeCost(b: Building): Partial<Record<ResourceId, number>> {
+    const targetId = b.def.upgradesTo as BuildingDefId | undefined;
+    if (!targetId) return {};
+    const target = getDef(targetId);
+    const cost: Partial<Record<ResourceId, number>> = {};
+    for (const r of RESOURCE_IDS) {
+      const net = (target.cost[r] ?? 0) - Math.floor((b.def.cost[r] ?? 0) * DEMOLISH_REFUND);
+      if (net > 0) cost[r] = net;
+    }
+    return cost;
+  }
+
   upgradeBuilding(id: number): void {
     const b = this.buildings.get(id);
     if (!b || b.owner !== 'player') return;
     const targetId = b.def.upgradesTo as BuildingDefId | undefined;
     if (targetId) {
-      const target = getDef(targetId);
-      const missing = missingResourcesMessage(this.store, target.cost);
+      if (this.buildLockReason(targetId)) {
+        events.emit('toast:show', { message: this.buildLockReason(targetId)! });
+        return;
+      }
+      // The old building counts toward the new one: its demolition refund
+      // is deducted, so upgrading never costs as much as building fresh.
+      const cost = this.defUpgradeCost(b);
+      const missing = missingResourcesMessage(this.store, cost);
       if (missing) {
         events.emit('toast:show', { message: missing });
         return;
       }
-      this.store.pay(target.cost);
+      this.store.pay(cost);
       this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
       this.buildings.delete(b.id);
       this.economy.onBuildingRemoved(b.id);
-      const upgraded = this.addBuilding(targetId, b.x, b.y, b.rotated);
+      // Swapping an existing structure is instant — there is no fresh
+      // construction site on top of a standing building.
+      const upgraded = this.addBuilding(targetId, b.x, b.y, b.rotated, true);
+      if (upgraded.def.isWarehouse) this.warehouseId = upgraded.id;
       this.sound.play('place');
       this.select(upgraded.id);
       return;

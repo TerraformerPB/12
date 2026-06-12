@@ -1,5 +1,6 @@
 import {
   BUILDING_DEFAULT_HP,
+  UPGRADE_LOCAL_STORE,
   BUILDING_MAX_LEVEL,
   CONSTRUCTION_TIME_PER_TILE,
   LOCAL_STORE_CAP,
@@ -152,6 +153,11 @@ export class Building {
     return Math.min(1, this.assignedWorkers / required);
   }
 
+  /** Local input/output storage, growing with the level (phase 20). */
+  get localCap(): number {
+    return LOCAL_STORE_CAP + UPGRADE_LOCAL_STORE * (this.level - 1);
+  }
+
   /** Production speed factor from the upgrade level. */
   get levelFactor(): number {
     return 1 + UPGRADE_SPEED_BONUS * (this.level - 1);
@@ -181,7 +187,7 @@ export class Building {
     if (speed <= 0) return;
 
     if (!this.active) {
-      if (this.outputStore >= LOCAL_STORE_CAP) return;
+      if (this.outputStore >= this.localCap) return;
       if (recipe.input) {
         if (this.inputStore <= 0) return;
         this.inputStore--;
@@ -203,7 +209,7 @@ export class Building {
     if (this.underConstruction) return 0;
     const recipe = this.def.recipe;
     if (!recipe?.input) return 0;
-    return Math.max(0, LOCAL_STORE_CAP - this.inputStore - this.incomingInput);
+    return Math.max(0, this.localCap - this.inputStore - this.incomingInput);
   }
 
   /** Output units not yet promised to a carrier. */

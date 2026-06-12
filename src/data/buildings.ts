@@ -19,6 +19,8 @@ export const PlacementRule = {
   Water: 'water',
   /** Free grass tiles with at least one water tile orthogonally adjacent. */
   AdjacentWater: 'adjacentWater',
+  /** Free grass tiles with at least one ore-vein tile orthogonally adjacent. */
+  AdjacentOre: 'adjacentOre',
 } as const;
 export type PlacementRule = (typeof PlacementRule)[keyof typeof PlacementRule];
 
@@ -65,6 +67,8 @@ export interface BuildingDef {
   upgradeCost?: Partial<Record<ResourceId, number>>;
   /** Soldiers can be recruited here (barracks). */
   recruitsSoldiers?: boolean;
+  /** Fires at enemies like a tower (towers, the keep). */
+  shoots?: boolean;
   /** Hit points; BUILDING_DEFAULT_HP when omitted. */
   maxHp?: number;
   /** Rank index required in the empire scenario (0/omitted = always). */
@@ -84,10 +88,26 @@ export const BUILDING_DEFS = {
     cost: {},
     placement: PlacementRule.Grass,
     isWarehouse: true,
+    upgradesTo: 'keep',
     upgradeCost: { wood: 40, stone: 20 },
     description: 'Zentrales Lager. Träger liefern hier alle Waren ab.',
     maxHp: 150,
     art: { color: 0xb08a4f, height: 40 },
+  },
+  keep: {
+    id: 'keep',
+    category: 'defense',
+    name: 'Bergfried',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 60, stone: 120 },
+    placement: PlacementRule.Grass,
+    isWarehouse: true,
+    shoots: true,
+    population: 3,
+    requiredRank: 3,
+    description: 'Ausgebautes Lagerhaus: massiv, beherbergt 3 Bewohner und beschießt Angreifer wie ein Turm.',
+    maxHp: 340,
+    art: { color: 0x8d8d99, height: 56, material: 'stone' },
   },
   lumberjack: {
     id: 'lumberjack',
@@ -119,10 +139,10 @@ export const BUILDING_DEFS = {
     name: 'Erzmine',
     footprint: { w: 2, h: 2 },
     cost: { wood: 30, stone: 10 },
-    placement: PlacementRule.AdjacentRock,
+    placement: PlacementRule.AdjacentOre,
     recipe: { output: 'ore', duration: 7 },
     workersRequired: 1,
-    description: 'Fördert 1 Erz alle 7 Sekunden. Muss an Fels grenzen.',
+    description: 'Fördert 1 Erz alle 7 Sekunden. Braucht eine Erzader (goldene Sprenkel) — Vorkommen erschöpfen sich.',
     art: { color: 0x6b5d52, height: 24 },
   },
   smithy: {
@@ -355,6 +375,7 @@ export const BUILDING_DEFS = {
     art: { color: 0x76695a, height: 32, material: 'stone' },
   },
   tower: {
+    shoots: true,
     id: 'tower',
     category: 'defense',
     name: 'Wachturm',

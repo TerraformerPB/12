@@ -4,6 +4,7 @@ import {
   CART_CAPACITY,
   CART_SPEED,
   FOREST_WOOD_PER_TILE,
+  ORE_PER_TILE,
   RESOURCE_IDS,
   START_WORKERS,
   TICK_RATE,
@@ -92,6 +93,8 @@ export interface EconomyContext {
   getSpeedFactor(): number;
   /** A lumberjack consumed enough wood — fell one adjacent forest tile. */
   fellForestTile(building: Building): void;
+  /** A mine extracted enough ore — deplete one adjacent vein tile. */
+  depleteOreTile(building: Building): void;
   /** Seasonal farm multiplier (autumn boost, winter standstill). */
   getFarmFactor(): number;
   onConstructionFinished(building: Building): void;
@@ -162,6 +165,10 @@ export class EconomySystem {
       if (b.def.placement === 'adjacentForest' && b.def.recipe) {
         b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Forest) === null;
       }
+      // Mines need an ore vein and deplete it (phase 20).
+      if (b.def.placement === 'adjacentOre' && b.def.recipe) {
+        b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Ore) === null;
+      }
       // Construction sites: build up once all materials arrived.
       if (b.underConstruction) {
         if (b.materialsMissing() === 0) {
@@ -180,6 +187,13 @@ export class EconomySystem {
         if (b.harvestProgress >= FOREST_WOOD_PER_TILE) {
           b.harvestProgress = 0;
           this.ctx.fellForestTile(b);
+        }
+      }
+      if (b.outputStore > before && b.def.placement === 'adjacentOre') {
+        b.harvestProgress++;
+        if (b.harvestProgress >= ORE_PER_TILE) {
+          b.harvestProgress = 0;
+          this.ctx.depleteOreTile(b);
         }
       }
     }

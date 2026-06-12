@@ -1,5 +1,5 @@
 import { events } from '../core/EventBus';
-import { LOCAL_STORE_CAP, RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
+import { RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
 import { SOLDIER_TYPE_IDS, getSoldierType } from '../data/soldiers';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
@@ -126,7 +126,9 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
         .join(' ');
     const upgradeTarget = b.def.upgradesTo ? getDef(b.def.upgradesTo as BuildingDefId) : null;
     if (upgradeTarget) {
-      upgradeBtn.textContent = `Ausbauen: ${upgradeTarget.name} (${costLine(upgradeTarget.cost)})`;
+      // Net cost: the demolition refund of the old building is deducted.
+      const cost = costLine(game.defUpgradeCost(b));
+      upgradeBtn.textContent = `Ausbauen: ${upgradeTarget.name} (${cost || 'Gratis'})`;
       upgradeBtn.hidden = false;
     } else if (b.level < b.maxLevel) {
       upgradeBtn.textContent = `⭐ Stufe ${b.level + 1} (${costLine(game.levelUpgradeCost(b))})`;
@@ -197,17 +199,21 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     if (recipe) {
       const progress = b.durationTicks > 0 ? b.progress / b.durationTicks : 0;
       if (b.productionHalted) {
-        addRow('🌲 Kein Wald mehr in Reichweite!');
+        addRow(
+          b.def.placement === 'adjacentOre'
+            ? '⛏️ Erzader erschöpft — keine Ader in Reichweite!'
+            : '🌲 Kein Wald mehr in Reichweite!',
+        );
       } else {
         addRow(b.active ? 'Produziert …' : 'Wartet', b.active ? progress : 0);
       }
       if (recipe.input) {
         addRow(
-          `${RESOURCE_INFO[recipe.input].icon} Eingang: ${b.inputStore}/${LOCAL_STORE_CAP}`,
+          `${RESOURCE_INFO[recipe.input].icon} Eingang: ${b.inputStore}/${b.localCap}`,
         );
       }
       addRow(
-        `${RESOURCE_INFO[recipe.output].icon} Ausgang: ${b.outputStore}/${LOCAL_STORE_CAP}`,
+        `${RESOURCE_INFO[recipe.output].icon} Ausgang: ${b.outputStore}/${b.localCap}`,
       );
     }
     if (b.def.population) {

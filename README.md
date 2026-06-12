@@ -193,6 +193,23 @@ ohne weitere Code-Änderung. Neue Ressourcen werden analog in `config.ts`
   kommt, wird daraus das echte Match-System (Gegner-Suche nach Pokalen,
   Burg-Upload statt lokaler KI hinter demselben `DuelAI`-Interface).
 
+- **Phase 20 (✓) — Rohstoffe, Bergfried & sinnvolle Stufen:** Wald wächst
+  doppelt so schnell nach (alle 10 s, 6 Versuche). **Erzvorkommen:** Die
+  Kerne der Felscluster sind jetzt Erzadern (goldene Sprenkel, jede Karte
+  hat garantiert welche); die Erzmine muss an einer Ader stehen und baut
+  sie ab — pro 12 Erz wird ein Adern-Tile zu Fels, ohne Ader steht die
+  Mine still. **Bergfried:** Das Lagerhaus lässt sich (im Wirtschaftsmodus
+  ab Ratsherr) zum Bergfried ausbauen — 340 HP, +3 Bevölkerung und er
+  beschießt Angreifer wie ein Wachturm (gemeinsames `shoots`-Flag).
+  **Stufen wirken jetzt überall:** +2 lokale Lagerplätze pro Stufe (alle
+  Betriebe), Marktplatz-Stufen verbessern Verkaufspreise (+5 %/Stufe),
+  Ställe stellen pro Stufe einen Karren, Kasernen ab Stufe 2/3 rekrutieren
+  vorbeförderte Veteranen (Rang 1/2). **Ausbaukosten-Fix:** Beim
+  Gebäude-Tausch (Mauer→verstärkte Mauer, Tor→Eisentor, Lagerhaus→Bergfried)
+  wird die Abriss-Erstattung des alten Gebäudes angerechnet — und der
+  Tausch ist instant statt Baustelle (es steht ja schon ein Gebäude;
+  das behebt nebenbei eine Doppelzahlung aus Phase 13). Savegame v11.
+
 - **Phase 19 (✓) — Wirtschaftsmodus-Vertiefung:** **Dynamische Preise** —
   jeder Karawanenverkauf sättigt den Markt der Fraktion für diese Ware
   (Preis ÷ (1+Sättigung), Erholung über Minuten): Wer immer dasselbe

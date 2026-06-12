@@ -355,3 +355,102 @@ describe('empire depth (phase 19)', () => {
     expect(c.diplo.contracts.length).toBe(0);
   });
 });
+
+describe('ore, keep & level effects (phase 20)', () => {
+  it('terrain generation seeds ore veins on every map', async () => {
+    const { IsoGrid, Terrain } = await import('../src/world/IsoGrid');
+    const { generateTerrain } = await import('../src/world/TerrainGenerator');
+    for (let i = 0; i < 10; i++) {
+      const grid = new IsoGrid(48, 48);
+      generateTerrain(grid, (i * 7919 + 13) >>> 0);
+      let ore = 0;
+      for (let y = 0; y < 48; y++) for (let x = 0; x < 48; x++) {
+        if (grid.terrainAt(x, y) === Terrain.Ore) ore++;
+      }
+      expect(ore, `seed ${i}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('mines must stand next to an ore vein', async () => {
+    const { IsoGrid, Terrain } = await import('../src/world/IsoGrid');
+    const { checkPlacement } = await import('../src/systems/BuildSystem');
+    const { getDef } = await import('../src/data/buildings');
+    const grid = new IsoGrid(12, 12);
+    const mine = getDef('mine');
+    expect(checkPlacement(grid, mine, 4, 4, false).ok).toBe(false);
+    grid.setTerrain(3, 4, Terrain.Ore);
+    expect(checkPlacement(grid, mine, 4, 4, false).ok).toBe(true);
+    // plain rock no longer suffices
+    grid.setTerrain(3, 4, Terrain.Rock);
+    expect(checkPlacement(grid, mine, 4, 4, false).ok).toBe(false);
+  });
+
+  it('the warehouse upgrades into a shooting keep', async () => {
+    const { getDef } = await import('../src/data/buildings');
+    expect(getDef('warehouse').upgradesTo).toBe('keep');
+    const keep = getDef('keep');
+    expect(keep.isWarehouse).toBe(true);
+    expect(keep.shoots).toBe(true);
+    expect(keep.maxHp).toBeGreaterThan(getDef('warehouse').maxHp!);
+  });
+
+  it('def-swap upgrades deduct the demolition refund', async () => {
+    const { getDef } = await import('../src/data/buildings');
+    const { DEMOLISH_REFUND } = await import('../src/data/config');
+    // wall → wallStrong: net stone = target − refund(base)
+    const wall = getDef('wall');
+    const strong = getDef('wallStrong');
+    const refundStone = Math.floor((wall.cost.stone ?? 0) * DEMOLISH_REFUND);
+    expect((strong.cost.stone ?? 0) - refundStone).toBeLessThan(strong.cost.stone ?? 0);
+  });
+
+  it('levels grow local storage', async () => {
+    const { Building } = await import('../src/entities/Building');
+    const { LOCAL_STORE_CAP, UPGRADE_LOCAL_STORE } = await import('../src/data/config');
+    const b = new Building(1, 'mill', 5, 5, false);
+    expect(b.localCap).toBe(LOCAL_STORE_CAP);
+    b.level = 3;
+    expect(b.localCap).toBe(LOCAL_STORE_CAP + 2 * UPGRADE_LOCAL_STORE);
+  });
+});
+
+describe('ore depletion (phase 20)', () => {
+  it('a producing mine consumes the adjacent vein and halts when empty', async () => {
+    const { IsoGrid, Terrain } = await import('../src/world/IsoGrid');
+    const { Building } = await import('../src/entities/Building');
+    const { EconomySystem, ResourceStore } = await import('../src/systems/EconomySystem');
+    const grid = new IsoGrid(12, 12);
+    grid.setTerrain(3, 4, Terrain.Ore); // single vein next to the mine
+    const mine = new Building(2, 'mine', 4, 4, false);
+    mine.assignedWorkers = 1;
+    const buildings = new Map([[mine.id, mine]]);
+    let depleted = 0;
+    const eco = new EconomySystem({
+      grid,
+      store: new ResourceStore(),
+      buildings,
+      workers: [],
+      getWarehouse: () => null,
+      nextEntityId: () => 99,
+      getSoldierCount: () => 0,
+      getSpeedFactor: () => 1,
+      fellForestTile: () => {},
+      depleteOreTile: (b) => {
+        depleted++;
+        const tile = b.adjacentTerrainTile(grid, Terrain.Ore);
+        if (tile) grid.setTerrain(tile.x, tile.y, Terrain.Rock);
+      },
+      getFarmFactor: () => 1,
+      onConstructionFinished: () => {},
+    });
+    // ORE_PER_TILE outputs deplete the vein; afterwards production halts.
+    for (let t = 0; t < 20 * 7 * 13 + 40; t++) {
+      eco.tick();
+      mine.outputStore = 0; // drain so the local store never blocks
+    }
+    expect(depleted).toBe(1);
+    expect(grid.terrainAt(3, 4)).toBe(Terrain.Rock);
+    eco.tick();
+    expect(mine.productionHalted).toBe(true);
+  });
+});

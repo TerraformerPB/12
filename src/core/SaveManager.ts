@@ -91,6 +91,11 @@ export function migrateSave(data: SaveData): SaveData | null {
     data.diplomacy = null;
     data.saveVersion = 10;
   }
+  if (data.saveVersion === 10) {
+    // v10 → v11: ore veins (terrain regenerates with deposits; rock→ore is
+    // collision-free since both are unbuildable). Data shape is unchanged.
+    data.saveVersion = 11;
+  }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }
 
