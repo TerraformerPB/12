@@ -83,11 +83,16 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
   onlineBtn.textContent = '🌐 Online';
   onlineBtn.addEventListener('click', () => events.emit('online:openMenu', undefined));
 
+  const editorBtn = document.createElement('button');
+  editorBtn.className = 'menu-btn';
+  editorBtn.textContent = '🗺️ Karten-Editor';
+  editorBtn.addEventListener('click', () => game.openMapEditor());
+
   const settingsBtn = document.createElement('button');
   settingsBtn.className = 'menu-btn';
   settingsBtn.textContent = '⚙️ Einstellungen';
 
-  buttons.append(continueBtn, newBtn, scenarioRow, duelBtn, onlineBtn, scoresBtn, settingsBtn);
+  buttons.append(continueBtn, newBtn, scenarioRow, duelBtn, onlineBtn, editorBtn, scoresBtn, settingsBtn);
 
   const footer = document.createElement('div');
   footer.className = 'menu-footer';

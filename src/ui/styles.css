@@ -1065,3 +1065,101 @@ button:active {
   margin-top: 0 !important;
   width: auto !important;
 }
+
+/* --- Map editor toolbar (phase 'editor') --- */
+.editor-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  max-width: 96vw;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+}
+
+.editor-bar[hidden] {
+  display: none;
+}
+
+.editor-palette,
+.editor-size,
+.editor-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.editor-brush {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--ui-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.editor-brush span {
+  font-size: 18px;
+}
+
+.editor-brush.active {
+  border-color: var(--ui-accent);
+  background: rgba(216, 165, 72, 0.18);
+}
+
+.editor-size-btn,
+.editor-tool {
+  padding: 8px 10px;
+  color: var(--ui-text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.editor-size-btn.active {
+  border-color: var(--ui-accent);
+  background: rgba(216, 165, 72, 0.18);
+}
+
+.editor-tool.primary {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.editor-tool.danger,
+.pause-card .danger {
+  border-color: var(--ui-danger);
+}
+
+.editor-hint {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.editor-load-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-load-row button:first-child {
+  flex: 1;
+  text-align: left;
+}

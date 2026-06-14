@@ -60,6 +60,11 @@ export function createHUD(uiRoot: HTMLElement, game: Game): void {
 
   uiRoot.appendChild(bar);
 
+  // The map editor has its own toolbar and no economy — hide the resource bar.
+  events.on('game:phaseChanged', ({ phase }) => {
+    bar.hidden = phase === 'editor';
+  });
+
   const update = (key: string, text: string): void => {
     const chip = chips.get(key);
     if (!chip || chip.last === text) return;

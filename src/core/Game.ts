@@ -76,6 +76,8 @@ import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
 import { createDuelMenu } from '../ui/DuelMenu';
 import { createMainMenu } from '../ui/MainMenu';
+import { createMapEditorPanel } from '../ui/MapEditorPanel';
+import { blankTerrain } from './MapStore';
 import { createStatsPanel } from '../ui/StatsPanel';
 import { createMarketPanel } from '../ui/MarketPanel';
 import { createOnlineMenu } from '../ui/OnlineMenu';
@@ -139,6 +141,11 @@ export class Game {
   grid = new IsoGrid(MAP_W, MAP_H);
   camera = new Camera();
   renderer = new WorldRenderer();
+  /** Pointer input; held so the map editor can switch to brush mode. */
+  private input: InputController | null = null;
+  /** Map-editor brush: terrain id painted on tap/drag, and brush radius. */
+  private editorBrush: Terrain = Terrain.Water;
+  private editorBrushSize = 1;
   saveManager = new SaveManager();
   sound = new SoundManager();
 
@@ -202,9 +209,10 @@ export class Game {
   async init(root: HTMLElement, uiRoot: HTMLElement): Promise<void> {
     await this.renderer.init(root);
     await this.sound.preload();
-    new InputController(this.renderer.canvas, this.camera, {
+    this.input = new InputController(this.renderer.canvas, this.camera, {
       onTap: (x, y) => this.handleTap(x, y),
       onHover: (x, y) => this.handleHover(x, y),
+      onPaint: (x, y) => this.paintEditorTile(x, y),
     });
 
     createHUD(uiRoot, this);
@@ -215,6 +223,7 @@ export class Game {
     createTutorialBanner(uiRoot, this);
     createDuelMenu(uiRoot, this);
     createMainMenu(uiRoot, this);
+    createMapEditorPanel(uiRoot, this);
     this.statsPanel = createStatsPanel(uiRoot, this);
     this.marketPanel = createMarketPanel(uiRoot, this);
     this.diplomacyPanel = createDiplomacyPanel(uiRoot, this);
@@ -255,6 +264,7 @@ export class Game {
   private resetWorld(
     seed: number,
     mirrorClearRects?: { x: number; y: number; w: number; h: number }[],
+    customTerrain?: number[],
   ): void {
     this.seed = seed;
     this.nextId = 1;
@@ -275,7 +285,16 @@ export class Game {
     this.reviveUsed = false;
     this.lostWarehouseSpot = null;
     this.grid = new IsoGrid(MAP_W, MAP_H);
-    generateTerrain(this.grid, seed);
+    if (customTerrain && customTerrain.length === MAP_W * MAP_H) {
+      // Player-made map from the editor: load its terrain verbatim, but keep
+      // the central building site clear so the starting warehouse always fits.
+      for (let i = 0; i < customTerrain.length; i++) {
+        this.grid.setTerrain(i % MAP_W, Math.floor(i / MAP_W), customTerrain[i] as Terrain);
+      }
+      this.clearCenterForStart();
+    } else {
+      generateTerrain(this.grid, seed);
+    }
     // Duel maps are mirrored at the middle so both sides face equal terrain.
     if (mirrorClearRects) mirrorTerrainEastWest(this.grid, mirrorClearRects);
     this.grid.sealBaseline();
@@ -361,8 +380,12 @@ export class Game {
     store.emitChanged();
   }
 
-  newGame(seed: number = (Math.random() * 0xffffffff) >>> 0, scenarioId: ScenarioId = 'endless'): void {
-    this.resetWorld(seed);
+  newGame(
+    seed: number = (Math.random() * 0xffffffff) >>> 0,
+    scenarioId: ScenarioId = 'endless',
+    customTerrain?: number[],
+  ): void {
+    this.resetWorld(seed, undefined, customTerrain);
     this.scenarioId = scenarioId;
     this.lastSeason = -1;
     this.setupSystems(new ResourceStore(START_RESOURCES));
@@ -791,6 +814,105 @@ export class Game {
       }
     }
     return { x: MAP_W - 12, y: cy };
+  }
+
+  // --- Map editor ----------------------------------------------------------------
+
+  /** Force the central building site to grass (start warehouse always fits). */
+  private clearCenterForStart(): void {
+    const cx = Math.floor(MAP_W / 2);
+    const cy = Math.floor(MAP_H / 2);
+    for (let y = cy - 2; y <= cy + 1; y++) {
+      for (let x = cx - 2; x <= cx + 1; x++) {
+        if (this.grid.inBounds(x, y)) this.grid.setTerrain(x, y, Terrain.Grass);
+      }
+    }
+  }
+
+  /**
+   * Open the map editor on a blank (or supplied) terrain grid. The world is
+   * shown through the normal renderer; single-finger drag paints terrain.
+   */
+  openMapEditor(terrain: number[] = blankTerrain()): void {
+    // The editor reuses the live world, so persist any running game first —
+    // exitMapEditor restores it, keeping the editor non-destructive.
+    if (this.phase === 'playing' || this.phase === 'paused') this.saveNow();
+    this.duelMode = false;
+    this.resetWorld(0, undefined, terrain.slice());
+    this.setupSystems(new ResourceStore({}));
+    this.warehouseId = 0;
+    const center = gridToScreen(MAP_W / 2, MAP_H / 2);
+    this.camera.centerOn(center.x, center.y);
+    this.input?.setPaintMode(true);
+    this.setPhase('editor');
+    this.emitEditorState();
+  }
+
+  /** Leave the editor back to the title screen, restoring any saved game. */
+  exitMapEditor(): void {
+    this.input?.setPaintMode(false);
+    const data = this.saveManager.load();
+    if (data) this.loadFromData(data);
+    else this.newGame();
+    this.setPhase('menu');
+  }
+
+  setEditorBrush(t: Terrain): void {
+    this.editorBrush = t;
+    this.emitEditorState();
+  }
+
+  setEditorBrushSize(size: number): void {
+    this.editorBrushSize = Math.max(1, Math.min(4, Math.floor(size)));
+    this.emitEditorState();
+  }
+
+  /** Paint the brush terrain at the screen position (editor phase only). */
+  private paintEditorTile(sx: number, sy: number): void {
+    if (this.phase !== 'editor') return;
+    const world = this.camera.screenToWorld(sx, sy);
+    const tile = screenToTile(world.x, world.y);
+    const r = this.editorBrushSize - 1;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = tile.x + dx;
+        const y = tile.y + dy;
+        if (!this.grid.inBounds(x, y)) continue;
+        if (this.grid.terrainAt(x, y) === this.editorBrush) continue;
+        this.grid.setTerrain(x, y, this.editorBrush);
+        this.renderer.rebuildChunkAt(this.grid, x, y);
+      }
+    }
+  }
+
+  /** Flood the whole map with one terrain (editor tool). */
+  fillEditor(t: Terrain): void {
+    if (this.phase !== 'editor') return;
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) this.grid.setTerrain(x, y, t);
+    }
+    this.renderer.buildTerrain(this.grid);
+  }
+
+  /** The current editor terrain as a flat array (row-major), for saving. */
+  editorTerrain(): number[] {
+    const out: number[] = [];
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) out.push(this.grid.terrainAt(x, y));
+    }
+    return out;
+  }
+
+  /** Start a normal endless game on the current editor terrain. */
+  playEditorMap(): void {
+    const terrain = this.editorTerrain();
+    this.input?.setPaintMode(false);
+    this.newGame(undefined, 'endless', terrain);
+    this.setPhase('playing');
+  }
+
+  private emitEditorState(): void {
+    events.emit('editor:changed', { brush: this.editorBrush, brushSize: this.editorBrushSize });
   }
 
   /** Resolve duel outcomes outside the combat iteration (safe point). */
