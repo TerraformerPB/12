@@ -23,7 +23,13 @@ export interface GameEvents {
   'techs:changed': { researched: string[] };
   'tutorial:changed': { text: string | null };
   'wave:status': { wave: number; nextInSeconds: number; enemiesAlive: number; kills: number };
-  'game:over': { wavesSurvived: number; kills: number };
+  'game:over': {
+    wavesSurvived: number;
+    kills: number;
+    empire: boolean;
+    prestige: number;
+    rankName: string;
+  };
   'duel:openMenu': void;
   'duel:status': { ownHp: number; foeHp: number; foes: number };
   'duel:ended': {

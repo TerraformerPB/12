@@ -100,12 +100,12 @@ import {
 import {
   DUEL_BUDGETS,
   DUEL_DEPLOY_COSTS,
-  DUEL_NODES,
   DUEL_NODE_INTERVAL,
   DUEL_NODE_RADIUS,
   DUEL_NODE_YIELD,
   DUEL_TIME_LIMIT,
   duelClearRects,
+  duelNodes,
   type DuelAiLevelId,
   type DuelBudgetId,
 } from '../data/duel';
@@ -196,7 +196,7 @@ export class Game {
   diplomacyPanel: { toggle(): void } | null = null;
   /** True once the player has built anything beyond the starting warehouse. */
   hasProgress(): boolean {
-    return this.buildings.size > 1 || this.waveSystem.waveNumber > 0;
+    return this.buildings.size > 1 || (!this.empireMode && this.waveSystem.waveNumber > 0);
   }
 
   async init(root: HTMLElement, uiRoot: HTMLElement): Promise<void> {
@@ -674,11 +674,13 @@ export class Game {
       })
     ) {
       this.victoryAnnounced = true;
-      recordScore({
-        waves: this.waveSystem.waveNumber,
-        kills: this.waveSystem.kills,
-        date: new Date().toLocaleDateString('de-DE'),
-      });
+      if (!this.empireMode) {
+        recordScore({
+          waves: this.waveSystem.waveNumber,
+          kills: this.waveSystem.kills,
+          date: new Date().toLocaleDateString('de-DE'),
+        });
+      }
       this.saveManager.clear();
       this.setPhase('gameover');
       this.sound.play('horn');
@@ -706,7 +708,7 @@ export class Game {
     const cy = Math.floor(MAP_H / 2);
     this.resetWorld((Math.random() * 0xffffffff) >>> 0, duelClearRects(MAP_W, MAP_H));
     this.setupSystems(new ResourceStore(budget.resources));
-    this.duelNodes = DUEL_NODES.flatMap((n) => [
+    this.duelNodes = duelNodes(MAP_W, MAP_H).flatMap((n) => [
       { ...n, owner: 'none' as const },
       { ...n, x: MAP_W - 1 - n.x, owner: 'none' as const },
     ]);
@@ -1474,14 +1476,21 @@ export class Game {
     this.sound.play('gameover');
     // A lost run must not be resumable after reload.
     this.saveManager.clear();
-    recordScore({
-      waves: Math.max(0, this.waveSystem.waveNumber - 1),
-      kills: this.waveSystem.kills,
-      date: new Date().toLocaleDateString('de-DE'),
-    });
+    // The wave highscore board only makes sense for the endless mode — the
+    // economy (empire) mode has no waves, so don't pollute it with zeroes.
+    if (!this.empireMode) {
+      recordScore({
+        waves: Math.max(0, this.waveSystem.waveNumber - 1),
+        kills: this.waveSystem.kills,
+        date: new Date().toLocaleDateString('de-DE'),
+      });
+    }
     events.emit('game:over', {
       wavesSurvived: Math.max(0, this.waveSystem.waveNumber - 1),
       kills: this.waveSystem.kills,
+      empire: this.empireMode,
+      prestige: Math.floor(this.prestige),
+      rankName: rankFor(this.prestige).name,
     });
   }
 
