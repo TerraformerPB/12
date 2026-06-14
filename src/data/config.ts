@@ -251,6 +251,26 @@ export const AUTOSAVE_INTERVAL_MS = 30_000;
 /** User-facing app version (keep in sync with package.json / build.gradle). */
 export const APP_VERSION = '0.1.0';
 
+/**
+ * Legal / contact details for the imprint and privacy dialog. Required for
+ * the Play Store listing — replace every TODO with real data before release.
+ * Centralised here so it lives in exactly one place.
+ */
+export const LEGAL_INFO = {
+  /** Imprint (Impressum, § 5 TMG). */
+  provider: 'TODO: Anbietername / Firma',
+  street: 'TODO: Straße & Hausnummer',
+  city: 'TODO: PLZ & Ort',
+  country: 'Deutschland',
+  email: 'TODO: kontakt@example.com',
+  website: 'https://burgspiel.de',
+  /** Full online privacy policy (opened from the legal dialog). */
+  privacyUrl: 'https://burgspiel.de/privacy',
+} as const;
+
+/** True while any legal field still holds a placeholder (gates store build). */
+export const LEGAL_INFO_INCOMPLETE = Object.values(LEGAL_INFO).some((v) => v.startsWith('TODO'));
+
 // --- Wirtschaftssimulator (Phase 18, Szenario 'empire') ---------------------------
 
 /** Luxury demand per head and food interval (only in the empire scenario). */

@@ -1,7 +1,7 @@
 import { events } from '../core/EventBus';
 import { loadScores } from '../core/Highscores';
 import { loadDuelRating } from '../core/DuelRating';
-import { APP_VERSION } from '../data/config';
+import { APP_VERSION, LEGAL_INFO } from '../data/config';
 import { SCENARIO_IDS, getScenario } from '../data/scenarios';
 import type { Game } from '../core/Game';
 
@@ -195,21 +195,22 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
 
   const legalBody = document.createElement('div');
   legalBody.className = 'legal-body';
+  const webHost = LEGAL_INFO.website.replace(/^https?:\/\//, '');
   legalBody.innerHTML = `
     <h3>Impressum</h3>
     <p>
       <strong>Angaben gemäß § 5 TMG:</strong><br>
-      Burgspiel Entwickler-Team<br>
-      Musterstraße 42<br>
-      12345 Musterstadt<br>
-      Deutschland
+      ${LEGAL_INFO.provider}<br>
+      ${LEGAL_INFO.street}<br>
+      ${LEGAL_INFO.city}<br>
+      ${LEGAL_INFO.country}
     </p>
     <p>
       <strong>Kontakt:</strong><br>
-      E-Mail: support@burgspiel.de<br>
-      Web: <a href="https://burgspiel.de" target="_blank" style="color:var(--ui-accent)">burgspiel.de</a>
+      E-Mail: ${LEGAL_INFO.email}<br>
+      Web: <a href="${LEGAL_INFO.website}" target="_blank" style="color:var(--ui-accent)">${webHost}</a>
     </p>
-    
+
     <h3>Datenschutzerklärung</h3>
     <p>
       Dieses Spiel speichert alle Spielstände lokal auf Ihrem Endgerät. Es werden standardmäßig keine personenbezogenen Daten an unsere Server übertragen.
@@ -223,7 +224,7 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
   const onlinePrivacyBtn = document.createElement('button');
   onlinePrivacyBtn.textContent = '🌐 Online-Datenschutzerklärung';
   onlinePrivacyBtn.addEventListener('click', () => {
-    window.open('https://burgspiel.de/privacy', '_system');
+    window.open(LEGAL_INFO.privacyUrl, '_system');
   });
 
   const legalClose = document.createElement('button');
