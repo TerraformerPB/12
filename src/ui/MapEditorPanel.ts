@@ -1,6 +1,6 @@
 import { events } from '../core/EventBus';
 import { Terrain } from '../world/IsoGrid';
-import { deleteMap, listMaps, loadMap, saveMap } from '../core/MapStore';
+import { deleteMap, exportMapCode, importMapCode, listMaps, loadMap, saveMap } from '../core/MapStore';
 import { MAP_H, MAP_W } from '../data/config';
 import type { Game } from '../core/Game';
 
@@ -67,6 +67,8 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
   });
   tool('💾 Speichern', () => saveCurrent());
   tool('📂 Laden', () => openLoad());
+  tool('🔗 Teilen', () => openShare());
+  tool('📥 Import', () => importCode());
   tool('▶ Spielen', () => game.playEditorMap(), 'primary');
   tool('✖ Beenden', () => game.exitMapEditor());
 
@@ -96,6 +98,44 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
       events.emit('toast:show', { message: `Karte „${name.trim()}“ gespeichert` });
     } else {
       events.emit('toast:show', { message: 'Bitte einen gültigen Namen eingeben' });
+    }
+  }
+
+  function openShare(): void {
+    card.replaceChildren();
+    const h = document.createElement('h2');
+    h.textContent = '🔗 Karte teilen';
+    const info = document.createElement('p');
+    info.className = 'gameover-stats';
+    info.textContent = 'Diesen Code kopieren und weitergeben:';
+    const area = document.createElement('textarea');
+    area.className = 'editor-code';
+    area.readOnly = true;
+    area.value = exportMapCode(MAP_W, MAP_H, game.editorTerrain());
+    area.addEventListener('focus', () => area.select());
+    const copy = document.createElement('button');
+    copy.textContent = '📋 Kopieren';
+    copy.addEventListener('click', () => {
+      area.select();
+      void navigator.clipboard?.writeText(area.value).catch(() => {});
+      events.emit('toast:show', { message: 'Code kopiert' });
+    });
+    const close = document.createElement('button');
+    close.textContent = 'Schließen';
+    close.addEventListener('click', closeDialog);
+    card.append(h, info, area, copy, close);
+    dialog.hidden = false;
+  }
+
+  function importCode(): void {
+    const code = prompt('Karten-Code einfügen:', '');
+    if (code === null) return;
+    const map = importMapCode(code);
+    if (map && map.width === MAP_W && map.height === MAP_H) {
+      game.openMapEditor(map.terrain);
+      events.emit('toast:show', { message: 'Karte importiert' });
+    } else {
+      events.emit('toast:show', { message: 'Ungültiger Karten-Code' });
     }
   }
 

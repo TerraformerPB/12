@@ -39,7 +39,18 @@ const TOKEN_KEY = 'burgspiel.onlineToken';
 const ADS_ENABLED_KEY = 'burgspiel.adsEnabled';
 const DEFAULT_URL = 'http://localhost:8787';
 
-export class OnlineError extends Error {}
+export class OnlineError extends Error {
+  /** HTTP status (0 when the server was unreachable). */
+  status: number;
+  constructor(message: string, status = 0) {
+    super(message);
+    this.status = status;
+  }
+  /** True when the backend is in maintenance mode. */
+  get isMaintenance(): boolean {
+    return this.status === 503;
+  }
+}
 
 export class OnlineClient {
   private storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -93,7 +104,7 @@ export class OnlineClient {
       throw new OnlineError('Server nicht erreichbar');
     }
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new OnlineError((body.error as string) ?? `Fehler ${res.status}`);
+    if (!res.ok) throw new OnlineError((body.error as string) ?? `Fehler ${res.status}`, res.status);
     return body as T;
   }
 

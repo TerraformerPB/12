@@ -120,3 +120,20 @@ export function loadMap(name: string): CustomMap | null {
 export function deleteMap(name: string): void {
   writeAll(readAll().filter((m) => m.name.toLowerCase() !== name.trim().toLowerCase()));
 }
+
+/** Versioned prefix for shareable map codes (copy/paste between players). */
+const SHARE_PREFIX = 'BURGMAP1.';
+
+/** A portable, shareable code for a terrain grid. */
+export function exportMapCode(width: number, height: number, terrain: number[]): string {
+  return SHARE_PREFIX + encodeMap(width, height, terrain);
+}
+
+/** Parse a shareable code back into a terrain grid; null if invalid. */
+export function importMapCode(
+  code: string,
+): { width: number; height: number; terrain: number[] } | null {
+  const trimmed = code.trim();
+  if (!trimmed.startsWith(SHARE_PREFIX)) return null;
+  return decodeMap(trimmed.slice(SHARE_PREFIX.length));
+}

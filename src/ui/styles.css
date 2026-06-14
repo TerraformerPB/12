@@ -1163,3 +1163,16 @@ button:active {
   flex: 1;
   text-align: left;
 }
+
+.editor-code {
+  width: min(80vw, 420px);
+  height: 90px;
+  resize: none;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--ui-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 8px;
+}

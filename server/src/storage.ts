@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
@@ -131,6 +131,14 @@ export class JsonStore {
       this.flushTimer = null;
     }
     mkdirSync(dirname(this.file), { recursive: true });
+    // Keep one previous version as a safety net before overwriting.
+    if (existsSync(this.file)) {
+      try {
+        copyFileSync(this.file, `${this.file}.bak`);
+      } catch {
+        // a missing backup must never block the write
+      }
+    }
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.data));
     renameSync(tmp, this.file);

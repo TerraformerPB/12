@@ -4,6 +4,8 @@ import {
   decodeMap,
   deleteMap,
   encodeMap,
+  exportMapCode,
+  importMapCode,
   listMaps,
   loadMap,
   saveMap,
@@ -96,5 +98,23 @@ describe('map persistence', () => {
   it('refuses empty names and size mismatches', () => {
     expect(saveMap('   ', MAP_W, MAP_H, blankTerrain())).toBe(false);
     expect(saveMap('Bad', MAP_W, MAP_H, [Terrain.Grass])).toBe(false);
+  });
+});
+
+describe('shareable map codes', () => {
+  it('round-trips through an export/import code', () => {
+    const terrain = blankTerrain();
+    terrain[10] = Terrain.Water;
+    terrain[20] = Terrain.Ore;
+    const code = exportMapCode(MAP_W, MAP_H, terrain);
+    expect(code.startsWith('BURGMAP1.')).toBe(true);
+    const back = importMapCode(code);
+    expect(back?.terrain).toEqual(terrain);
+  });
+
+  it('rejects codes without the versioned prefix or with bad payloads', () => {
+    expect(importMapCode('not a code')).toBeNull();
+    expect(importMapCode(encodeMap(MAP_W, MAP_H, blankTerrain()))).toBeNull(); // no prefix
+    expect(importMapCode('BURGMAP1.garbage')).toBeNull();
   });
 });
