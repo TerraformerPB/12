@@ -12,14 +12,17 @@
   header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
   header h1 { margin:0; font-size:18px; color:var(--accent); }
   header .spacer { flex:1; }
-  main { padding:20px; max-width:1000px; margin:0 auto; }
+  main { padding:20px; max-width:1040px; margin:0 auto; }
   .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h3 { margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+  .card h3 .spacer { flex:1; }
   input { background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--text);
           border-radius:8px; padding:9px 12px; font:inherit; margin-right:8px; }
   button { background:rgba(255,255,255,.08); border:1px solid var(--border); color:var(--text);
            border-radius:8px; padding:8px 12px; font:inherit; cursor:pointer; }
   button:hover { border-color:var(--accent); }
   button.danger { border-color:var(--danger); color:#ff9d96; }
+  button.on { border-color:var(--ok); color:#a6e6ad; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
   th { color:var(--dim); font-weight:600; }
@@ -29,7 +32,11 @@
   .stat b { display:block; font-size:22px; color:var(--accent); }
   .banned { color:var(--danger); }
   .admin { color:var(--accent); }
+  .dim { color:var(--dim); }
+  .win { color:var(--ok); }
+  .loss { color:var(--danger); }
   #msg { color:var(--danger); min-height:18px; font-size:13px; }
+  .scroll { max-height:320px; overflow:auto; }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -51,21 +58,47 @@
 
   <div id="panel" hidden>
     <div class="card">
-      <h3>Statistik</h3>
+      <h3>Statistik <div class="spacer"></div>
+        <button id="adsBtn">Werbung</button>
+        <button id="maintBtn">Wartungsmodus</button>
+      </h3>
       <div class="stats" id="stats"></div>
     </div>
     <div class="card">
-      <h3>Nutzer</h3>
-      <table>
-        <thead><tr><th>ID</th><th>Name</th><th>Rolle</th><th>🏆</th><th>Duelle</th><th>Beste Wellen</th><th>Status</th><th>Aktionen</th></tr></thead>
-        <tbody id="users"></tbody>
-      </table>
+      <h3>Nutzer <div class="spacer"></div>
+        <input id="search" placeholder="🔍 Name suchen…">
+      </h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Rolle</th><th>🏆</th><th>Duelle</th><th>Wellen</th><th>Status</th><th>Aktionen</th></tr></thead>
+          <tbody id="users"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Letzte Duelle</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>#</th><th>Angreifer</th><th>Verteidiger</th><th>Ergebnis</th><th>Δ</th><th>Wann</th></tr></thead>
+          <tbody id="duels"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Audit-Log (Admin-Aktionen)</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Wann</th><th>Admin</th><th>Aktion</th><th>Detail</th></tr></thead>
+          <tbody id="audit"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem('burgspiel.admin.token') || '';
+let allUsers = [];
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -75,6 +108,36 @@ async function api(path, opts = {}) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || res.status);
   return body;
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const when = (ms) => new Date(ms).toLocaleString('de-DE');
+
+function statusLabel(u) {
+  if (!u.banned) return '<span class="ok">aktiv</span>';
+  if (u.bannedUntil) return `<span class="banned">bis ${esc(when(u.bannedUntil))}</span>`;
+  return '<span class="banned">gesperrt</span>';
+}
+
+function renderUsers() {
+  const q = $('search').value.trim().toLowerCase();
+  const rows = allUsers.filter((u) => !q || u.username.toLowerCase().includes(q));
+  $('users').innerHTML = rows.map((u) => `
+    <tr>
+      <td>${u.id}</td>
+      <td>${esc(u.username)}</td>
+      <td class="${u.role === 'admin' ? 'admin' : ''}">${u.role}</td>
+      <td>${u.trophies}</td>
+      <td>${u.wins ?? u.duelWins}S / ${u.losses ?? u.duelLosses}N</td>
+      <td>${u.bestWaves}</td>
+      <td>${statusLabel(u)}</td>
+      <td>
+        <button data-act="${u.banned ? 'unban' : 'ban'}" data-id="${u.id}">${u.banned ? 'Entsperren' : 'Sperren'}</button>
+        ${u.banned ? '' : `<button data-act="suspend" data-id="${u.id}">Zeitsperre</button>`}
+        <button data-act="${u.role === 'admin' ? 'demote' : 'promote'}" data-id="${u.id}">${u.role === 'admin' ? 'Zu Spieler' : 'Zu Admin'}</button>
+        <button class="danger" data-act="delete" data-id="${u.id}">Löschen</button>
+      </td>
+    </tr>`).join('');
 }
 
 async function refresh() {
@@ -88,25 +151,35 @@ async function refresh() {
   const stats = await api('/api/admin/stats');
   $('stats').innerHTML = [
     ['Nutzer', stats.users], ['Gesperrt', stats.banned], ['Duelle gesamt', stats.duelsTotal],
-    ['Duelle (24h)', stats.duelsToday], ['Burgen', stats.castles],
+    ['Duelle (24h)', stats.duelsToday], ['Burgen', stats.castles], ['Werbung gesehen', stats.adsTotal],
   ].map(([l, v]) => `<div class="stat"><b>${v}</b>${l}</div>`).join('');
+  $('adsBtn').textContent = stats.adsEnabled ? '📺 Werbung: AN' : '📺 Werbung: AUS';
+  $('adsBtn').className = stats.adsEnabled ? 'on' : '';
+  $('maintBtn').textContent = stats.maintenanceMode ? '🛠️ Wartung: AN' : '🛠️ Wartung: AUS';
+  $('maintBtn').className = stats.maintenanceMode ? 'danger' : '';
 
-  const { users } = await api('/api/admin/users');
-  $('users').innerHTML = users.map((u) => `
+  allUsers = (await api('/api/admin/users')).users;
+  renderUsers();
+
+  const { entries: duels } = await api('/api/admin/duels');
+  $('duels').innerHTML = duels.map((d) => `
     <tr>
-      <td>${u.id}</td>
-      <td>${u.username}</td>
-      <td class="${u.role === 'admin' ? 'admin' : ''}">${u.role}</td>
-      <td>${u.trophies}</td>
-      <td>${u.wins ?? u.duelWins}S / ${u.losses ?? u.duelLosses}N</td>
-      <td>${u.bestWaves}</td>
-      <td class="${u.banned ? 'banned' : ''}">${u.banned ? 'gesperrt' : 'aktiv'}</td>
-      <td>
-        <button data-act="${u.banned ? 'unban' : 'ban'}" data-id="${u.id}">${u.banned ? 'Entsperren' : 'Sperren'}</button>
-        <button data-act="${u.role === 'admin' ? 'demote' : 'promote'}" data-id="${u.id}">${u.role === 'admin' ? 'Zu Spieler' : 'Zu Admin'}</button>
-        <button class="danger" data-act="delete" data-id="${u.id}">Löschen</button>
-      </td>
-    </tr>`).join('');
+      <td>${d.id}</td>
+      <td>${esc(d.attacker)}</td>
+      <td>${esc(d.defender)}</td>
+      <td class="${d.victory ? 'win' : 'loss'}">${d.victory ? 'Angreifer siegt' : 'Verteidiger siegt'}</td>
+      <td>${d.attackerDelta > 0 ? '+' : ''}${d.attackerDelta}</td>
+      <td class="dim">${esc(when(d.at))}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="dim">Noch keine Duelle.</td></tr>';
+
+  const { entries: audit } = await api('/api/admin/audit');
+  $('audit').innerHTML = audit.map((a) => `
+    <tr>
+      <td class="dim">${esc(when(a.at))}</td>
+      <td class="admin">${esc(a.adminName)}</td>
+      <td>${esc(a.action)}</td>
+      <td>${esc(a.detail || '')}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="dim">Noch keine Aktionen.</td></tr>';
 }
 
 $('loginBtn').addEventListener('click', async () => {
@@ -128,6 +201,15 @@ $('logout').addEventListener('click', () => {
   location.reload();
 });
 
+$('search').addEventListener('input', renderUsers);
+
+$('adsBtn').addEventListener('click', async () => {
+  try { await api('/api/admin/ads/toggle', { method: 'POST' }); await refresh(); } catch (e) { alert(e.message); }
+});
+$('maintBtn').addEventListener('click', async () => {
+  try { await api('/api/admin/maintenance', { method: 'POST' }); await refresh(); } catch (e) { alert(e.message); }
+});
+
 $('users').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button');
   if (!btn) return;
@@ -136,6 +218,10 @@ $('users').addEventListener('click', async (ev) => {
     if (act === 'delete') {
       if (!confirm('Nutzer ' + id + ' wirklich löschen?')) return;
       await api('/api/admin/users/' + id, { method: 'DELETE' });
+    } else if (act === 'suspend') {
+      const hours = prompt('Sperrdauer in Stunden:', '24');
+      if (hours === null) return;
+      await api('/api/admin/users/' + id + '/suspend', { method: 'POST', body: JSON.stringify({ hours: Number(hours) }) });
     } else {
       await api('/api/admin/users/' + id + '/' + act, { method: 'POST' });
     }

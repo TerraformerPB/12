@@ -127,6 +127,17 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     if (route === 'GET /api/leaderboard/trophies') return leaderboard(ctx, 'trophies');
     if (route === 'GET /api/leaderboard/waves') return leaderboard(ctx, 'waves');
 
+    // --- maintenance gate: pause gameplay for everyone but admins ---
+    if (store.data.maintenanceMode && ctx.user?.role !== 'admin') {
+      const blocked = new Set([
+        'POST /api/scores',
+        'POST /api/duel/castle',
+        'GET /api/duel/match',
+        'POST /api/duel/result',
+      ]);
+      if (blocked.has(route)) throw new HttpError(503, 'Wartungsmodus aktiv — bitte später erneut versuchen');
+    }
+
     // --- monetization ---
     if (route === 'POST /api/ad-watched') return adWatched(ctx);
 
@@ -139,8 +150,13 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     // --- admin ---
     if (route === 'GET /api/admin/users') return adminUsers(ctx);
     if (route === 'GET /api/admin/stats') return adminStats(ctx);
+    if (route === 'GET /api/admin/audit') return adminAudit(ctx);
+    if (route === 'GET /api/admin/duels') return adminDuels(ctx);
     if (route === 'POST /api/admin/ads/toggle') return adminToggleAds(ctx);
-    const banMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)\/(ban|unban|promote|demote)$/);
+    if (route === 'POST /api/admin/maintenance') return adminToggleMaintenance(ctx);
+    const banMatch = url.pathname.match(
+      /^\/api\/admin\/users\/(\d+)\/(ban|unban|promote|demote|suspend)$/,
+    );
     if (req.method === 'POST' && banMatch) {
       return adminUserAction(ctx, Number(banMatch[1]), banMatch[2]);
     }
@@ -158,7 +174,7 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     const payload = verifyToken(header.slice(7), store.data.secret);
     if (!payload) return null;
     const user = store.userById(payload.userId);
-    return user && !user.banned ? user : null;
+    return user && !isBanned(user) ? user : null;
   }
 
   function requireUser(ctx: Ctx): UserRecord {
@@ -170,6 +186,38 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     const user = requireUser(ctx);
     if (user.role !== 'admin') throw new HttpError(403, 'Nur für Admins');
     return user;
+  }
+
+  /**
+   * True if the account is currently locked out. Timed suspensions expire on
+   * their own — the first request after the deadline lifts the ban for good.
+   */
+  function isBanned(user: UserRecord): boolean {
+    if (!user.banned) return false;
+    if (user.bannedUntil != null && Date.now() >= user.bannedUntil) {
+      user.banned = false;
+      user.bannedUntil = null;
+      store.flushSoon();
+      return false;
+    }
+    return true;
+  }
+
+  /** Append a state-changing admin action to the audit trail. */
+  function audit(admin: UserRecord, action: string, targetId: number | null, detail: string): void {
+    store.data.auditLog.push({
+      id: store.data.nextAuditId++,
+      adminId: admin.id,
+      adminName: admin.username,
+      action,
+      targetId,
+      detail,
+      at: Date.now(),
+    });
+    // Keep the trail bounded — the dashboard only needs recent history.
+    if (store.data.auditLog.length > 2000) {
+      store.data.auditLog.splice(0, store.data.auditLog.length - 2000);
+    }
   }
 
   function field(body: unknown, key: string): unknown {
@@ -211,7 +259,12 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     if (!user || typeof password !== 'string' || !verifyPassword(password, user.passwordHash)) {
       throw new HttpError(401, 'Name oder Passwort falsch');
     }
-    if (user.banned) throw new HttpError(403, 'Konto gesperrt');
+    if (isBanned(user)) {
+      const until = user.bannedUntil
+        ? ` bis ${new Date(user.bannedUntil).toLocaleString('de-DE')}`
+        : '';
+      throw new HttpError(403, `Konto gesperrt${until}`);
+    }
     sendJson(ctx.res, 200, {
       token: issueToken(user),
       user: publicUser(user),
@@ -359,6 +412,7 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
       users: store.data.users.map((u) => ({
         ...publicUser(u),
         banned: u.banned,
+        bannedUntil: u.bannedUntil ?? null,
         adsWatched: u.adsWatched ?? 0,
       })),
     });
@@ -376,6 +430,39 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
       castles: store.data.users.filter((u) => u.castleCode !== null).length,
       adsTotal,
       adsEnabled: store.data.adsEnabled !== false,
+      maintenanceMode: store.data.maintenanceMode === true,
+    });
+  }
+
+  function adminAudit(ctx: Ctx): void {
+    requireAdmin(ctx);
+    const limit = Math.min(
+      500,
+      Number(new URL(ctx.req.url ?? '/', 'http://x').searchParams.get('limit')) || 100,
+    );
+    sendJson(ctx.res, 200, { entries: store.data.auditLog.slice(-limit).reverse() });
+  }
+
+  function adminDuels(ctx: Ctx): void {
+    requireAdmin(ctx);
+    const limit = Math.min(
+      200,
+      Number(new URL(ctx.req.url ?? '/', 'http://x').searchParams.get('limit')) || 50,
+    );
+    const name = (id: number): string => store.userById(id)?.username ?? `#${id}`;
+    sendJson(ctx.res, 200, {
+      entries: store.data.duels
+        .slice(-limit)
+        .reverse()
+        .map((d) => ({
+          id: d.id,
+          attacker: name(d.attackerId),
+          defender: name(d.defenderId),
+          victory: d.victory,
+          attackerDelta: d.attackerDelta,
+          defenderDelta: d.defenderDelta,
+          at: d.at,
+        })),
     });
   }
 
@@ -383,23 +470,57 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     const admin = requireAdmin(ctx);
     const target = store.userById(id);
     if (!target) throw new HttpError(404, 'Unbekannter Nutzer');
-    if (target.id === admin.id && (action === 'ban' || action === 'demote')) {
+    if (target.id === admin.id && (action === 'ban' || action === 'suspend' || action === 'demote')) {
       throw new HttpError(400, 'Nicht auf das eigene Konto anwendbar');
     }
-    if (action === 'ban') target.banned = true;
-    if (action === 'unban') target.banned = false;
-    if (action === 'promote') target.role = 'admin';
-    if (action === 'demote') target.role = 'player';
+    let detail = '';
+    if (action === 'ban') {
+      target.banned = true;
+      target.bannedUntil = null;
+      detail = 'permanent gesperrt';
+    } else if (action === 'suspend') {
+      const hours = Number(field(ctx.body, 'hours'));
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24 * 365) {
+        throw new HttpError(400, 'Ungültige Sperrdauer (Stunden)');
+      }
+      target.banned = true;
+      target.bannedUntil = Date.now() + hours * 60 * 60 * 1000;
+      detail = `gesperrt für ${hours}h (bis ${new Date(target.bannedUntil).toLocaleString('de-DE')})`;
+    } else if (action === 'unban') {
+      target.banned = false;
+      target.bannedUntil = null;
+      detail = 'entsperrt';
+    } else if (action === 'promote') {
+      target.role = 'admin';
+      detail = 'zu Admin befördert';
+    } else if (action === 'demote') {
+      target.role = 'player';
+      detail = 'zu Spieler herabgestuft';
+    }
+    audit(admin, action, target.id, `${target.username}: ${detail}`);
     store.flushSoon();
-    sendJson(ctx.res, 200, { user: { ...publicUser(target), banned: target.banned } });
+    sendJson(ctx.res, 200, {
+      user: { ...publicUser(target), banned: target.banned, bannedUntil: target.bannedUntil ?? null },
+    });
   }
 
   function adminDeleteUser(ctx: Ctx, id: number): void {
     const admin = requireAdmin(ctx);
     if (id === admin.id) throw new HttpError(400, 'Eigenes Konto: bitte über /api/me löschen');
+    const target = store.userById(id);
+    if (!target) throw new HttpError(404, 'Unbekannter Nutzer');
     store.data.users = store.data.users.filter((u) => u.id !== id);
+    audit(admin, 'delete', id, `${target.username} gelöscht`);
     store.flushSoon();
     sendJson(ctx.res, 200, { ok: true });
+  }
+
+  function adminToggleMaintenance(ctx: Ctx): void {
+    const admin = requireAdmin(ctx);
+    store.data.maintenanceMode = !store.data.maintenanceMode;
+    audit(admin, 'maintenance', null, store.data.maintenanceMode ? 'Wartungsmodus AN' : 'Wartungsmodus AUS');
+    store.flushSoon();
+    sendJson(ctx.res, 200, { ok: true, maintenanceMode: store.data.maintenanceMode });
   }
 
   function adWatched(ctx: Ctx): void {
@@ -410,8 +531,9 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
   }
 
   function adminToggleAds(ctx: Ctx): void {
-    requireAdmin(ctx);
+    const admin = requireAdmin(ctx);
     store.data.adsEnabled = store.data.adsEnabled === false ? true : false;
+    audit(admin, 'ads', null, store.data.adsEnabled ? 'Werbung aktiviert' : 'Werbung deaktiviert');
     store.flushSoon();
     sendJson(ctx.res, 200, { ok: true, adsEnabled: store.data.adsEnabled });
   }
@@ -429,6 +551,7 @@ function newUser(
     passwordHash: hashPassword(password),
     role,
     banned: false,
+    bannedUntil: null,
     createdAt: Date.now(),
     trophies: ELO_START,
     duelWins: 0,

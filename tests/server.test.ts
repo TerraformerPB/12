@@ -169,6 +169,73 @@ describe('admin', () => {
   });
 });
 
+describe('admin moderation tools', () => {
+  let admin = '';
+  let playerId = 0;
+  beforeAll(async () => {
+    const a = await api('/api/auth/login', { body: { username: 'koenig', password: 'burgburg' } });
+    admin = a.body.token as string;
+    playerId = store.userByName('ritter1')!.id;
+  });
+
+  it('records an audit entry for every state-changing action', async () => {
+    await api(`/api/admin/users/${playerId}/promote`, { token: admin, method: 'POST', body: {} });
+    await api(`/api/admin/users/${playerId}/demote`, { token: admin, method: 'POST', body: {} });
+    const audit = await api('/api/admin/audit', { token: admin });
+    const entries = audit.body.entries as { action: string; detail: string; adminName: string }[];
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+    // Newest first.
+    expect(entries[0].action).toBe('demote');
+    expect(entries[0].adminName).toBe('koenig');
+    expect((await api('/api/admin/audit')).status).toBe(401); // admin only
+  });
+
+  it('suspends an account for a fixed time and lifts it automatically', async () => {
+    const res = await api(`/api/admin/users/${playerId}/suspend`, {
+      token: admin,
+      method: 'POST',
+      body: { hours: 2 },
+    });
+    expect(res.status).toBe(200);
+    expect((res.body.user as Record<string, unknown>).banned).toBe(true);
+    // Locked out while the suspension stands.
+    expect((await api('/api/auth/login', { body: { username: 'ritter1', password: 'burgburg' } })).status).toBe(403);
+    // Once the deadline passes, the next login lifts the ban for good.
+    store.userByName('ritter1')!.bannedUntil = Date.now() - 1;
+    const login = await api('/api/auth/login', { body: { username: 'ritter1', password: 'burgburg' } });
+    expect(login.status).toBe(200);
+    expect(store.userByName('ritter1')!.banned).toBe(false);
+  });
+
+  it('rejects bad suspension durations and self-suspension', async () => {
+    expect((await api(`/api/admin/users/${playerId}/suspend`, { token: admin, method: 'POST', body: { hours: 0 } })).status).toBe(400);
+    const selfId = store.userByName('koenig')!.id;
+    expect((await api(`/api/admin/users/${selfId}/suspend`, { token: admin, method: 'POST', body: { hours: 5 } })).status).toBe(400);
+  });
+
+  it('lists recent duels with resolved names', async () => {
+    const duels = await api('/api/admin/duels', { token: admin });
+    const entries = duels.body.entries as { attacker: string; defender: string }[];
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    expect(typeof entries[0].attacker).toBe('string');
+    expect((await api('/api/admin/duels')).status).toBe(401);
+  });
+
+  it('maintenance mode pauses gameplay for players but not admins', async () => {
+    const player = await api('/api/auth/login', { body: { username: 'ritter1', password: 'burgburg' } });
+    const pt = player.body.token as string;
+    const toggle = await api('/api/admin/maintenance', { token: admin, method: 'POST', body: {} });
+    expect(toggle.body.maintenanceMode).toBe(true);
+    expect((await api('/api/scores', { token: pt, body: { waves: 1, kills: 1 } })).status).toBe(503);
+    // Admins keep working through maintenance.
+    expect((await api('/api/scores', { token: admin, body: { waves: 1, kills: 1 } })).status).toBe(200);
+    // Turn it back off.
+    const off = await api('/api/admin/maintenance', { token: admin, method: 'POST', body: {} });
+    expect(off.body.maintenanceMode).toBe(false);
+    expect((await api('/api/scores', { token: pt, body: { waves: 1, kills: 1 } })).status).toBe(200);
+  });
+});
+
 describe('ad management', () => {
   let adminToken = '';
   let playerToken = '';
