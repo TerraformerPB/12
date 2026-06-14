@@ -43,6 +43,10 @@ interface BuildingViewEntry {
   /** Redraw trigger for the hp/construction overlay. */
   lastOverlayKey: string;
   lastLevel: number;
+  /** Floating upgrade-level badge (star pips), shown from level 2. */
+  levelBadge?: Graphics;
+  /** Redraw trigger for the level badge (level + construction state). */
+  lastBadgeKey?: string;
   sailsGfx?: Graphics;
   sailsAngle?: number;
 }
@@ -497,6 +501,42 @@ export class WorldRenderer {
     }
   }
 
+  /**
+   * A floating chip with gold star pips above the roof — one pip per level,
+   * shown from level 2. Works for every building regardless of whether it
+   * uses an external sprite or a baked placeholder, so upgrades always read
+   * clearly on the map. Hidden while a building is still under construction.
+   */
+  private syncLevelBadge(entry: BuildingViewEntry, b: Building): void {
+    const key = `${b.level}:${b.underConstruction ? 1 : 0}`;
+    if (entry.lastBadgeKey === key) return;
+    entry.lastBadgeKey = key;
+    if (!entry.levelBadge) {
+      entry.levelBadge = new Graphics();
+      entry.view.addChild(entry.levelBadge);
+    }
+    const g = entry.levelBadge;
+    g.clear();
+    if (b.level < 2 || b.underConstruction) {
+      g.visible = false;
+      return;
+    }
+    g.visible = true;
+    const [n, , s] = footprintCorners(b.w, b.h);
+    const cx = (n[0] + s[0]) / 2;
+    const top = n[1] - b.def.art.height - 20;
+    const pips = b.level;
+    const gap = 11;
+    const w = pips * gap + 6;
+    g.roundRect(cx - w / 2, top - 8, w, 16, 8)
+      .fill({ color: 0x1c1710, alpha: 0.8 })
+      .stroke({ color: 0xe3b341, width: 1 });
+    for (let i = 0; i < pips; i++) {
+      const px = cx - w / 2 + 9 + i * gap;
+      g.star(px, top, 5, 4.4, 1.9).fill({ color: 0xf4d06a }).stroke({ color: 0x7a5a16, width: 0.6 });
+    }
+  }
+
   private syncBuildings(state: RenderState): void {
     for (const [id, entry] of this.buildingViews) {
       if (!state.buildings.has(id)) {
@@ -519,6 +559,7 @@ export class WorldRenderer {
           this.updateOverlay(existing, b);
           existing.lastOverlayKey = overlayKey;
         }
+        this.syncLevelBadge(existing, b);
         // Rotate sails if present
         if (existing.sailsGfx) {
           const active = !b.underConstruction && b.assignedWorkers > 0 && !b.productionHalted && !b.userPaused;
@@ -598,6 +639,7 @@ export class WorldRenderer {
         sailsAngle,
       };
       this.updateOverlay(entry, b);
+      this.syncLevelBadge(entry, b);
       this.buildingViews.set(b.id, entry);
     }
   }
