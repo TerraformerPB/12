@@ -478,6 +478,27 @@ export class WorldRenderer {
   }
 
   /**
+   * Topmost building whose drawn sprite covers the world point — selection
+   * tests the full sprite rectangle (including the part overhanging the base
+   * tile), not just the footprint, so tall buildings are easy to tap even
+   * where they overlap a neighbour. Returns the frontmost (highest zIndex).
+   */
+  pickBuildingAt(worldX: number, worldY: number): number | null {
+    let bestId: number | null = null;
+    let bestZ = -Infinity;
+    for (const [id, entry] of this.buildingViews) {
+      const b = entry.bounds;
+      if (worldX < b.minX || worldX > b.maxX || worldY < b.minY || worldY > b.maxY) continue;
+      const z = entry.view.zIndex;
+      if (z > bestZ) {
+        bestZ = z;
+        bestId = id;
+      }
+    }
+    return bestId;
+  }
+
+  /**
    * Overlay above the roof (world px, relative to the anchor):
    * health bar for finished buildings, yellow progress bar for sites.
    */

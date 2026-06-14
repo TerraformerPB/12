@@ -1311,8 +1311,12 @@ export class Game {
     }
 
     this.selectSoldier(null);
-    // The opposing castle cannot be inspected — send soldiers instead.
-    const hit = occupant === NO_OCCUPANT ? null : (this.buildings.get(occupant) ?? null);
+    // Selection tests the full sprite (incl. the part overhanging the base
+    // tile), so a tall house is easy to tap even where it overlaps a
+    // neighbour. The footprint occupant is the fallback for flat tiles.
+    const pickedId = this.renderer.pickBuildingAt(world.x, world.y);
+    const targetId = pickedId ?? (occupant !== NO_OCCUPANT ? occupant : null);
+    const hit = targetId !== null ? (this.buildings.get(targetId) ?? null) : null;
     if (hit && hit.owner === 'foe') {
       events.emit('toast:show', { message: 'Feindliche Burg — schicke deine Soldaten!' });
       this.select(null);
