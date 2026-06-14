@@ -168,3 +168,45 @@ describe('admin', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('ad management', () => {
+  let adminToken = '';
+  let playerToken = '';
+
+  beforeAll(async () => {
+    const adminLogin = await api('/api/auth/login', { body: { username: 'koenig', password: 'burgburg' } });
+    adminToken = adminLogin.body.token as string;
+    const playerLogin = await api('/api/auth/login', { body: { username: 'ritter1', password: 'burgburg' } });
+    playerToken = playerLogin.body.token as string;
+  });
+
+  it('increments watched ads count for player', async () => {
+    const res = await api('/api/ad-watched', { token: playerToken, method: 'POST', body: {} });
+    expect(res.status).toBe(200);
+    expect(res.body.adsWatched).toBe(1);
+
+    const me = await api('/api/me', { token: playerToken });
+    expect((me.body.user as any).adsWatched).toBe(1);
+  });
+
+  it('toggles global ads enabled status as admin only', async () => {
+    const stats = await api('/api/admin/stats', { token: adminToken });
+    expect(stats.body.adsEnabled).toBe(true);
+
+    const failToggle = await api('/api/admin/ads/toggle', { token: playerToken, method: 'POST', body: {} });
+    expect(failToggle.status).toBe(403);
+
+    const toggle1 = await api('/api/admin/ads/toggle', { token: adminToken, method: 'POST', body: {} });
+    expect(toggle1.status).toBe(200);
+    expect(toggle1.body.adsEnabled).toBe(false);
+
+    const stats2 = await api('/api/admin/stats', { token: adminToken });
+    expect(stats2.body.adsEnabled).toBe(false);
+
+    const me = await api('/api/me', { token: playerToken });
+    expect(me.body.adsEnabled).toBe(false);
+
+    const toggle2 = await api('/api/admin/ads/toggle', { token: adminToken, method: 'POST', body: {} });
+    expect(toggle2.body.adsEnabled).toBe(true);
+  });
+});

@@ -4,7 +4,13 @@ import { checkPlacement, rotatedFootprint } from '../src/systems/BuildSystem';
 import { IsoGrid, Terrain } from '../src/world/IsoGrid';
 
 function makeGrid(): IsoGrid {
-  return new IsoGrid(12, 12); // all grass
+  const grid = new IsoGrid(12, 12); // all grass
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      grid.setExplored(x, y, true);
+    }
+  }
+  return grid;
 }
 
 describe('placement validation', () => {

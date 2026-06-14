@@ -35,7 +35,14 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
     game.restartNewGame();
   });
 
-  card.append(heading, stats, scoreList, reviveBtn, newGameBtn);
+  const continueBtn = document.createElement('button');
+  continueBtn.textContent = 'Weiterspielen';
+  continueBtn.addEventListener('click', () => {
+    overlay.hidden = true;
+    game.continueEndlessAfterVictory();
+  });
+
+  card.append(heading, stats, scoreList, reviveBtn, continueBtn, newGameBtn);
   overlay.appendChild(card);
   uiRoot.appendChild(overlay);
 
@@ -53,6 +60,7 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
     stats.textContent = `Überstandene Wellen: ${wavesSurvived} · Besiegte Gegner: ${kills}`;
     renderScores();
     reviveBtn.hidden = !game.canRevive();
+    continueBtn.hidden = true;
     overlay.hidden = false;
   });
 
@@ -61,6 +69,7 @@ export function createGameOverMenu(uiRoot: HTMLElement, game: Game): void {
     stats.textContent = `Szenario „${scenario}“ geschafft · Besiegte Gegner: ${kills}`;
     renderScores();
     reviveBtn.hidden = true;
+    continueBtn.hidden = false;
     overlay.hidden = false;
   });
 }

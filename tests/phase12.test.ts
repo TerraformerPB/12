@@ -7,6 +7,7 @@ import {
   TICK_RATE,
   VETERAN_BONUS,
   VETERAN_THRESHOLDS,
+  ORE_PER_TILE,
 } from '../src/data/config';
 import { getDef } from '../src/data/buildings';
 import { SELL_PRICE } from '../src/data/market';
@@ -376,6 +377,7 @@ describe('ore, keep & level effects (phase 20)', () => {
     const { checkPlacement } = await import('../src/systems/BuildSystem');
     const { getDef } = await import('../src/data/buildings');
     const grid = new IsoGrid(12, 12);
+    for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) grid.setExplored(x, y, true);
     const mine = getDef('mine');
     expect(checkPlacement(grid, mine, 4, 4, false).ok).toBe(false);
     grid.setTerrain(3, 4, Terrain.Ore);
@@ -444,7 +446,7 @@ describe('ore depletion (phase 20)', () => {
       onConstructionFinished: () => {},
     });
     // ORE_PER_TILE outputs deplete the vein; afterwards production halts.
-    for (let t = 0; t < 20 * 7 * 13 + 40; t++) {
+    for (let t = 0; t < 20 * 7 * (ORE_PER_TILE + 1) + 40; t++) {
       eco.tick();
       mine.outputStore = 0; // drain so the local store never blocks
     }

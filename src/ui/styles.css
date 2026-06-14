@@ -698,6 +698,84 @@ button:active {
   width: 100%;
 }
 
+.stats-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--ui-border);
+  padding-bottom: 6px;
+}
+
+.stats-panel .stats-tabs button.tab-btn {
+  flex: 1;
+  margin-top: 0;
+  padding: 4px 6px;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ui-text);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.stats-panel .stats-tabs button.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stats-panel .stats-tabs button.tab-btn.active {
+  background: var(--ui-accent);
+  color: #121622;
+  font-weight: bold;
+  border-color: var(--ui-accent);
+}
+
+.needs-group {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+}
+
+.needs-class-title {
+  font-weight: bold;
+  font-size: 12px;
+  color: var(--ui-accent);
+  margin-bottom: 4px;
+}
+
+.needs-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.needs-list li {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.needs-checklist-container {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--ui-border);
+}
+
+.needs-checklist-title {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--ui-accent);
+}
+
+.needs-list.select-needs li {
+  font-size: 11.5px;
+}
+
 /* --- Marktplatz --- */
 
 .market-row {
@@ -858,4 +936,132 @@ button:active {
   color: #e8e6df;
   background: #141821;
   z-index: 100;
+}
+
+/* --- Production Management (StatsPanel) --- */
+
+.stats-panel {
+  width: min(86vw, 360px) !important;
+}
+
+.prod-mgmt-row {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 8px 10px !important;
+  margin-top: 4px;
+}
+
+.prod-mgmt-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.prod-color-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  align-self: center;
+}
+
+.prod-mgmt-status {
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.prod-mgmt-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.mini-btn {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  border-radius: 6px !important;
+  margin-top: 0 !important;
+  width: auto !important;
+}
+
+.mini-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- Legal Notices (Impressum & Datenschutz) --- */
+
+.legal-card {
+  max-width: min(90vw, 360px) !important;
+}
+
+.legal-body {
+  text-align: left;
+  max-height: 250px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.4;
+  padding-right: 6px;
+  margin: 10px 0;
+  border-top: 1px solid var(--ui-border);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.legal-body h3 {
+  font-size: 13px;
+  margin: 12px 0 4px;
+  color: var(--ui-accent);
+}
+
+.legal-body p {
+  margin: 0 0 8px;
+  color: var(--ui-text-dim);
+}
+
+/* --- Admin Dashboard UI Panels --- */
+
+.admin-card {
+  max-width: min(94vw, 550px) !important;
+}
+
+.admin-users-list {
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: 10px;
+  border-top: 1px solid var(--ui-border);
+  padding-top: 8px;
+}
+
+.admin-user-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 8px;
+  text-align: left;
+}
+
+.admin-user-info {
+  font-size: 12.5px;
+}
+
+.admin-user-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.admin-user-actions button.mini-btn {
+  padding: 3px 6px !important;
+  font-size: 10px !important;
+  margin-top: 0 !important;
+  width: auto !important;
 }

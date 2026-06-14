@@ -52,6 +52,7 @@ function publicUser(u: UserRecord): Record<string, unknown> {
     bestWaves: u.bestWaves,
     bestKills: u.bestKills,
     hasCastle: u.castleCode !== null,
+    adsWatched: u.adsWatched ?? 0,
     createdAt: u.createdAt,
   };
 }
@@ -126,6 +127,9 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     if (route === 'GET /api/leaderboard/trophies') return leaderboard(ctx, 'trophies');
     if (route === 'GET /api/leaderboard/waves') return leaderboard(ctx, 'waves');
 
+    // --- monetization ---
+    if (route === 'POST /api/ad-watched') return adWatched(ctx);
+
     // --- gameplay ---
     if (route === 'POST /api/scores') return submitScore(ctx);
     if (route === 'POST /api/duel/castle') return uploadCastle(ctx);
@@ -135,6 +139,7 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     // --- admin ---
     if (route === 'GET /api/admin/users') return adminUsers(ctx);
     if (route === 'GET /api/admin/stats') return adminStats(ctx);
+    if (route === 'POST /api/admin/ads/toggle') return adminToggleAds(ctx);
     const banMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)\/(ban|unban|promote|demote)$/);
     if (req.method === 'POST' && banMatch) {
       return adminUserAction(ctx, Number(banMatch[1]), banMatch[2]);
@@ -192,7 +197,11 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     const user = newUser(store, username, password, store.data.users.length === 0 ? 'admin' : 'player');
     store.data.users.push(user);
     store.flushSoon();
-    sendJson(ctx.res, 201, { token: issueToken(user), user: publicUser(user) });
+    sendJson(ctx.res, 201, {
+      token: issueToken(user),
+      user: publicUser(user),
+      adsEnabled: store.data.adsEnabled !== false,
+    });
   }
 
   function login(ctx: Ctx): void {
@@ -203,13 +212,20 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
       throw new HttpError(401, 'Name oder Passwort falsch');
     }
     if (user.banned) throw new HttpError(403, 'Konto gesperrt');
-    sendJson(ctx.res, 200, { token: issueToken(user), user: publicUser(user) });
+    sendJson(ctx.res, 200, {
+      token: issueToken(user),
+      user: publicUser(user),
+      adsEnabled: store.data.adsEnabled !== false,
+    });
   }
 
   // --- account ----------------------------------------------------------------------
 
   function me(ctx: Ctx): void {
-    sendJson(ctx.res, 200, { user: publicUser(requireUser(ctx)) });
+    sendJson(ctx.res, 200, {
+      user: publicUser(requireUser(ctx)),
+      adsEnabled: store.data.adsEnabled !== false,
+    });
   }
 
   function changePassword(ctx: Ctx): void {
@@ -340,19 +356,26 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
   function adminUsers(ctx: Ctx): void {
     requireAdmin(ctx);
     sendJson(ctx.res, 200, {
-      users: store.data.users.map((u) => ({ ...publicUser(u), banned: u.banned })),
+      users: store.data.users.map((u) => ({
+        ...publicUser(u),
+        banned: u.banned,
+        adsWatched: u.adsWatched ?? 0,
+      })),
     });
   }
 
   function adminStats(ctx: Ctx): void {
     requireAdmin(ctx);
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const adsTotal = store.data.users.reduce((sum, u) => sum + (u.adsWatched ?? 0), 0);
     sendJson(ctx.res, 200, {
       users: store.data.users.length,
       banned: store.data.users.filter((u) => u.banned).length,
       duelsTotal: store.data.duels.length,
       duelsToday: store.data.duels.filter((d) => d.at > dayAgo).length,
       castles: store.data.users.filter((u) => u.castleCode !== null).length,
+      adsTotal,
+      adsEnabled: store.data.adsEnabled !== false,
     });
   }
 
@@ -378,6 +401,20 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
     store.flushSoon();
     sendJson(ctx.res, 200, { ok: true });
   }
+
+  function adWatched(ctx: Ctx): void {
+    const user = requireUser(ctx);
+    user.adsWatched = (user.adsWatched ?? 0) + 1;
+    store.flushSoon();
+    sendJson(ctx.res, 200, { ok: true, adsWatched: user.adsWatched });
+  }
+
+  function adminToggleAds(ctx: Ctx): void {
+    requireAdmin(ctx);
+    store.data.adsEnabled = store.data.adsEnabled === false ? true : false;
+    store.flushSoon();
+    sendJson(ctx.res, 200, { ok: true, adsEnabled: store.data.adsEnabled });
+  }
 }
 
 function newUser(
@@ -399,6 +436,7 @@ function newUser(
     bestWaves: 0,
     bestKills: 0,
     castleCode: null,
+    adsWatched: 0,
   };
 }
 

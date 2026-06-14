@@ -162,7 +162,9 @@ export class EconomySystem {
       // The duel opponent's castle has no economy of its own.
       if (b.owner !== 'player') continue;
       // Lumberjacks need standing forest and slowly consume it.
-      if (b.def.placement === 'adjacentForest' && b.def.recipe) {
+      if (b.defId === 'lumberjack' && b.def.recipe) {
+        b.productionHalted = b.terrainTileInRange(this.ctx.grid, Terrain.Forest, 4) === null;
+      } else if (b.def.placement === 'adjacentForest' && b.def.recipe) {
         b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Forest) === null;
       }
       // Mines need an ore vein and deplete it (phase 20).
@@ -275,7 +277,7 @@ export class EconomySystem {
     const warehouse = this.ctx.getWarehouse();
     if (!warehouse) return;
     for (const b of this.ctx.buildings.values()) {
-      if (b.def.isWarehouse || b.owner !== 'player') continue;
+      if ((b.def.isWarehouse && !b.underConstruction) || b.owner !== 'player') continue;
       // Pickups: bring finished output to the warehouse.
       while (b.unclaimedOutput() > 0) {
         const output = b.def.recipe?.output;
@@ -362,10 +364,9 @@ export class EconomySystem {
     assign(this.pickupQueue, idleCarriers);
   }
 
-  /** Route the worker to the job's first stop. Returns false if unreachable. */
   private startJob(worker: Worker, job: Job): boolean {
     const firstStop =
-      job.kind === 'pickup' ? this.ctx.buildings.get(job.buildingId) : this.ctx.getWarehouse();
+      job.kind === 'pickup' ? this.ctx.buildings.get(job.buildingId) : this.getNearestWarehouse(worker.tile);
     if (!firstStop) return false;
     const path = this.pathTo(worker.tile, firstStop);
     if (!path) return false;
@@ -377,6 +378,21 @@ export class EconomySystem {
 
   private pathTo(from: Point, building: Building): Point[] | null {
     return findPath(this.ctx.grid, from, building.accessTiles(this.ctx.grid));
+  }
+
+  private getNearestWarehouse(point: Point): Building | null {
+    let nearest: Building | null = null;
+    let minDist = Infinity;
+    for (const b of this.ctx.buildings.values()) {
+      if (b.def.isWarehouse && b.owner === 'player' && !b.underConstruction) {
+        const dist = Math.abs(b.x - point.x) + Math.abs(b.y - point.y);
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = b;
+        }
+      }
+    }
+    return nearest ?? this.ctx.getWarehouse();
   }
 
   private advanceWorkers(): void {
@@ -395,7 +411,6 @@ export class EconomySystem {
   }
 
   private onArrival(worker: Worker): void {
-    const warehouse = this.ctx.getWarehouse();
     switch (worker.phase) {
       case 'toPickup': {
         const job = worker.job;
@@ -419,11 +434,12 @@ export class EconomySystem {
           source.reservedOutput = Math.max(0, source.reservedOutput - 1);
           worker.carrying = job.resource;
           worker.carryingCount = 1 + extra;
-          if (!warehouse) {
+          const wh = this.getNearestWarehouse(worker.tile);
+          if (!wh) {
             this.finishJob(worker);
             return;
           }
-          const path = this.pathTo(worker.tile, warehouse);
+          const path = this.pathTo(worker.tile, wh);
           if (!path) {
             // Stranded: drop the goods (lost) and go idle in place.
             worker.carrying = null;
@@ -508,12 +524,12 @@ export class EconomySystem {
   /** Clear the job and send the worker home to the warehouse. */
   private finishJob(worker: Worker): void {
     worker.job = null;
-    const warehouse = this.ctx.getWarehouse();
-    if (!warehouse) {
+    const wh = this.getNearestWarehouse(worker.tile);
+    if (!wh) {
       worker.phase = 'idle';
       return;
     }
-    const path = this.pathTo(worker.tile, warehouse);
+    const path = this.pathTo(worker.tile, wh);
     if (path && path.length > 1) {
       worker.phase = 'returning';
       worker.setPath(path);

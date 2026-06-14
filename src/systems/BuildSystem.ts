@@ -35,6 +35,7 @@ export function checkPlacement(
       const x = gx + dx;
       const y = gy + dy;
       if (!grid.inBounds(x, y)) return { ok: false, reason: 'Außerhalb der Karte' };
+      if (!grid.isExplored(x, y)) return { ok: false, reason: 'Gelände nicht erkundet' };
       if (grid.terrainAt(x, y) !== requiredTerrain) {
         return {
           ok: false,

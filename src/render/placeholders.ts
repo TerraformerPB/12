@@ -60,7 +60,6 @@ function tileHash(gx: number, gy: number): number {
   return (((gx * 73856093) ^ (gy * 19349663)) >>> 0) % 997;
 }
 
-/** Draw one terrain tile into a (chunk) graphics object. */
 export function drawTerrainTile(
   g: Graphics,
   cx: number,
@@ -74,43 +73,71 @@ export function drawTerrainTile(
   switch (terrain) {
     case Terrain.Grass: {
       g.poly(diamond(cx, cy)).fill(checker ? PALETTE.grassA : PALETTE.grassB);
-      // Atmosphere: scattered flowers, bushes and pebbles.
       const ox = ((hash % 13) - 6) * 1.6;
       const oy = ((hash % 7) - 3) * 1.4;
+      // Draw grass blades
+      const bladeColor = shade(checker ? PALETTE.grassA : PALETTE.grassB, 0.78);
+      g.moveTo(cx + ox, cy + oy).lineTo(cx + ox - 1, cy + oy - 4)
+       .moveTo(cx + ox + 2, cy + oy).lineTo(cx + ox + 3, cy + oy - 5)
+       .stroke({ color: bladeColor, width: 1.2 });
+
       if (hash % 23 === 0) {
-        g.circle(cx + ox, cy + oy, 1.6).fill(0xf2e9b0);
-        g.circle(cx + ox + 4, cy + oy + 2, 1.3).fill(0xe8a8b8);
+        // Red flower cluster with yellow centers
+        g.circle(cx + ox, cy + oy, 2.0).fill(0xcc3333);
+        g.circle(cx + ox, cy + oy, 0.8).fill(0xffd700);
+        g.circle(cx + ox + 4, cy + oy + 2, 1.6).fill(0xcc3333);
+        g.circle(cx + ox + 4, cy + oy + 2, 0.6).fill(0xffd700);
       } else if (hash % 19 === 0) {
-        g.ellipse(cx + ox, cy + oy, 4.5, 3).fill(PALETTE.treeDark);
-        g.ellipse(cx + ox - 3, cy + oy + 1.5, 3, 2).fill(PALETTE.treeLight);
+        // Bush cluster with highlight
+        g.ellipse(cx + ox, cy + oy, 5, 3.5).fill(PALETTE.treeDark);
+        g.ellipse(cx + ox - 2, cy + oy - 1, 3.5, 2.2).fill(PALETTE.treeLight);
       } else if (hash % 31 === 0) {
-        g.circle(cx + ox, cy + oy, 2).fill(shade(PALETTE.rock, 1.1));
-        g.circle(cx + ox + 3.5, cy + oy + 1.5, 1.4).fill(PALETTE.rock);
+        // Pebbles
+        g.circle(cx + ox, cy + oy + 1, 2.5).fill({ color: 0x000000, alpha: 0.15 }); // pebble shadow
+        g.circle(cx + ox, cy + oy, 2.2).fill(shade(PALETTE.rock, 1.15));
+        g.circle(cx + ox + 3.5, cy + oy + 1.5, 1.5).fill(PALETTE.rock);
       }
       break;
     }
     case Terrain.Water: {
       g.poly(diamond(cx, cy)).fill(checker ? PALETTE.water : PALETTE.waterDeep);
-      // Light streaks suggest current (fills are cheaper than strokes).
+      // Shoreline wet sand effect on the border
+      if (hash % 4 === 0) {
+        g.poly([cx, cy - HALF_H, cx + 12, cy - HALF_H + 6, cx, cy - HALF_H + 2, cx - 12, cy - HALF_H + 6]).fill({
+          color: 0x8fbdf5,
+          alpha: 0.45
+        });
+      }
+      // Light ripples
       if (hash % 5 < 2) {
         const sy = cy - 4 + (hash % 9);
-        g.rect(cx - 12 + (hash % 6), sy, 16 + (hash % 8), 1.2).fill({
-          color: 0x7ba6e0,
-          alpha: 0.5,
+        g.ellipse(cx - 4 + (hash % 9), sy, 10 + (hash % 5), 1.8).stroke({
+          color: 0x82b2e8,
+          width: 1.0,
+          alpha: 0.35,
         });
       }
       break;
     }
     case Terrain.Forest: {
       g.poly(diamond(cx, cy)).fill(checker ? PALETTE.grassA : PALETTE.grassB);
-      // Two stylized firs per tile (offset for variety via checker).
+      // Detailed pine trees with trunk, multi-layered foliage, and ground drop shadows.
       const tree = (tx: number, ty: number, s: number): void => {
-        g.rect(tx - 1.5 * s, ty - 2 * s, 3 * s, 4 * s).fill(PALETTE.trunk);
-        g.poly([tx, ty - 16 * s, tx + 7 * s, ty - 2 * s, tx - 7 * s, ty - 2 * s]).fill(
+        // Drop shadow
+        g.ellipse(tx, ty + 2, 7 * s, 3.5 * s).fill({ color: 0x000000, alpha: 0.22 });
+        // Trunk
+        g.rect(tx - 1.5 * s, ty - 3 * s, 3 * s, 5 * s).fill(PALETTE.trunk);
+        // Foliage bottom
+        g.poly([tx, ty - 15 * s, tx + 8 * s, ty - 3 * s, tx - 8 * s, ty - 3 * s]).fill(
           checker ? PALETTE.treeDark : PALETTE.treeLight,
         );
-        g.poly([tx, ty - 20 * s, tx + 5 * s, ty - 9 * s, tx - 5 * s, ty - 9 * s]).fill(
+        // Foliage middle
+        g.poly([tx, ty - 20 * s, tx + 6 * s, ty - 9 * s, tx - 6 * s, ty - 9 * s]).fill(
           checker ? PALETTE.treeLight : PALETTE.treeDark,
+        );
+        // Foliage top
+        g.poly([tx, ty - 24 * s, tx + 4 * s, ty - 14 * s, tx - 4 * s, ty - 14 * s]).fill(
+          shade(checker ? PALETTE.treeLight : PALETTE.treeDark, 1.25),
         );
       };
       if (checker) {
@@ -124,8 +151,10 @@ export function drawTerrainTile(
     }
     case Terrain.Rock: {
       g.poly(diamond(cx, cy)).fill(shade(PALETTE.rock, 0.8));
-      // Small lump so rock reads as elevated.
-      const lift = 7;
+      // Ground shadow
+      g.ellipse(cx, cy + 2, HALF_W, HALF_H).fill({ color: 0x000000, alpha: 0.15 });
+      const lift = 8;
+      // Main rock face
       g.poly([
         cx,
         cy - HALF_H / 2 - lift,
@@ -136,12 +165,17 @@ export function drawTerrainTile(
         cx - HALF_W / 2,
         cy - lift / 2,
       ]).fill(PALETTE.rockTop);
+      // Rock cracks/layers
+      g.moveTo(cx - 6, cy - lift / 2).lineTo(cx + 3, cy - lift).stroke({ color: shade(PALETTE.rock, 0.55), width: 1.2 });
+      g.moveTo(cx, cy - lift / 2).lineTo(cx - 4, cy + 2).stroke({ color: shade(PALETTE.rock, 0.55), width: 1.2 });
       break;
     }
     case Terrain.Ore: {
-      // Rock lump with glinting ore speckles so veins stand out on the map.
       g.poly(diamond(cx, cy)).fill(shade(PALETTE.rock, 0.7));
-      const lift = 7;
+      // Ground shadow
+      g.ellipse(cx, cy + 2, HALF_W, HALF_H).fill({ color: 0x000000, alpha: 0.15 });
+      const lift = 8;
+      // Main rock face
       g.poly([
         cx,
         cy - HALF_H / 2 - lift,
@@ -152,8 +186,12 @@ export function drawTerrainTile(
         cx - HALF_W / 2,
         cy - lift / 2,
       ]).fill(shade(PALETTE.rockTop, 0.85));
+      // Rock cracks
+      g.moveTo(cx - 4, cy - lift / 2).lineTo(cx + 5, cy - lift).stroke({ color: shade(PALETTE.rock, 0.5), width: 1.2 });
+      // Glinting gold veins
       for (const [dx, dy] of [[-8, -6], [5, -9], [-2, -2], [9, -3], [-11, 1]] as const) {
-        g.circle(cx + dx, cy + dy - lift / 2, 1.7).fill(0xe3b341);
+        g.circle(cx + dx, cy + dy - lift / 2, 2.0).fill(0xffd700);
+        g.circle(cx + dx + 0.8, cy + dy - lift / 2 - 0.8, 0.8).fill(0xffffff);
       }
       break;
     }
@@ -293,13 +331,26 @@ export function drawBuildingView(
     });
     return;
   }
-  drawBuildingBlock(g, w, h, def.art);
-  drawDecorations(g, def, w, h);
-  drawLevelTrim(g, def, w, h, level);
+
+  let art = def.art;
+  if (def.id === 'hut') {
+    if (level === 1) {
+      art = { color: 0xd8af84, height: 18, material: 'wood' };
+    } else if (level === 2) {
+      art = { color: 0xe8e2d8, height: 22, material: 'wood' };
+    } else if (level === 3) {
+      art = { color: 0x7a828a, height: 26, material: 'stone' };
+    }
+  }
+  const targetDef = def.id === 'hut' ? { ...def, art } : def;
+
+  drawBuildingBlock(g, w, h, targetDef.art);
+  drawDecorations(g, targetDef, w, h, level);
+  drawLevelTrim(g, targetDef, w, h, level);
   // Bar floats above the roof, centered over the footprint.
   const [n, , s] = footprintCorners(w, h);
   const cx = (n[0] + s[0]) / 2;
-  drawHpBar(g, cx, n[1] - def.art.height - 10, Math.max(28, w * 18), hpRatio);
+  drawHpBar(g, cx, n[1] - targetDef.art.height - 10, Math.max(28, w * 18), hpRatio);
 }
 
 /** Visual upgrade markers: timber bracing at level 2, gold trim + banner at 3. */
@@ -325,7 +376,7 @@ function drawLevelTrim(g: Graphics, def: BuildingDef, w: number, h: number, leve
 }
 
 /** Per-building placeholder details (roofs, blades, flags, crates …). */
-function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): void {
+function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number, level = 1): void {
   const lift = def.art.height;
   const [n, e, s, wp] = footprintCorners(w, h);
   // Roof-face corners.
@@ -338,15 +389,9 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): v
 
   switch (def.id) {
     case 'mill': {
-      // Windmill cross on a short mast.
+      // Windmill short mast only (sails are added dynamically).
       const mx = roofCx;
-      const my = roofCy - 8;
-      g.moveTo(mx, roofCy).lineTo(mx, my).stroke({ color: 0x4a3b28, width: 2.5 });
-      for (const a of [0.5, 2.07, 3.64, 5.21]) {
-        g.moveTo(mx, my)
-          .lineTo(mx + Math.cos(a) * 16, my + Math.sin(a) * 16)
-          .stroke({ color: 0xf4eee0, width: 3.5 });
-      }
+      g.moveTo(mx, roofCy).lineTo(mx, roofCy - 8).stroke({ color: 0x4a3b28, width: 2.5 });
       break;
     }
     case 'tower': {
@@ -375,6 +420,11 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): v
       // Two crates on the roof.
       g.rect(roofCx - 10, roofCy - 7, 9, 7).fill(shade(def.art.color, 0.8));
       g.rect(roofCx + 1, roofCy - 5, 7, 5).fill(shade(def.art.color, 0.65));
+      break;
+    }
+    case 'smallWarehouse': {
+      // One crate on the roof.
+      g.rect(roofCx - 5, roofCy - 6, 8, 6).fill(shade(def.art.color, 0.75));
       break;
     }
     case 'bakery': {
@@ -436,10 +486,97 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): v
       break;
     }
     case 'hut': {
-      // Door on the right wall.
-      const dx = (s[0] + e[0]) / 2;
-      const dy = (s[1] + e[1]) / 2;
-      g.poly([dx, dy - 1, dx + 5, dy - 3.5, dx + 5, dy - 12, dx, dy - 9]).fill(0x4a3826);
+      // 1. Sloped Roof (hipRoof equivalent)
+      let roofColor = 0xb89f68; // Lvl 1: Straw thatch
+      let rH = 11;
+      if (level === 2) {
+        roofColor = 0xa84832; // Lvl 2: Red clay
+        rH = 12;
+      } else if (level === 3) {
+        roofColor = 0x3f5a7a; // Lvl 3: Slate blue
+        rH = 13;
+      }
+
+      // Roof ridge points R1 and R2
+      const r1 = [(rw[0] + rn[0]) / 2, (rw[1] + rn[1]) / 2 - rH];
+      const r2 = [(rs[0] + re[0]) / 2, (rs[1] + re[1]) / 2 - rH];
+
+      // Left sloped roof face (darker shade)
+      g.poly([rw[0], rw[1], rs[0], rs[1], r2[0], r2[1], r1[0], r1[1]])
+        .fill({ color: shade(roofColor, 0.72) });
+
+      // Right sloped roof face (lighter shade)
+      g.poly([rn[0], rn[1], re[0], re[1], r2[0], r2[1], r1[0], r1[1]])
+        .fill({ color: shade(roofColor, 1.12) });
+
+      // Ridge line highlight
+      g.moveTo(r1[0], r1[1]).lineTo(r2[0], r2[1]).stroke({ color: shade(roofColor, 1.35), width: 1.5 });
+
+      // 2. Level-specific wall framing / doors / windows
+      if (level === 1) {
+        // Door on the right wall
+        const dx = (s[0] + e[0]) / 2;
+        const dy = (s[1] + e[1]) / 2;
+        g.poly([dx - 3, dy + 1, dx + 3, dy - 2, dx + 3, dy - 10, dx - 3, dy - 7]).fill(0x3d2b1a);
+        
+        // Window on the right wall
+        const wx = s[0] + (e[0] - s[0]) * 0.8;
+        const wy = s[1] + (e[1] - s[1]) * 0.8 - lift * 0.5;
+        g.poly([wx - 2, wy + 0.5, wx + 2, wy - 0.5, wx + 2, wy - 5, wx - 2, wy - 4])
+          .fill(0xf4c95d)
+          .stroke({ color: 0x3a2a18, width: 0.8 });
+      } else if (level === 2) {
+        // Timber framing on left wall (wp -> s)
+        for (const t of [0, 0.5, 1]) {
+          const a = [wp[0] + (s[0] - wp[0]) * t, wp[1] + (s[1] - wp[1]) * t];
+          g.moveTo(a[0], a[1]).lineTo(a[0], a[1] - lift).stroke({ color: 0x4a301a, width: 1.5 });
+        }
+        // Timber framing on right wall (s -> e)
+        for (const t of [0, 0.5, 1]) {
+          const b = [s[0] + (e[0] - s[0]) * t, s[1] + (e[1] - s[1]) * t];
+          g.moveTo(b[0], b[1]).lineTo(b[0], b[1] - lift).stroke({ color: 0x4a301a, width: 1.5 });
+        }
+        // Horizontal timber beam
+        g.moveTo(wp[0], wp[1] - lift * 0.555).lineTo(s[0], s[1] - lift * 0.555).stroke({ color: 0x4a301a, width: 1.5 });
+        g.moveTo(s[0], s[1] - lift * 0.555).lineTo(e[0], e[1] - lift * 0.555).stroke({ color: 0x4a301a, width: 1.5 });
+
+        // Door on right wall
+        const dx = (s[0] + e[0]) / 2;
+        const dy = (s[1] + e[1]) / 2;
+        g.poly([dx - 3, dy + 1, dx + 3, dy - 2, dx + 3, dy - 11, dx - 3, dy - 8]).fill(0x3d2b1a);
+
+        // Windows on left & right walls
+        const wlx = wp[0] + (s[0] - wp[0]) * 0.55;
+        const wly = wp[1] + (s[1] - wp[1]) * 0.55 - lift * 0.7;
+        g.poly([wlx - 2.5, wly + 0.5, wlx + 2.5, wly - 0.5, wlx + 2.5, wly - 5.5, wlx - 2.5, wly - 4.5])
+          .fill(0xf4c95d)
+          .stroke({ color: 0x3a2a18, width: 0.8 });
+
+        const wrx = s[0] + (e[0] - s[0]) * 0.8;
+        const wry = s[1] + (e[1] - s[1]) * 0.8 - lift * 0.7;
+        g.poly([wrx - 2.5, wry + 0.5, wrx + 2.5, wry - 0.5, wrx + 2.5, wry - 5.5, wrx - 2.5, wry - 4.5])
+          .fill(0xf4c95d)
+          .stroke({ color: 0x3a2a18, width: 0.8 });
+      } else {
+        // Door on right wall (arched stone door, gold highlight trim)
+        const dx = (s[0] + e[0]) / 2;
+        const dy = (s[1] + e[1]) / 2;
+        g.poly([dx - 4, dy + 1.5, dx + 4, dy - 2.5, dx + 4, dy - 12, dx - 4, dy - 8]).fill(0xe3b341);
+        g.poly([dx - 3, dy + 1, dx + 3, dy - 2, dx + 3, dy - 11, dx - 3, dy - 8]).fill(0x2a1d12);
+
+        // Windows with gold frames
+        const wlx = wp[0] + (s[0] - wp[0]) * 0.5;
+        const wly = wp[1] + (s[1] - wp[1]) * 0.5 - lift * 0.6;
+        g.poly([wlx - 3, wly + 0.5, wlx + 3, wly - 0.5, wlx + 3, wly - 7, wlx - 3, wly - 6])
+          .fill(0xf4c95d)
+          .stroke({ color: 0xe3b341, width: 1 });
+
+        const wrx = s[0] + (e[0] - s[0]) * 0.75;
+        const wry = s[1] + (e[1] - s[1]) * 0.75 - lift * 0.6;
+        g.poly([wrx - 3, wry + 0.5, wrx + 3, wry - 0.5, wrx + 3, wry - 7, wrx - 3, wry - 6])
+          .fill(0xf4c95d)
+          .stroke({ color: 0xe3b341, width: 1 });
+      }
       break;
     }
     case 'gate': {
@@ -447,6 +584,58 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number): v
       const dx2 = (s[0] + e[0]) / 2;
       const dy2 = (s[1] + e[1]) / 2;
       g.poly([dx2, dy2, dx2 + 7, dy2 - 3.5, dx2 + 7, dy2 - 16, dx2, dy2 - 12]).fill(0x241b12);
+      break;
+    }
+    case 'quarry': {
+      // Stone piles at the front corner.
+      g.ellipse(s[0] - 6, s[1] - 4, 5, 2.5).fill(0x9298a4);
+      g.ellipse(s[0] + 4, s[1] - 5, 4, 2).fill(0x787e8a);
+      break;
+    }
+    case 'keep': {
+      // Big red flag.
+      g.moveTo(roofCx, roofCy).lineTo(roofCx, roofCy - 20).stroke({ color: 0x4a3b28, width: 2 });
+      g.poly([roofCx, roofCy - 20, roofCx + 12, roofCy - 17, roofCx, roofCy - 14]).fill(PALETTE.flag);
+      // Large arched door on the front-right.
+      const dx = (s[0] + e[0]) / 2;
+      const dy = (s[1] + e[1]) / 2;
+      g.poly([dx - 4, dy - 1, dx + 4, dy - 4, dx + 4, dy - 14, dx - 4, dy - 11]).fill(0x4a3826);
+      break;
+    }
+    case 'market': {
+      // Colorful striped awnings on the roof.
+      g.rect(roofCx - 10, roofCy - 6, 8, 5).fill(0xc23b3b); // Red tent
+      g.rect(roofCx + 2, roofCy - 4, 7, 4).fill(0x3a6fc4); // Blue tent
+      break;
+    }
+    case 'sheepFarm': {
+      // White puffs representing sheep on the pasture.
+      g.circle(s[0] - 8, s[1] - 4, 3).fill(0xffffff);
+      g.circle(s[0] + 6, s[1] - 5, 2.5).fill(0xf0f0f0);
+      break;
+    }
+    case 'weavery': {
+      // Fabric hanging from window.
+      const dx = (s[0] + e[0]) / 2;
+      const dy = (s[1] + e[1]) / 2;
+      g.rect(dx - 2, dy - 8, 4, 9).fill(0x9a5a74);
+      break;
+    }
+    case 'stable': {
+      // Open paddock entrance.
+      const dx = (s[0] + e[0]) / 2;
+      const dy = (s[1] + e[1]) / 2;
+      g.poly([dx - 3, dy - 1, dx + 3, dy - 3, dx + 3, dy - 11, dx - 3, dy - 9]).fill(0x241b12);
+      break;
+    }
+    case 'gateIron': {
+      // Arched opening with iron grid spikes.
+      const dx = (s[0] + e[0]) / 2;
+      const dy = (s[1] + e[1]) / 2;
+      g.poly([dx, dy, dx + 7, dy - 3.5, dx + 7, dy - 16, dx, dy - 12]).fill(0x1a1510);
+      // Spikes
+      g.moveTo(dx + 2, dy - 6).lineTo(dx + 2, dy - 13).stroke({ color: 0x4a4a4a, width: 1.2 });
+      g.moveTo(dx + 5, dy - 7.5).lineTo(dx + 5, dy - 14.5).stroke({ color: 0x4a4a4a, width: 1.2 });
       break;
     }
     default:
@@ -479,7 +668,7 @@ export function drawSoldier(g: Graphics, selected: boolean, hpRatio = 1): void {
   if (selected) {
     g.ellipse(0, 2, 12, 6).stroke({ color: PALETTE.selection, width: 2, alpha: 0.95 });
   }
-  g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+  g.ellipse(0, 2.5, 8.5, 4.5).fill({ color: 0x000000, alpha: 0.28 });
   // Spear behind the body.
   g.moveTo(5, 1).lineTo(9, -20).stroke({ color: PALETTE.trunk, width: 1.8 });
   g.poly([9, -20, 11.5, -16.5, 7.5, -17]).fill(PALETTE.soldierHelmet);
@@ -512,7 +701,7 @@ export function drawEnemy(g: Graphics, art: EnemyDef['art'], hpRatio = 1): void 
 export function drawWorker(g: Graphics, carryingColor: number | null): void {
   g.clear();
   // Soft shadow.
-  g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+  g.ellipse(0, 2.5, 8.5, 4.5).fill({ color: 0x000000, alpha: 0.28 });
   // Tunic body.
   g.poly([-5, 0, 5, 0, 3.5, -9, -3.5, -9])
     .fill(PALETTE.workerBody)
@@ -527,3 +716,134 @@ export function drawWorker(g: Graphics, carryingColor: number | null): void {
       .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
   }
 }
+
+/** Draw a fishery boat on water. */
+export function drawFisheryBoat(g: Graphics, bobTimer: number): void {
+  g.clear();
+  // Soft shadow on water
+  g.ellipse(0, 4, 12, 5).fill({ color: 0x000000, alpha: 0.2 });
+  // Wooden boat hull
+  g.poly([-14, -2, 14, -6, 10, 4, -10, 6])
+    .fill(0x8a5a36)
+    .stroke({ color: 0x4a2a16, width: 1.5 });
+  // Inside of boat (darker)
+  g.poly([-11, -2, 11, -5, 8, 2, -8, 3]).fill(0x5a3a1d);
+  // Seat plank
+  g.rect(-4, -2, 8, 3).fill(0x9a6b3f);
+  // Fishing rod (shaking/bobbing slightly)
+  const angle = Math.sin(bobTimer * 4) * 0.08;
+  const rx = 6;
+  const ry = -2;
+  const length = 16;
+  const tipX = rx + Math.cos(-0.6 + angle) * length;
+  const tipY = ry + Math.sin(-0.6 + angle) * length * 0.8;
+  g.moveTo(rx, ry).lineTo(tipX, tipY).stroke({ color: 0xc8a27c, width: 1.5 });
+  // Fishing line going down into water
+  g.moveTo(tipX, tipY).lineTo(tipX + 2, tipY + 12 + Math.sin(bobTimer * 2) * 2).stroke({ color: 0xdcdcdc, width: 0.8 });
+}
+
+/** Draw a decorative worker NPC with matching tools (going/working) or cargo (returning). */
+export function drawDecorativeNPC(
+  g: Graphics,
+  type: 'lumberjack' | 'miner' | 'quarryman' | 'farmer',
+  phase: 'toTarget' | 'working' | 'returning' | 'idle',
+  hasSprite: boolean
+): void {
+  g.clear();
+  if (hasSprite) {
+    // Just draw overlay (axe/pickaxe/scythe/hoe or log/ore/stone/wheat)
+    if (phase === 'returning') {
+      if (type === 'lumberjack') {
+        // Log on shoulder
+        g.rect(2, -21, 10, 5)
+          .fill(0x9a6b3f)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+      } else if (type === 'miner') {
+        // Ore chunk on shoulder
+        g.rect(2, -21, 8, 6)
+          .fill(0x47494f)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+        g.circle(4, -18, 1.2).fill(0xe3b341); // gold glint
+        g.circle(7, -19, 1).fill(0xe3b341);
+      } else if (type === 'quarryman') {
+        // Stone block on shoulder
+        g.rect(2, -22, 8, 8)
+          .fill(0xa5aab5)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+      } else if (type === 'farmer') {
+        // Wheat sheaf
+        g.ellipse(5, -19, 4, 7).fill(0xe3c558);
+        g.moveTo(2, -21).lineTo(8, -17).stroke({ color: 0xc8a27c, width: 1 });
+      }
+    } else if (phase === 'toTarget' || phase === 'working') {
+      // Draw tool in hand
+      if (type === 'lumberjack') {
+        // Axe handle
+        g.moveTo(2, -12).lineTo(8, -20).stroke({ color: 0x5a4632, width: 1.5 });
+        // Axe head
+        g.poly([8, -20, 12, -22, 10, -17]).fill(0x777777).stroke({ color: 0x333333, width: 0.8 });
+      } else if (type === 'miner') {
+        // Pickaxe handle
+        g.moveTo(2, -10).lineTo(8, -19).stroke({ color: 0x5a4632, width: 1.5 });
+        // Pickaxe curved head
+        g.moveTo(5, -21).quadraticCurveTo(8, -19, 11, -15).stroke({ color: 0x6e7480, width: 2 });
+      } else if (type === 'quarryman') {
+        // Hammer handle
+        g.moveTo(2, -10).lineTo(8, -19).stroke({ color: 0x5a4632, width: 1.5 });
+        // Hammer head (blocky)
+        g.rect(6, -21, 5, 4).fill(0x555c69).stroke({ color: 0x222222, width: 0.8 });
+      } else if (type === 'farmer') {
+        // Scythe/hoe handle
+        g.moveTo(1, -7).lineTo(8, -22).stroke({ color: 0x5a4632, width: 1.5 });
+        // Curved scythe blade
+        g.moveTo(8, -22).quadraticCurveTo(14, -23, 13, -16).stroke({ color: 0xdcdcdc, width: 1.2 });
+      }
+    }
+  } else {
+    // Draw entire worker
+    // Soft shadow
+    g.ellipse(0, 2, 7, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+    // Draw body
+    g.poly([-5, 0, 5, 0, 3.5, -9, -3.5, -9])
+      .fill(PALETTE.workerBody)
+      .stroke({ color: PALETTE.workerOutline, width: 1.2 });
+    // Draw head
+    g.circle(0, -12, 3.8).fill(PALETTE.skin).stroke({ color: PALETTE.workerOutline, width: 1 });
+    // Draw hat/hood
+    g.poly([-4, -13, 4, -13, 0, -17.5]).fill(shade(PALETTE.workerBody, 0.8));
+
+    if (phase === 'returning') {
+      if (type === 'lumberjack') {
+        g.rect(-6, -18, 12, 5)
+          .fill(0x9a6b3f)
+          .stroke({ color: PALETTE.workerOutline, width: 1 });
+      } else if (type === 'miner') {
+        g.rect(-5, -18, 10, 6)
+          .fill(0x47494f)
+          .stroke({ color: PALETTE.workerOutline, width: 1 });
+        g.circle(-2, -15, 1).fill(0xe3b341);
+      } else if (type === 'quarryman') {
+        g.rect(-5, -19, 10, 7)
+          .fill(0xa5aab5)
+          .stroke({ color: PALETTE.workerOutline, width: 1 });
+      } else if (type === 'farmer') {
+        g.ellipse(0, -17, 4, 6).fill(0xe3c558).stroke({ color: PALETTE.workerOutline, width: 1 });
+      }
+    } else if (phase === 'toTarget' || phase === 'working') {
+      if (type === 'lumberjack') {
+        g.moveTo(3, -7).lineTo(9, -15).stroke({ color: 0x5a4632, width: 1.5 });
+        g.poly([9, -15, 13, -17, 11, -12]).fill(0xa8adb8).stroke({ color: PALETTE.workerOutline, width: 0.8 });
+      } else if (type === 'miner') {
+        g.moveTo(3, -7).lineTo(9, -15).stroke({ color: 0x5a4632, width: 1.5 });
+        g.moveTo(6, -17).quadraticCurveTo(9, -15, 12, -11).stroke({ color: 0xa8adb8, width: 2 });
+      } else if (type === 'quarryman') {
+        g.moveTo(3, -7).lineTo(9, -15).stroke({ color: 0x5a4632, width: 1.5 });
+        g.rect(7, -17, 4, 3).fill(0x6e7480).stroke({ color: PALETTE.workerOutline, width: 0.8 });
+      } else if (type === 'farmer') {
+        g.moveTo(2, -5).lineTo(8, -17).stroke({ color: 0x5a4632, width: 1.5 });
+        g.moveTo(8, -17).quadraticCurveTo(13, -18, 12, -12).stroke({ color: 0xa8adb8, width: 1.2 });
+      }
+    }
+  }
+}
+

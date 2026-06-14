@@ -98,4 +98,9 @@ export class BuildingSprites {
     }
     return entry;
   }
+
+  /** Check if a building has a loaded external sprite variant at this level. */
+  hasExternal(defId: string, level: number): boolean {
+    return this.external.has(`${defId}:L${level}`);
+  }
 }

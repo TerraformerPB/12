@@ -26,6 +26,7 @@ export interface UserRecord {
   bestKills: number;
   /** Uploaded castle snapshot (BURG1. code) for async duels. */
   castleCode: string | null;
+  adsWatched: number;
 }
 
 export interface DuelLogRecord {
@@ -45,9 +46,10 @@ export interface DataShape {
   secret: string;
   users: UserRecord[];
   duels: DuelLogRecord[];
+  adsEnabled?: boolean;
 }
 
-const EMPTY: DataShape = { nextUserId: 1, nextDuelId: 1, secret: '', users: [], duels: [] };
+const EMPTY: DataShape = { nextUserId: 1, nextDuelId: 1, secret: '', users: [], duels: [], adsEnabled: true };
 
 export class JsonStore {
   readonly data: DataShape;

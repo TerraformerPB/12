@@ -3,12 +3,25 @@ apply plugin: 'com.android.application'
 android {
     namespace = "de.burgspiel.app"
     compileSdk = rootProject.ext.compileSdkVersion
+
+    signingConfigs {
+        release {
+            // To sign your release build for the Play Store, generate a keystore file
+            // (e.g. keytool -genkey -v -keystore my-release-key.keystore -alias my-key-alias -keyalg RSA -keysize 2048 -validity 10000)
+            // and configure its location and credentials here:
+            // storeFile file("my-release-key.keystore")
+            // storePassword "YOUR_STORE_PASSWORD"
+            // keyAlias "YOUR_KEY_ALIAS"
+            // keyPassword "YOUR_KEY_PASSWORD"
+        }
+    }
+
     defaultConfig {
         applicationId "de.burgspiel.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "0.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,8 +31,10 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Uncomment the line below once release signing details above are configured:
+            // signingConfig signingConfigs.release
         }
     }
 }
