@@ -1,18 +1,21 @@
-# Deployment auf einen eigenen Linux-VPS
+# Deployment auf einen eigenen Linux-VPS (hinter Cloudflare)
 
 Setup für **Frontend (Spiel) + Backend (Accounts/Bestenlisten/Duelle)** auf
-einem Debian/Ubuntu-Server mit nginx-Reverse-Proxy und HTTPS (Let's Encrypt).
+einem Debian/Ubuntu-Server mit nginx-Reverse-Proxy. Die Domain
+`burg.paulbartsch.de` läuft über den **Cloudflare-Proxy** (orange Wolke),
+Cloudflare übernimmt das öffentliche HTTPS.
 
 Ergebnis:
-- Spiel unter `https://DEINE-DOMAIN`
-- Admin-Dashboard unter `https://DEINE-DOMAIN/admin`
+- Spiel unter `https://burg.paulbartsch.de`
+- Admin-Dashboard unter `https://burg.paulbartsch.de/admin`
 - Node-Backend lokal auf `127.0.0.1:8787`, von nginx unter `/api` und `/admin` geproxyt
-- Das Spiel spricht das Backend automatisch same-origin an (keine manuelle Adress-Eingabe nötig)
+- Verschlüsselung Cloudflare→Origin via Origin-Cert (nginx 443)
+- Das Spiel spricht das Backend automatisch same-origin an (keine manuelle Adresse nötig)
 
 ## Voraussetzungen
-- Frischer Debian/Ubuntu-VPS mit root/sudo
-- Eine Domain, deren DNS-A-(und ggf. AAAA-)Record auf die Server-IP zeigt
-- Ports 80 und 443 offen
+- Frischer Debian/Ubuntu-VPS mit root/sudo (IP `217.160.190.29`)
+- Cloudflare-DNS: A-Record `burg` → `217.160.190.29`, Proxy **an** (orange) ✅ schon erledigt
+- Ports 80 und 443 am Server offen
 
 ## Einmaliges Setup
 
@@ -21,12 +24,22 @@ Ergebnis:
 sudo git clone -b claude/loving-thompson-my7ouf \
   <REPO-URL> /opt/burgspiel
 
-# 2) Setup ausführen (baut, richtet systemd + nginx + HTTPS ein)
+# 2) Setup ausführen (baut, richtet systemd + nginx + Origin-Cert ein)
 cd /opt/burgspiel
-sudo DOMAIN=spiel.example.com EMAIL=du@example.com bash deploy/setup.sh
+sudo bash deploy/setup.sh
 ```
 
-Das war's. Spiel: `https://spiel.example.com`, Admin: `.../admin`.
+## 3) Cloudflare SSL-Modus setzen (einmalig, im Cloudflare-Dashboard)
+
+**SSL/TLS → Overview → Modus „Full"** auswählen.
+
+- „Full" passt zum selbstsignierten Origin-Cert, das `setup.sh` erzeugt.
+- Nicht „Flexible" (sonst Redirect-Loop, da nginx auf HTTPS umleitet).
+- Optional besser „Full (strict)": dazu ein **Cloudflare Origin Certificate**
+  erstellen, als `/etc/ssl/burgspiel/origin.crt` + `origin.key` ablegen
+  (`systemctl reload nginx`) und CF-Modus auf „Full (strict)" stellen.
+
+Danach: Spiel unter `https://burg.paulbartsch.de`, Admin unter `.../admin`.
 
 > Erster registrierter Account wird automatisch Admin. Alternativ vorab in
 > `deploy/burgspiel.service` `BURGSPIEL_ADMIN_USER`/`_PASSWORD` setzen.
@@ -55,6 +68,7 @@ nginx -t && systemctl reload nginx
 | `PORT` | HTTP-Port des Backends | `8787` |
 | `BURGSPIEL_DATA` | Pfad der JSON-Datendatei | `/opt/burgspiel/server-data/burgspiel.json` |
 | `BURGSPIEL_CORS` | `Access-Control-Allow-Origin` | `*` |
+| `BURGSPIEL_TRUST_PROXY` | Client-IP aus `X-Forwarded-For` (hinter Proxy) | `1` |
 | `BURGSPIEL_ADMIN_USER` / `_PASSWORD` | Admin-Seed beim ersten Start | — |
 | `BURGSPIEL_RATE_MAX` | Requests pro 10 s und IP | `30` |
 

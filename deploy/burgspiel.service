@@ -15,6 +15,8 @@ WorkingDirectory=/opt/burgspiel
 Environment=PORT=8787
 Environment=BURGSPIEL_DATA=/opt/burgspiel/server-data/burgspiel.json
 Environment=BURGSPIEL_CORS=*
+# Hinter nginx/Cloudflare: echte Client-IP aus X-Forwarded-For fürs Rate-Limit.
+Environment=BURGSPIEL_TRUST_PROXY=1
 # Admin-Seed beim ersten Start (sonst wird der erste Account Admin):
 # Environment=BURGSPIEL_ADMIN_USER=admin
 # Environment=BURGSPIEL_ADMIN_PASSWORD=bitte-aendern

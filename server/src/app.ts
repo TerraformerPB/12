@@ -56,6 +56,22 @@ function publicUser(u: UserRecord): Record<string, unknown> {
   };
 }
 
+/**
+ * Real client IP for rate limiting. Behind a reverse proxy (nginx/Cloudflare)
+ * the socket address is always the proxy, so with BURGSPIEL_TRUST_PROXY set we
+ * trust the left-most X-Forwarded-For entry (nginx fills it from the real
+ * client, restoring Cloudflare's CF-Connecting-IP). Off by default so a
+ * directly exposed server cannot be spoofed via headers.
+ */
+function clientIp(req: IncomingMessage): string {
+  if (process.env.BURGSPIEL_TRUST_PROXY) {
+    const fwd = req.headers['x-forwarded-for'];
+    const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket.remoteAddress ?? '?';
+}
+
 export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerResponse) => void {
   if (!store.data.secret) {
     store.data.secret = randomBytes(32).toString('hex');
@@ -90,7 +106,7 @@ export function createApp(store: JsonStore): (req: IncomingMessage, res: ServerR
       return;
     }
 
-    const ip = req.socket.remoteAddress ?? '?';
+    const ip = clientIp(req);
     const now = Date.now();
     const hits = (rates.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
     hits.push(now);
