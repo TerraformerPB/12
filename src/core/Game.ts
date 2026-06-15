@@ -749,6 +749,7 @@ export class Game {
 
     const cy = Math.floor(MAP_H / 2);
     this.resetWorld((Math.random() * 0xffffffff) >>> 0, duelClearRects(MAP_W, MAP_H));
+    this.grid.revealAll(); // duels show the whole battlefield — no fog of war
     this.setupSystems(this.newStore());
     this.duelNodes = duelNodes(MAP_W, MAP_H).flatMap((n) => [
       { ...n, owner: 'none' as const },
@@ -863,6 +864,7 @@ export class Game {
     this.resetWorld(0, undefined, terrain.slice());
     this.setupSystems(this.newStore());
     this.warehouseId = 0;
+    this.grid.revealAll(); // the editor never uses fog of war
     const center = gridToScreen(MAP_W / 2, MAP_H / 2);
     this.camera.centerOn(center.x, center.y);
     this.input?.setPaintMode(true);

@@ -128,6 +128,11 @@ export class IsoGrid {
     this.exploredState[this.idx(gx, gy)] = val ? 1 : 0;
   }
 
+  /** Reveal the whole map (used by the map editor and duels — no fog there). */
+  revealAll(): void {
+    this.exploredState.fill(1);
+  }
+
   exploredIndices(): number[] {
     const list: number[] = [];
     for (let i = 0; i < this.exploredState.length; i++) {

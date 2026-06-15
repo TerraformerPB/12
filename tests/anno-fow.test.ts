@@ -16,6 +16,15 @@ describe('Fog of War & Larger Map', () => {
     expect(grid.isExplored(10, 10)).toBe(true);
   });
 
+  it('revealAll uncovers the whole map (editor/duel)', () => {
+    const grid = new IsoGrid(8, 8);
+    expect(grid.isExplored(0, 0)).toBe(false);
+    grid.revealAll();
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) expect(grid.isExplored(x, y)).toBe(true);
+    }
+  });
+
   it('blocks building placement on unexplored tiles', () => {
     const grid = new IsoGrid(64, 64);
     const hutDef = getDef('hut');
