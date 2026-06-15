@@ -140,7 +140,7 @@ export class WorldRenderer {
   private selectionView!: Graphics;
   private selectionKey = '';
   private fogView!: Graphics;
-  private decorativeNPCs = new Map<number, DecorativeNPCState>();
+  private decorativeNPCs = new Map<string, DecorativeNPCState>();
   private fisheryBoats = new Map<number, FisheryBoatState>();
   private lastTime = performance.now();
 
@@ -702,33 +702,58 @@ export class WorldRenderer {
   }
 
   private syncDecorativeNPCs(state: RenderState, dt: number): void {
-    const liveBuildingIds = new Set<number>();
-
     for (const b of state.buildings.values()) {
       if (b.defId !== 'lumberjack' && b.defId !== 'mine' && b.defId !== 'quarry' && b.defId !== 'farm') continue;
-      liveBuildingIds.add(b.id);
 
       const active = !b.underConstruction && b.assignedWorkers > 0 && !b.productionHalted && !b.userPaused;
-      
-      // Determine target tile based on building type
-      let target: Point | null = null;
-      if (active) {
-        if (b.defId === 'lumberjack') {
-          target = b.terrainTileInRange(state.grid, Terrain.Forest, 4);
-        } else if (b.defId === 'mine') {
-          target = b.adjacentTerrainTile(state.grid, Terrain.Ore);
-        } else if (b.defId === 'quarry') {
-          target = b.adjacentTerrainTile(state.grid, Terrain.Rock);
-        } else if (b.defId === 'farm') {
-          const access = b.accessTiles(state.grid);
-          // door is access[0]. Target field spot is any other access tile.
-          target = access.length > 1 ? access[1 + ((b.id * 17) % (access.length - 1))] : (access[0] ?? { x: b.x, y: b.y });
-        }
+      // One animated figure per assigned worker (the farm can staff two).
+      const maxFigures = b.workersRequired || 1;
+      const desired = active ? Math.min(b.assignedWorkers, maxFigures) : 0;
+      for (let index = 0; index < maxFigures; index++) {
+        this.updateDecorativeNPC(state, b, index, index < desired, dt);
       }
+    }
 
-      let npc = this.decorativeNPCs.get(b.id);
+    // Clean up NPCs whose building was removed entirely.
+    for (const [key, npc] of this.decorativeNPCs) {
+      if (!state.buildings.has(npc.buildingId)) {
+        npc.view.destroy({ children: true });
+        this.decorativeNPCs.delete(key);
+      }
+    }
+  }
 
-      if (!active || !target) {
+  /** Animate one decorative field/resource worker, keyed by building + index. */
+  private updateDecorativeNPC(
+    state: RenderState,
+    b: Building,
+    index: number,
+    want: boolean,
+    dt: number,
+  ): void {
+    const key = `${b.id}:${index}`;
+
+    // Determine target tile based on building type.
+    let target: Point | null = null;
+    if (want) {
+      if (b.defId === 'lumberjack') {
+        target = b.terrainTileInRange(state.grid, Terrain.Forest, 4);
+      } else if (b.defId === 'mine') {
+        target = b.adjacentTerrainTile(state.grid, Terrain.Ore);
+      } else if (b.defId === 'quarry') {
+        target = b.adjacentTerrainTile(state.grid, Terrain.Rock);
+      } else if (b.defId === 'farm') {
+        const access = b.accessTiles(state.grid);
+        // door is access[0]. Spread farmers across the remaining field spots.
+        target = access.length > 1
+          ? access[1 + ((b.id * 17 + index * 7) % (access.length - 1))]
+          : (access[0] ?? { x: b.x, y: b.y });
+      }
+    }
+
+    let npc = this.decorativeNPCs.get(key);
+
+      if (!want || !target) {
         if (npc) {
           // Return worker to building door and despawn
           if (npc.phase !== 'returning') {
@@ -741,8 +766,8 @@ export class WorldRenderer {
               npc.targetTile = null;
             } else {
               npc.view.destroy({ children: true });
-              this.decorativeNPCs.delete(b.id);
-              continue;
+              this.decorativeNPCs.delete(key);
+              return;
             }
           }
 
@@ -768,8 +793,8 @@ export class WorldRenderer {
           if (npc.pathIndex >= npc.path.length) {
             // Arrived at door, despawn
             npc.view.destroy({ children: true });
-            this.decorativeNPCs.delete(b.id);
-            continue;
+            this.decorativeNPCs.delete(key);
+            return;
           }
 
           // Visual updates
@@ -796,7 +821,7 @@ export class WorldRenderer {
           npc.view.rotation = 0;
           drawDecorativeNPC(npc.gfx, npc.type, npc.phase, npc.sprite !== null);
         }
-        continue;
+        return;
       }
 
       // Building is active and has a target
@@ -821,7 +846,7 @@ export class WorldRenderer {
           facing: 1,
           lastFrame: -1,
         };
-        this.decorativeNPCs.set(b.id, npc);
+        this.decorativeNPCs.set(key, npc);
       }
 
       // Target validation check
@@ -1017,15 +1042,6 @@ export class WorldRenderer {
       }
 
       drawDecorativeNPC(npc.gfx, npc.type, npc.phase, npc.sprite !== null);
-    }
-
-    // Clean up completely removed buildings
-    for (const [id, npc] of this.decorativeNPCs) {
-      if (!state.buildings.has(id)) {
-        npc.view.destroy({ children: true });
-        this.decorativeNPCs.delete(id);
-      }
-    }
   }
 
   private syncFisheryBoats(state: RenderState, dt: number): void {
