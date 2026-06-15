@@ -35,7 +35,19 @@ export interface MatchOpponent {
 
 const URL_KEY = 'burgspiel.serverUrl';
 const TOKEN_KEY = 'burgspiel.onlineToken';
-const DEFAULT_URL = 'http://localhost:8787';
+
+/**
+ * Default backend address. In the browser the backend is reached same-origin
+ * (nginx reverse-proxies /api and /admin to the Node server), so a deployed
+ * build works without manually entering a server URL. Falls back to the local
+ * dev server outside the browser (e.g. tests, SSR).
+ */
+function defaultServerUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.origin?.startsWith('http')) {
+    return window.location.origin;
+  }
+  return 'http://localhost:8787';
+}
 
 export class OnlineError extends Error {}
 
@@ -49,7 +61,7 @@ export class OnlineClient {
   }
 
   get serverUrl(): string {
-    return this.storage.getItem(URL_KEY) ?? DEFAULT_URL;
+    return this.storage.getItem(URL_KEY) ?? defaultServerUrl();
   }
 
   setServerUrl(url: string): void {
