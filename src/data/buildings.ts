@@ -51,6 +51,8 @@ export interface BuildingDef {
   isWarehouse?: boolean;
   /** Total goods this warehouse can physically hold (sum over all resources). */
   storageCap?: number;
+  /** Late-game gate: needs a level-3 house and every other economy building built. */
+  lateGame?: boolean;
   /** Own units may walk through this building's tiles (gates). */
   passable?: boolean;
   /** Walkable by everyone; own units move faster. 1 = road/bridge, 2 = paved. */
@@ -275,6 +277,45 @@ export const BUILDING_DEFS = {
     description: 'Webt 1 Wolle zu 1 Tuch (6 Sekunden). Luxusgut.',
     art: { color: 0x9a5a74, height: 28 },
   },
+  imkerei: {
+    id: 'imkerei',
+    category: 'economy',
+    name: 'Imkerei',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 50, stone: 20 },
+    placement: PlacementRule.Grass,
+    recipe: { output: 'honig', duration: 8 },
+    workersRequired: 2,
+    lateGame: true,
+    description: 'Erntet 1 Honig alle 8 Sekunden. Grundstoff für Met. Endgame-Gebäude.',
+    art: { color: 0xe0a92a, height: 24 },
+  },
+  methaus: {
+    id: 'methaus',
+    category: 'economy',
+    name: 'Methaus',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 60, stone: 40 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'honig', output: 'met', duration: 7 },
+    workersRequired: 2,
+    lateGame: true,
+    description: 'Braut 1 Honig zu 1 Met (7 Sekunden). Luxus für Händler-Häuser. Endgame-Gebäude.',
+    art: { color: 0xc9962f, height: 30 },
+  },
+  goldschmiede: {
+    id: 'goldschmiede',
+    category: 'economy',
+    name: 'Goldschmiede',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 50, stone: 60 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'gold', output: 'schmuck', duration: 9 },
+    workersRequired: 2,
+    lateGame: true,
+    description: 'Verarbeitet 1 Gold zu 1 Schmuck (9 Sekunden). Höchster Luxus für Händler-Häuser. Endgame-Gebäude.',
+    art: { color: 0x6fd6e0, height: 30, material: 'stone' },
+  },
   stable: {
     id: 'stable',
     category: 'economy',
@@ -422,6 +463,24 @@ export function getDef(id: BuildingDefId): BuildingDef {
   return BUILDING_DEFS[id] as BuildingDef;
 }
 
+/**
+ * Economy buildings that must all be standing before late-game luxury
+ * buildings unlock (alongside a level-3 house). Roads, warehouses, houses and
+ * the luxury buildings themselves are excluded.
+ */
+export const LATE_GAME_PREREQS: BuildingDefId[] = (Object.keys(BUILDING_DEFS) as BuildingDefId[]).filter(
+  (id) => {
+    const d = BUILDING_DEFS[id] as BuildingDef;
+    return (
+      d.category === 'economy' &&
+      d.roadTier === undefined &&
+      !d.isWarehouse &&
+      !d.lateGame &&
+      id !== 'hut'
+    );
+  },
+);
+
 /** Build menu sections, in display order. */
 export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
   {
@@ -431,6 +490,10 @@ export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
   {
     title: 'Verarbeitung',
     ids: ['mill', 'bakery', 'brewery', 'weavery', 'smithy'],
+  },
+  {
+    title: 'Luxus (Endgame)',
+    ids: ['imkerei', 'methaus', 'goldschmiede'],
   },
   {
     title: 'Logistik & Wohnen',

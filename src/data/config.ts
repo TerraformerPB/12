@@ -6,7 +6,7 @@
 
 // --- Resources -------------------------------------------------------------
 
-export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'wool', 'cloth', 'gold'] as const;
+export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'wool', 'cloth', 'gold', 'honig', 'met', 'schmuck'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
 
 export interface ResourceInfo {
@@ -29,6 +29,9 @@ export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
   wool: { label: 'Wolle', icon: '🐑', color: 0xe9e4d8 },
   cloth: { label: 'Tuch', icon: '🧵', color: 0xb05a7a },
   gold: { label: 'Gold', icon: '🪙', color: 0xe3b341 },
+  honig: { label: 'Honig', icon: '🍯', color: 0xe0a92a },
+  met: { label: 'Met', icon: '🍶', color: 0xc9962f },
+  schmuck: { label: 'Schmuck', icon: '💍', color: 0x6fd6e0 },
 };
 
 // --- Simulation ------------------------------------------------------------
@@ -114,6 +117,9 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   wool: 0,
   cloth: 0,
   gold: 0,
+  honig: 0,
+  met: 0,
+  schmuck: 0,
 };
 
 // --- Roads (phase 4) -------------------------------------------------------------
@@ -281,6 +287,11 @@ export const LEGAL_INFO_INCOMPLETE = Object.values(LEGAL_INFO).some((v) => v.sta
 export const LUXURY_BEER_PER_POP = 0.12;
 export const LUXURY_CLOTH_PER_POP = 0.08;
 export const LUXURY_GOLD_PER_POP_L3 = 0.05;
+/** Late-game merchant luxuries (only demanded once their chain is built). */
+export const LUXURY_MET_PER_POP = 0.06;
+export const LUXURY_SCHMUCK_PER_POP = 0.04;
+/** Tax multiplier for L3 merchants when both late-game luxuries are supplied. */
+export const LUXURY_BOOM_TAX_FACTOR = 1.4;
 
 /** Morale gates for upgrading Huts */
 export const HUT_UPGRADE_MORALE_GATE_L2 = 80;

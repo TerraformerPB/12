@@ -37,9 +37,12 @@ import {
   HUT_UPGRADE_MORALE_GATE_L2,
   HUT_UPGRADE_MORALE_GATE_L3,
   LUXURY_GOLD_PER_POP_L3,
+  LUXURY_MET_PER_POP,
+  LUXURY_SCHMUCK_PER_POP,
+  LUXURY_BOOM_TAX_FACTOR,
   START_WORKERS,
 } from '../data/config';
-import { getDef, type BuildingDefId } from '../data/buildings';
+import { getDef, LATE_GAME_PREREQS, type BuildingDefId } from '../data/buildings';
 import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
 import { Enemy } from '../entities/Enemy';
@@ -588,12 +591,43 @@ export class Game {
         }
       }
 
+      // Late-game luxuries — only demanded once their production chain exists,
+      // so reaching level 3 before the endgame never punishes the player.
+      const hasMeadery = this.hasBuilt('methaus');
+      const hasGoldsmith = this.hasBuilt('goldschmiede');
+      let metSatisfied = true;
+      let schmuckSatisfied = true;
+      if (popHaendler > 0 && hasMeadery) {
+        const needM = Math.ceil(popHaendler * LUXURY_MET_PER_POP);
+        const take = Math.min(needM, this.store.get('met'));
+        if (take > 0) this.store.pay({ met: take });
+        metSatisfied = take >= needM;
+        this.morale = metSatisfied
+          ? Math.min(100, this.morale + 0.5)
+          : Math.max(0, this.morale - 1);
+      }
+      if (popHaendler > 0 && hasGoldsmith) {
+        const needS = Math.ceil(popHaendler * LUXURY_SCHMUCK_PER_POP);
+        const take = Math.min(needS, this.store.get('schmuck'));
+        if (take > 0) this.store.pay({ schmuck: take });
+        schmuckSatisfied = take >= needS;
+        this.morale = schmuckSatisfied
+          ? Math.min(100, this.morale + 0.5)
+          : Math.max(0, this.morale - 1);
+      }
+
       // Apply satisfaction reductions to tax
       if (!beerSatisfied) taxBuerger *= 0.5;
       if (!clothSatisfied) taxBuerger *= 0.5;
       if (!merchantBeerSatisfied) taxHaendler *= 0.5;
       if (!merchantClothSatisfied) taxHaendler *= 0.5;
       if (!merchantGoldSatisfied) taxHaendler *= 0.25;
+      if (hasMeadery && !metSatisfied) taxHaendler *= 0.5;
+      if (hasGoldsmith && !schmuckSatisfied) taxHaendler *= 0.5;
+      // Luxury boom: well-supplied merchants pay far more tax.
+      if (popHaendler > 0 && hasMeadery && hasGoldsmith && metSatisfied && schmuckSatisfied) {
+        taxHaendler *= LUXURY_BOOM_TAX_FACTOR;
+      }
 
       // Prestige
       let gained = pop * PRESTIGE_PER_POP;
@@ -605,6 +639,8 @@ export class Game {
         if (merchantBeerSatisfied) gained += PRESTIGE_LUXURY_BONUS;
         if (merchantClothSatisfied) gained += PRESTIGE_LUXURY_BONUS;
         if (merchantGoldSatisfied) gained += PRESTIGE_LUXURY_BONUS * 1.5;
+        if (hasMeadery && metSatisfied) gained += PRESTIGE_LUXURY_BONUS * 2;
+        if (hasGoldsmith && schmuckSatisfied) gained += PRESTIGE_LUXURY_BONUS * 2;
       }
       this.addPrestige(gained);
     }
@@ -649,11 +685,40 @@ export class Game {
 
   /** Empire scenario gates some buildings behind ranks. */
   buildLockReason(defId: BuildingDefId): string | null {
+    const def = getDef(defId);
+    if (def.lateGame) {
+      const reason = this.lateGameLockReason();
+      if (reason) return reason;
+    }
     if (!this.empireMode) return null;
-    const required = getDef(defId).requiredRank ?? 0;
+    const required = def.requiredRank ?? 0;
     if (this.rankIndex >= required) return null;
     const rank = RANKS[required];
     return `${rank.icon} Erst ab Rang ${rank.name}`;
+  }
+
+  /** Has the player a finished building of this type? */
+  private hasBuilt(defId: BuildingDefId): boolean {
+    for (const b of this.buildings.values()) {
+      if (b.owner === 'player' && b.defId === defId && !b.underConstruction) return true;
+    }
+    return false;
+  }
+
+  /** Late-game gate: a level-3 house and every other economy building must exist. */
+  private lateGameLockReason(): string | null {
+    const hasL3House = [...this.buildings.values()].some(
+      (b) => b.owner === 'player' && b.defId === 'hut' && b.level >= 3 && !b.underConstruction,
+    );
+    if (!hasL3House) return '🏰 Erst im späten Spiel: ein Haus auf Stufe 3 (Händler)';
+    const missing: string[] = [];
+    for (const id of LATE_GAME_PREREQS) {
+      if (!this.hasBuilt(id)) missing.push(getDef(id).name);
+    }
+    if (missing.length > 0) {
+      return `🏰 Baue zuerst alle Wirtschaftsgebäude (fehlt: ${missing.join(', ')})`;
+    }
+    return null;
   }
 
   /** Worker speed scales with morale (0.75–1.25). */

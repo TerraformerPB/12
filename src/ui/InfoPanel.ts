@@ -1,5 +1,5 @@
 import { events } from '../core/EventBus';
-import { RESOURCE_IDS, RESOURCE_INFO, TAX_GOLD_PER_POP, LUXURY_BEER_PER_POP, LUXURY_CLOTH_PER_POP, LUXURY_GOLD_PER_POP_L3 } from '../data/config';
+import { RESOURCE_IDS, RESOURCE_INFO, TAX_GOLD_PER_POP, LUXURY_BEER_PER_POP, LUXURY_CLOTH_PER_POP, LUXURY_GOLD_PER_POP_L3, LUXURY_MET_PER_POP, LUXURY_SCHMUCK_PER_POP, LUXURY_BOOM_TAX_FACTOR } from '../data/config';
 import { SOLDIER_TYPE_IDS, getSoldierType } from '../data/soldiers';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
@@ -174,6 +174,13 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     if (currentSoldier) game.dismissSoldier(currentSoldier.id);
   });
 
+  const buildingExists = (defId: BuildingDefId): boolean => {
+    for (const ob of game.buildings.values()) {
+      if (ob.owner === 'player' && ob.defId === defId && !ob.underConstruction) return true;
+    }
+    return false;
+  };
+
   const getHouseTaxPerMin = (b: Building): { potential: number; actual: number } => {
     const intervalsPerMin = 60 / 15; // 4
     const pop = b.populationBonus;
@@ -217,6 +224,15 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       if (beerStock < needB) actualMult *= 0.5;
       if (clothStock < needC) actualMult *= 0.5;
       if (goldStock < needG) actualMult *= 0.25;
+      // Late-game luxuries (only once their chain stands).
+      const hasMeadery = buildingExists('methaus');
+      const hasGoldsmith = buildingExists('goldschmiede');
+      const metOk = !hasMeadery || game.store.get('met') >= Math.ceil(popHaendler * LUXURY_MET_PER_POP);
+      const schmuckOk =
+        !hasGoldsmith || game.store.get('schmuck') >= Math.ceil(popHaendler * LUXURY_SCHMUCK_PER_POP);
+      if (hasMeadery && !metOk) actualMult *= 0.5;
+      if (hasGoldsmith && !schmuckOk) actualMult *= 0.5;
+      if (hasMeadery && hasGoldsmith && metOk && schmuckOk) actualMult *= LUXURY_BOOM_TAX_FACTOR;
     }
     
     return {
@@ -342,6 +358,16 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
           needsHTML += `<li>${check(beerStock >= needB_L3)} Bier (${beerStock}/${needB_L3} auf Lager)</li>`;
           needsHTML += `<li>${check(clothStock >= needC_L3)} Kleidung (${clothStock}/${needC_L3} auf Lager)</li>`;
           needsHTML += `<li>${check(goldStock >= needG_L3)} Gold (${goldStock}/${needG_L3} auf Lager)</li>`;
+          if (buildingExists('methaus')) {
+            const needMet = Math.ceil(popHaendler * LUXURY_MET_PER_POP);
+            const metStock = game.store.get('met');
+            needsHTML += `<li>${check(metStock >= needMet)} Met (${metStock}/${needMet} auf Lager)</li>`;
+          }
+          if (buildingExists('goldschmiede')) {
+            const needSch = Math.ceil(popHaendler * LUXURY_SCHMUCK_PER_POP);
+            const schStock = game.store.get('schmuck');
+            needsHTML += `<li>${check(schStock >= needSch)} Schmuck (${schStock}/${needSch} auf Lager)</li>`;
+          }
         }
         needsHTML += `</ul>`;
         
