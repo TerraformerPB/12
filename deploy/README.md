@@ -19,13 +19,16 @@ Ergebnis:
 
 ## Einmaliges Setup
 
+Das Repo kann in **jedem** Verzeichnis liegen — setup.sh erkennt den Pfad
+selbst (hier z. B. `/var/www/burg/burg`).
+
 ```bash
-# 1) Repo nach /opt/burgspiel holen
+# 1) Repo holen (oder vorhandenes Verzeichnis nutzen)
 sudo git clone -b claude/loving-thompson-my7ouf \
-  <REPO-URL> /opt/burgspiel
+  <REPO-URL> /var/www/burg/burg
 
 # 2) Setup ausführen (baut, richtet systemd + nginx + Origin-Cert ein)
-cd /opt/burgspiel
+cd /var/www/burg/burg
 sudo bash deploy/setup.sh
 ```
 
@@ -47,7 +50,7 @@ Danach: Spiel unter `https://burg.paulbartsch.de`, Admin unter `.../admin`.
 ## Updates später
 
 ```bash
-cd /opt/burgspiel
+cd /var/www/burg/burg
 sudo bash deploy/deploy.sh
 ```
 
@@ -66,10 +69,10 @@ nginx -t && systemctl reload nginx
 | Variable | Bedeutung | Default |
 | --- | --- | --- |
 | `PORT` | HTTP-Port des Backends | `8787` |
-| `BURGSPIEL_DATA` | Pfad der JSON-Datendatei | `/opt/burgspiel/server-data/burgspiel.json` |
+| `BURGSPIEL_DATA` | Pfad der JSON-Datendatei | `<APP_DIR>/server-data/burgspiel.json` |
 | `BURGSPIEL_CORS` | `Access-Control-Allow-Origin` | `*` |
 | `BURGSPIEL_TRUST_PROXY` | Client-IP aus `X-Forwarded-For` (hinter Proxy) | `1` |
 | `BURGSPIEL_ADMIN_USER` / `_PASSWORD` | Admin-Seed beim ersten Start | — |
 | `BURGSPIEL_RATE_MAX` | Requests pro 10 s und IP | `30` |
 
-Daten liegen in `/opt/burgspiel/server-data/` — dieses Verzeichnis sichern.
+Daten liegen in `<APP_DIR>/server-data/` — dieses Verzeichnis sichern.

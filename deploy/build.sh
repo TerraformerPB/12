@@ -4,7 +4,7 @@
 # deploy.sh aufgerufen, kann aber auch direkt laufen.
 
 set -euo pipefail
-APP_DIR="${APP_DIR:-/opt/burgspiel}"
+APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$APP_DIR"
 
 echo ">> npm install…"

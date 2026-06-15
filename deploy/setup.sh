@@ -16,8 +16,10 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-burg.paulbartsch.de}"
-APP_DIR="${APP_DIR:-/opt/burgspiel}"
+# Repo-Verzeichnis automatisch aus dem Skript-Pfad ableiten (egal wohin geklont).
+APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CERT_DIR="/etc/ssl/burgspiel"
+echo ">> App-Verzeichnis: $APP_DIR"
 
 echo ">> Pakete installieren (Node 20, nginx, openssl)…"
 export DEBIAN_FRONTEND=noninteractive
@@ -41,14 +43,15 @@ if [ ! -f "$CERT_DIR/origin.crt" ]; then
 fi
 
 echo ">> systemd-Service einrichten…"
-install -m 644 "$APP_DIR/deploy/burgspiel.service" /etc/systemd/system/burgspiel.service
+sed "s#__APP_DIR__#$APP_DIR#g" "$APP_DIR/deploy/burgspiel.service" \
+  > /etc/systemd/system/burgspiel.service
 mkdir -p "$APP_DIR/server-data"
 systemctl daemon-reload
 systemctl enable --now burgspiel
 
 echo ">> nginx-Site einrichten…"
-sed "s/burg\.paulbartsch\.de/$DOMAIN/g" "$APP_DIR/deploy/nginx.conf" \
-  > /etc/nginx/sites-available/burgspiel
+sed -e "s/burg\.paulbartsch\.de/$DOMAIN/g" -e "s#__APP_DIR__#$APP_DIR#g" \
+  "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/burgspiel
 ln -sf /etc/nginx/sites-available/burgspiel /etc/nginx/sites-enabled/burgspiel
 rm -f /etc/nginx/sites-enabled/default
 nginx -t

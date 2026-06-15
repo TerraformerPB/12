@@ -7,7 +7,7 @@
 #   BRANCH=main bash deploy/deploy.sh
 
 set -euo pipefail
-APP_DIR="${APP_DIR:-/opt/burgspiel}"
+APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${BRANCH:-$(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)}"
 cd "$APP_DIR"
 

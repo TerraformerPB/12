@@ -10,17 +10,17 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/burgspiel
+WorkingDirectory=__APP_DIR__
 # Backend nur lokal erreichbar; nginx terminiert HTTPS und proxyt.
 Environment=PORT=8787
-Environment=BURGSPIEL_DATA=/opt/burgspiel/server-data/burgspiel.json
+Environment=BURGSPIEL_DATA=__APP_DIR__/server-data/burgspiel.json
 Environment=BURGSPIEL_CORS=*
 # Hinter nginx/Cloudflare: echte Client-IP aus X-Forwarded-For fürs Rate-Limit.
 Environment=BURGSPIEL_TRUST_PROXY=1
 # Admin-Seed beim ersten Start (sonst wird der erste Account Admin):
 # Environment=BURGSPIEL_ADMIN_USER=admin
 # Environment=BURGSPIEL_ADMIN_PASSWORD=bitte-aendern
-ExecStart=/usr/bin/node /opt/burgspiel/server/dist/index.js
+ExecStart=/usr/bin/node __APP_DIR__/server/dist/index.js
 Restart=on-failure
 RestartSec=3
 # Härtung
