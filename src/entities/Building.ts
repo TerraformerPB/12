@@ -3,13 +3,21 @@ import {
   UPGRADE_LOCAL_STORE,
   BUILDING_MAX_LEVEL,
   CONSTRUCTION_TIME_PER_TILE,
+  DEFAULT_WAREHOUSE_CAP,
   LOCAL_STORE_CAP,
+  RESOURCE_IDS,
   TICK_RATE,
   UPGRADE_HP_BONUS,
   UPGRADE_HUT_POPULATION,
   UPGRADE_SPEED_BONUS,
+  WAREHOUSE_CAP_PER_LEVEL,
   type ResourceId,
 } from '../data/config';
+
+/** A zero-filled stock record over all resources. */
+function zeroStock(): Record<ResourceId, number> {
+  return Object.fromEntries(RESOURCE_IDS.map((r) => [r, 0])) as Record<ResourceId, number>;
+}
 import { getDef, type BuildingDef, type BuildingDefId } from '../data/buildings';
 import type { IsoGrid, Point } from '../world/IsoGrid';
 
@@ -38,6 +46,10 @@ export interface BuildingSave {
   buildTicks: number;
   /** Since save version 13 (user pausing). */
   userPaused?: boolean;
+  /** Warehouse only: physical per-resource stock. Since save version 14. */
+  stock?: Partial<Record<ResourceId, number>>;
+  /** Warehouse only: per-resource target levels (Sollwerte). Since save v14. */
+  storageTargets?: Partial<Record<ResourceId, number>>;
 }
 
 /**
@@ -90,6 +102,16 @@ export class Building {
   reservedOutput = 0;
   /** Input units on their way via delivery jobs. */
   incomingInput = 0;
+
+  // --- Warehouse storage (only meaningful when def.isWarehouse) ---
+  /** Physical per-resource stock held in this warehouse. */
+  stock: Record<ResourceId, number> = zeroStock();
+  /** Player-set target levels per resource; absent = no demand (sink only). */
+  storageTargets: Partial<Record<ResourceId, number>> = {};
+  /** Units of each resource promised to outgoing deliver/transfer jobs (transient). */
+  reservedStock: Record<ResourceId, number> = zeroStock();
+  /** Units en route into this warehouse (transient; reserves capacity). */
+  incomingStock = 0;
 
   constructor(id: number, defId: BuildingDefId, x: number, y: number, rotated = false) {
     this.id = id;
@@ -174,6 +196,40 @@ export class Building {
   /** Local input/output storage, growing with the level (phase 20). */
   get localCap(): number {
     return LOCAL_STORE_CAP + UPGRADE_LOCAL_STORE * (this.level - 1);
+  }
+
+  /** True if this building physically stores goods. */
+  get isWarehouse(): boolean {
+    return this.def.isWarehouse === true;
+  }
+
+  /** Total goods this warehouse can hold, grown by upgrade level. */
+  get storageCapacity(): number {
+    if (!this.isWarehouse) return 0;
+    const base = this.def.storageCap ?? DEFAULT_WAREHOUSE_CAP;
+    return Math.round(base * (1 + WAREHOUSE_CAP_PER_LEVEL * (this.level - 1)));
+  }
+
+  /** Sum of all goods currently stored here. */
+  totalStored(): number {
+    let sum = 0;
+    for (const r of RESOURCE_IDS) sum += this.stock[r];
+    return sum;
+  }
+
+  /** Free capacity, accounting for goods already on their way in. */
+  freeCapacity(): number {
+    return Math.max(0, this.storageCapacity - this.totalStored() - this.incomingStock);
+  }
+
+  /** Stock of one resource not already promised to an outgoing job. */
+  availableStock(r: ResourceId): number {
+    return Math.max(0, this.stock[r] - this.reservedStock[r]);
+  }
+
+  /** Target level for one resource (Sollwert); 0 when unset. */
+  targetFor(r: ResourceId): number {
+    return this.storageTargets[r] ?? 0;
   }
 
   /** Production speed factor from the upgrade level. */
@@ -341,6 +397,8 @@ export class Building {
       materialsRemaining: { ...this.materialsRemaining },
       buildTicks: this.buildTicks,
       userPaused: this.userPaused,
+      stock: this.isWarehouse ? { ...this.stock } : undefined,
+      storageTargets: this.isWarehouse ? { ...this.storageTargets } : undefined,
     };
   }
 
@@ -358,6 +416,10 @@ export class Building {
     b.materialsRemaining = { ...s.materialsRemaining };
     b.buildTicks = s.buildTicks;
     b.userPaused = s.userPaused ?? false;
+    if (s.stock) {
+      for (const r of RESOURCE_IDS) b.stock[r] = s.stock[r] ?? 0;
+    }
+    if (s.storageTargets) b.storageTargets = { ...s.storageTargets };
     return b;
   }
 }

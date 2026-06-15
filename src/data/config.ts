@@ -88,6 +88,10 @@ export const TAP_MAX_PX = 10;
 
 /** Local output/input storage capacity of production buildings. */
 export const LOCAL_STORE_CAP = 5;
+/** Fallback total storage capacity of a warehouse (sum over all goods). */
+export const DEFAULT_WAREHOUSE_CAP = 200;
+/** Warehouse capacity growth per upgrade level above 1 (e.g. 0.25 = +25%). */
+export const WAREHOUSE_CAP_PER_LEVEL = 0.25;
 /** Carrier walking speed in tiles per second. */
 export const WORKER_SPEED = 2.2;
 /** Carriers available at game start. */
@@ -245,7 +249,7 @@ export const WINTER_FOOD_FACTOR = 1.5;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
 /** User-facing app version (keep in sync with package.json / build.gradle). */

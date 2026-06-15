@@ -49,6 +49,8 @@ export interface BuildingDef {
   population?: number;
   /** Central storage / carrier hub. Not buildable, exactly one per game. */
   isWarehouse?: boolean;
+  /** Total goods this warehouse can physically hold (sum over all resources). */
+  storageCap?: number;
   /** Own units may walk through this building's tiles (gates). */
   passable?: boolean;
   /** Walkable by everyone; own units move faster. 1 = road/bridge, 2 = paved. */
@@ -88,9 +90,10 @@ export const BUILDING_DEFS = {
     cost: {},
     placement: PlacementRule.Grass,
     isWarehouse: true,
+    storageCap: 400,
     upgradesTo: 'keep',
     upgradeCost: { wood: 40, stone: 20 },
-    description: 'Zentrales Lager. Träger liefern hier alle Waren ab.',
+    description: 'Hauptlager. Fasst 400 Waren. Träger liefern hier ab; von hier verteilst du per Sollwerten an die Außenlager.',
     maxHp: 150,
     art: { color: 0xb08a4f, height: 40 },
   },
@@ -102,7 +105,8 @@ export const BUILDING_DEFS = {
     cost: { wood: 20, stone: 10 },
     placement: PlacementRule.Grass,
     isWarehouse: true,
-    description: 'Lokales Lager. Verkürzt die Laufwege der Träger.',
+    storageCap: 100,
+    description: 'Außenlager (100 Waren). Setze Sollwerte, damit Träger gezielt Waren hierher transferieren.',
     maxHp: 80,
     art: { color: 0xcd9f68, height: 25 },
   },
@@ -114,6 +118,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 60, stone: 120 },
     placement: PlacementRule.Grass,
     isWarehouse: true,
+    storageCap: 300,
     shoots: true,
     population: 3,
     requiredRank: 3,

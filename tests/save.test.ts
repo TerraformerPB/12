@@ -27,7 +27,7 @@ function sampleData(): SaveData {
   const worker = new Worker(5, 24.5, 23);
   worker.phase = 'toDropoff';
   worker.carrying = 'wheat';
-  worker.job = { kind: 'deliver', buildingId: 2, resource: 'wheat' };
+  worker.job = { kind: 'deliver', buildingId: 2, warehouseId: 1, resource: 'wheat' };
 
   const soldier = new Soldier(7, 20, 21);
   soldier.mode = 'command';

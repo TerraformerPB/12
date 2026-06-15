@@ -2,13 +2,18 @@ import type { ResourceId } from '../data/config';
 import { Unit } from './Unit';
 
 /**
- * Carrier jobs.
- * - pickup:  walk to a building, take 1 output unit, bring it to the warehouse.
- * - deliver: walk to the warehouse, take 1 reserved unit, bring it to a building.
+ * Carrier jobs. Every job moves goods between a production/consumer building
+ * and a specific warehouse (local-storage model).
+ * - pickup:   take output at building `buildingId`, store it in warehouse `warehouseId`.
+ * - deliver:  take stock from warehouse `warehouseId`, bring it to consumer/site `buildingId`.
+ * - transfer: take stock from warehouse `warehouseId`, bring it to warehouse `buildingId`.
  */
 export interface Job {
-  kind: 'pickup' | 'deliver';
+  kind: 'pickup' | 'deliver' | 'transfer';
+  /** Producer (pickup) / consumer or destination warehouse (deliver, transfer). */
   buildingId: number;
+  /** The warehouse end: destination (pickup) or source (deliver, transfer). */
+  warehouseId: number;
   resource: ResourceId;
 }
 

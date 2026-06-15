@@ -202,7 +202,8 @@ describe('empire scenario (phase 18)', () => {
     const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
     const { ResourceStore } = await import('../src/systems/EconomySystem');
     const { TICK_RATE, RELATION_START, GIFT_RELATION_GAIN } = await import('../src/data/config');
-    const store = new ResourceStore({ gold: 500, bread: 100 });
+    const store = new ResourceStore();
+    store.setLoose({ gold: 500, bread: 100 });
     let raids = 0;
     const diplo = new DiplomacySystem({
       store,
@@ -233,7 +234,8 @@ describe('empire scenario (phase 18)', () => {
     const { ResourceStore } = await import('../src/systems/EconomySystem');
     const { CARAVAN_BATCH, CARAVAN_TRAVEL_SECONDS, TICK_RATE } = await import('../src/data/config');
     const { factionPrice } = await import('../src/data/factions');
-    const store = new ResourceStore({ bread: 50 });
+    const store = new ResourceStore();
+    store.setLoose({ bread: 50 });
     let prestige = 0;
     const diplo = new DiplomacySystem({
       store,
@@ -275,7 +277,8 @@ describe('empire depth (phase 19)', () => {
   async function makeDiplo(initial: Partial<Record<string, number>> = {}) {
     const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
     const { ResourceStore } = await import('../src/systems/EconomySystem');
-    const store = new ResourceStore(initial as never);
+    const store = new ResourceStore();
+    store.setLoose(initial as never);
     let contracts = 0;
     const diplo = new DiplomacySystem({
       store,

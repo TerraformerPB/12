@@ -306,6 +306,23 @@ export class Game {
     events.emit('soldier:selected', { soldier: null });
   }
 
+  /** Standing player warehouses that physically hold goods. */
+  private playerWarehouses(): Building[] {
+    const list: Building[] = [];
+    for (const b of this.buildings.values()) {
+      if (b.isWarehouse && b.owner === 'player' && !b.underConstruction) list.push(b);
+    }
+    return list;
+  }
+
+  /** A fresh network facade over the player's warehouses. */
+  private newStore(): ResourceStore {
+    return new ResourceStore(
+      () => this.playerWarehouses(),
+      () => this.buildings.get(this.warehouseId) ?? null,
+    );
+  }
+
   private setupSystems(store: ResourceStore): void {
     this.store = store;
     this.economy = new EconomySystem({
@@ -388,7 +405,7 @@ export class Game {
     this.resetWorld(seed, undefined, customTerrain);
     this.scenarioId = scenarioId;
     this.lastSeason = -1;
-    this.setupSystems(new ResourceStore(START_RESOURCES));
+    this.setupSystems(this.newStore());
 
     // Starting warehouse in the map center (the generator keeps it clear).
     const warehouseDef = getDef('warehouse');
@@ -396,6 +413,8 @@ export class Game {
     const wy = Math.floor(MAP_H / 2) - 1;
     const warehouse = this.addBuilding('warehouse', wx, wy, false);
     this.warehouseId = warehouse.id;
+    // Starting goods are physically stored in the main warehouse.
+    for (const r of RESOURCE_IDS) this.store.add(r, START_RESOURCES[r]);
 
     const center = gridToScreen(wx + warehouseDef.footprint.w / 2, wy + warehouseDef.footprint.h / 2);
     this.camera.centerOn(center.x, center.y);
@@ -730,7 +749,7 @@ export class Game {
 
     const cy = Math.floor(MAP_H / 2);
     this.resetWorld((Math.random() * 0xffffffff) >>> 0, duelClearRects(MAP_W, MAP_H));
-    this.setupSystems(new ResourceStore(budget.resources));
+    this.setupSystems(this.newStore());
     this.duelNodes = duelNodes(MAP_W, MAP_H).flatMap((n) => [
       { ...n, owner: 'none' as const },
       { ...n, x: MAP_W - 1 - n.x, owner: 'none' as const },
@@ -739,6 +758,9 @@ export class Game {
 
     this.warehouseId = this.buildCastle('player', cy);
     this.foeWarehouseId = this.buildCastle('foe', cy);
+    // Duels have no economy: keep the deployment budget fully liquid.
+    this.store.setLoose(budget.resources);
+    this.store.emitChanged();
 
     this.duelAI = new DuelAI(
       {
@@ -839,7 +861,7 @@ export class Game {
     if (this.phase === 'playing' || this.phase === 'paused') this.saveNow();
     this.duelMode = false;
     this.resetWorld(0, undefined, terrain.slice());
-    this.setupSystems(new ResourceStore({}));
+    this.setupSystems(this.newStore());
     this.warehouseId = 0;
     const center = gridToScreen(MAP_W / 2, MAP_H / 2);
     this.camera.centerOn(center.x, center.y);
@@ -1516,12 +1538,19 @@ export class Game {
         return;
       }
       this.store.pay(cost);
+      // Carry stored goods and targets across a warehouse def-swap.
+      const carriedStock = b.isWarehouse ? { ...b.stock } : null;
+      const carriedTargets = b.isWarehouse ? { ...b.storageTargets } : null;
       this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
       this.buildings.delete(b.id);
       this.economy.onBuildingRemoved(b.id);
       // Swapping an existing structure is instant — there is no fresh
       // construction site on top of a standing building.
       const upgraded = this.addBuilding(targetId, b.x, b.y, b.rotated, true);
+      if (upgraded.isWarehouse && carriedStock) {
+        for (const r of RESOURCE_IDS) upgraded.stock[r] = carriedStock[r] ?? 0;
+        if (carriedTargets) upgraded.storageTargets = carriedTargets;
+      }
       if (upgraded.def.isWarehouse) this.warehouseId = upgraded.id;
       this.sound.play('place');
       this.select(upgraded.id);
@@ -1549,12 +1578,27 @@ export class Game {
     events.emit('toast:show', { message: `${b.def.name} auf Stufe ${b.level} ausgebaut` });
   }
 
+  /** Adjust a warehouse's per-resource target level (Sollwert), clamped to capacity. */
+  adjustStorageTarget(id: number, resource: ResourceId, delta: number): void {
+    const b = this.buildings.get(id);
+    if (!b || b.owner !== 'player' || !b.isWarehouse) return;
+    const next = Math.max(0, Math.min(b.storageCapacity, b.targetFor(resource) + delta));
+    if (next === 0) delete b.storageTargets[resource];
+    else b.storageTargets[resource] = next;
+    this.saveNow();
+  }
+
   demolish(id: number): void {
     const b = this.buildings.get(id);
     if (!b || b.owner !== 'player' || b.defId === 'warehouse' || b.defId === 'keep') return;
+    // Rescue any goods physically stored here into the rest of the network.
+    const rescued = b.isWarehouse ? { ...b.stock } : null;
     this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
     this.buildings.delete(id);
     this.economy.onBuildingRemoved(id);
+    if (rescued) {
+      for (const r of RESOURCE_IDS) if (rescued[r] > 0) this.store.add(r, rescued[r]);
+    }
     for (const r of RESOURCE_IDS) {
       const refund = Math.floor((b.def.cost[r] ?? 0) * DEMOLISH_REFUND);
       if (refund > 0) this.store.add(r, refund);
@@ -1699,7 +1743,7 @@ export class Game {
       this.grid.applyTerrainOverrides(data.terrainOverrides as [number, number, Terrain][]);
       this.renderer.buildTerrain(this.grid);
     }
-    this.setupSystems(new ResourceStore(data.resources));
+    this.setupSystems(this.newStore());
     this.nextId = data.nextEntityId;
     if (data.explored && data.explored.length > 0) {
       this.grid.applyExploredIndices(data.explored);
@@ -1712,6 +1756,12 @@ export class Game {
       this.buildings.set(b.id, b);
       this.grid.setOccupantRect(b.x, b.y, b.w, b.h, b.id, passModeOf(b.def));
       if (b.def.isWarehouse) this.warehouseId = b.id;
+    }
+    // Pre-v14 saves carried no per-warehouse stock: seed the main warehouse
+    // from the old global totals so existing games keep their goods.
+    const storedTotal = this.playerWarehouses().reduce((s, w) => s + w.totalStored(), 0);
+    if (storedTotal === 0) {
+      for (const r of RESOURCE_IDS) this.store.add(r, data.resources[r] ?? 0);
     }
     for (const ws of data.workers) {
       this.workers.push(Worker.fromSave(ws));

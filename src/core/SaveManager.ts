@@ -110,6 +110,12 @@ export function migrateSave(data: SaveData): SaveData | null {
     data.explored = [];
     data.saveVersion = 13;
   }
+  if (data.saveVersion === 13) {
+    // v13 → v14: per-warehouse local storage. Old saves keep no per-building
+    // stock; Game deposits the global `resources` into the main warehouse on
+    // load, so no data needs reshaping here.
+    data.saveVersion = 14;
+  }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }
 

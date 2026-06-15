@@ -355,8 +355,51 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     } else if (b.def.population) {
       addRow(`👷 +${b.populationBonus} Bevölkerung`);
     }
-    if (b.def.isWarehouse) {
-      addRow('Hier lagern alle Waren.');
+    if (b.isWarehouse) {
+      const cap = b.storageCapacity;
+      const used = b.totalStored();
+      addRow(`📦 Belegung: ${used}/${cap}`, cap > 0 ? used / cap : 0);
+      if (b.owner === 'player') {
+        const hint = document.createElement('div');
+        hint.className = 'row';
+        hint.innerHTML =
+          '<span><small>Sollwerte: Träger transferieren Waren hierher, bis der Sollwert erreicht ist. ' +
+          'Lass alles auf 0, damit dieses Lager nur als Sammelstelle dient.</small></span>';
+        stats.appendChild(hint);
+
+        for (const r of RESOURCE_IDS) {
+          const row = document.createElement('div');
+          row.className = 'row warehouse-target';
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.gap = '6px';
+
+          const label = document.createElement('span');
+          label.style.flex = '1';
+          label.innerHTML = `${RESOURCE_INFO[r].icon} ${b.stock[r]} <small style="opacity:.7">/ Soll ${b.targetFor(r)}</small>`;
+
+          const minus = document.createElement('button');
+          minus.className = 'staff-btn';
+          minus.textContent = '−';
+          minus.disabled = b.targetFor(r) <= 0;
+          minus.addEventListener('click', () => {
+            game.adjustStorageTarget(b.id, r, -10);
+            renderStats(b);
+          });
+
+          const plus = document.createElement('button');
+          plus.className = 'staff-btn';
+          plus.textContent = '+';
+          plus.disabled = b.targetFor(r) >= cap;
+          plus.addEventListener('click', () => {
+            game.adjustStorageTarget(b.id, r, 10);
+            renderStats(b);
+          });
+
+          row.append(label, minus, plus);
+          stats.appendChild(row);
+        }
+      }
     }
   };
 
