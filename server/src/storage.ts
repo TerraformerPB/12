@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
@@ -16,6 +16,8 @@ export interface UserRecord {
   passwordHash: string;
   role: 'player' | 'admin';
   banned: boolean;
+  /** For timed suspensions: unix ms when the ban auto-lifts (null = permanent). */
+  bannedUntil?: number | null;
   createdAt: number;
   /** Online duel rating (Elo, starts at 1000). */
   trophies: number;
@@ -26,6 +28,7 @@ export interface UserRecord {
   bestKills: number;
   /** Uploaded castle snapshot (BURG1. code) for async duels. */
   castleCode: string | null;
+  adsWatched: number;
 }
 
 export interface DuelLogRecord {
@@ -38,16 +41,46 @@ export interface DuelLogRecord {
   at: number;
 }
 
+/** An audit trail entry for every state-changing admin action. */
+export interface AuditRecord {
+  id: number;
+  /** Who performed the action. */
+  adminId: number;
+  adminName: string;
+  /** Machine action key, e.g. 'ban', 'suspend', 'delete', 'maintenance'. */
+  action: string;
+  /** Affected user id, if any. */
+  targetId?: number | null;
+  /** Human-readable detail for the dashboard. */
+  detail?: string;
+  at: number;
+}
+
 export interface DataShape {
   nextUserId: number;
   nextDuelId: number;
+  nextAuditId: number;
   /** HMAC secret for tokens; generated on first start. */
   secret: string;
   users: UserRecord[];
   duels: DuelLogRecord[];
+  auditLog: AuditRecord[];
+  adsEnabled?: boolean;
+  /** When true, gameplay endpoints are paused for non-admins. */
+  maintenanceMode?: boolean;
 }
 
-const EMPTY: DataShape = { nextUserId: 1, nextDuelId: 1, secret: '', users: [], duels: [] };
+const EMPTY: DataShape = {
+  nextUserId: 1,
+  nextDuelId: 1,
+  nextAuditId: 1,
+  secret: '',
+  users: [],
+  duels: [],
+  auditLog: [],
+  adsEnabled: true,
+  maintenanceMode: false,
+};
 
 export class JsonStore {
   readonly data: DataShape;
@@ -57,11 +90,14 @@ export class JsonStore {
   /** file = null keeps everything in memory (tests). */
   constructor(file: string | null) {
     this.file = file;
-    this.data = { ...EMPTY, users: [], duels: [] };
+    this.data = { ...EMPTY, users: [], duels: [], auditLog: [] };
     if (file) {
       try {
         const raw = readFileSync(file, 'utf8');
         Object.assign(this.data, JSON.parse(raw) as DataShape);
+        // Backfill fields added after the file was first written.
+        this.data.auditLog ??= [];
+        this.data.nextAuditId ??= 1;
       } catch {
         // first start — file appears on the first flush
       }
@@ -95,6 +131,14 @@ export class JsonStore {
       this.flushTimer = null;
     }
     mkdirSync(dirname(this.file), { recursive: true });
+    // Keep one previous version as a safety net before overwriting.
+    if (existsSync(this.file)) {
+      try {
+        copyFileSync(this.file, `${this.file}.bak`);
+      } catch {
+        // a missing backup must never block the write
+      }
+    }
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.data));
     renameSync(tmp, this.file);

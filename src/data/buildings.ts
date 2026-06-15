@@ -94,6 +94,18 @@ export const BUILDING_DEFS = {
     maxHp: 150,
     art: { color: 0xb08a4f, height: 40 },
   },
+  smallWarehouse: {
+    id: 'smallWarehouse',
+    category: 'economy',
+    name: 'Kleines Lagerhaus',
+    footprint: { w: 1, h: 1 },
+    cost: { wood: 20, stone: 10 },
+    placement: PlacementRule.Grass,
+    isWarehouse: true,
+    description: 'Lokales Lager. Verkürzt die Laufwege der Träger.',
+    maxHp: 80,
+    art: { color: 0xcd9f68, height: 25 },
+  },
   keep: {
     id: 'keep',
     category: 'defense',
@@ -118,7 +130,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.AdjacentForest,
     recipe: { output: 'wood', duration: 4 },
     workersRequired: 1,
-    description: 'Produziert 1 Holz alle 4 Sekunden. Muss an Wald grenzen.',
+    description: 'Produziert 1 Holz alle 4 Sekunden. Muss an Wald grenzen, erntet Bäume im Umkreis von 4 Feldern.',
     art: { color: 0x7a5230, height: 26 },
   },
   quarry: {
@@ -278,7 +290,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 15 },
     placement: PlacementRule.Grass,
     population: 2,
-    description: 'Bietet Platz für 2 weitere Träger.',
+    description: 'Wohnhaus für Bewohner. Stufe 1: 2 Bauern (brauchen Brot/Fisch). Stufe 2: 4 Bürger (+Bier/Tuch). Stufe 3: 6 Händler (+Gold).',
     maxHp: 30,
     art: { color: 0x9c7b5a, height: 20 },
   },
@@ -408,26 +420,16 @@ export function getDef(id: BuildingDefId): BuildingDef {
 /** Build menu sections, in display order. */
 export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
   {
-    title: 'Wirtschaft',
-    ids: [
-      'lumberjack',
-      'quarry',
-      'mine',
-      'fishery',
-      'farm',
-      'mill',
-      'bakery',
-      'brewery',
-      'sheepFarm',
-      'weavery',
-      'smithy',
-      'market',
-      'stable',
-      'hut',
-      'road',
-      'roadStone',
-      'bridge',
-    ],
+    title: 'Grundversorgung',
+    ids: ['lumberjack', 'quarry', 'mine', 'fishery', 'farm', 'sheepFarm'],
+  },
+  {
+    title: 'Verarbeitung',
+    ids: ['mill', 'bakery', 'brewery', 'weavery', 'smithy'],
+  },
+  {
+    title: 'Logistik & Wohnen',
+    ids: ['hut', 'smallWarehouse', 'market', 'stable', 'road', 'roadStone', 'bridge'],
   },
   {
     title: 'Verteidigung',

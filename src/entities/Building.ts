@@ -36,6 +36,8 @@ export interface BuildingSave {
   underConstruction: boolean;
   materialsRemaining: Partial<Record<ResourceId, number>>;
   buildTicks: number;
+  /** Since save version 13 (user pausing). */
+  userPaused?: boolean;
 }
 
 /**
@@ -72,6 +74,8 @@ export class Building {
   productionHalted = false;
   /** Construction site: waiting for materials, then building up. */
   underConstruction = false;
+  /** Manually paused by the player. */
+  userPaused = false;
   /** Materials still to be delivered before building starts. */
   materialsRemaining: Partial<Record<ResourceId, number>> = {};
   /** Remaining build time once materials arrived. */
@@ -131,9 +135,23 @@ export class Building {
     return this.rotated ? f.w : f.h;
   }
 
-  /** Depth-sort key: the footprint's front (south) corner tile. */
+  /** Depth-sort key: center-based sorting to ensure correct overlap with units. */
   get zIndex(): number {
-    return this.x + this.w - 1 + this.y + this.h - 1;
+    if (this.def.roadTier !== undefined) {
+      // Roads and bridges are flat on the ground.
+      // Sorting them with an offset of -0.8 ensures that units on the same tile (at +0.5)
+      // and adjacent tiles (at -0.5) are always drawn on top of the road/bridge.
+      return this.x + this.y - 0.8;
+    }
+    if (this.defId === 'farm') {
+      // The farm has a 1x1 farmhouse at the north corner (this.x, this.y)
+      // and flat fields over the rest of the 3x3 footprint.
+      // Sorting as a 1x1 building (with a slightly reduced zIndex of 20.0 instead of 20.5)
+      // ensures that units on adjacent field tiles (NE/NW at 20.5) are drawn on top of the flat fields,
+      // while units behind the farmhouse (at the door NE/NW at 19.5) are correctly drawn behind it.
+      return this.x + this.y;
+    }
+    return this.x + this.y + (this.w + this.h) / 2 - 0.5;
   }
 
   get durationTicks(): number {
@@ -182,7 +200,7 @@ export class Building {
     if (this.underConstruction) return;
     const recipe = this.def.recipe;
     if (!recipe) return;
-    if (this.productionHalted) return;
+    if (this.productionHalted || this.userPaused) return;
     const speed = this.staffingFactor * this.levelFactor * extFactor;
     if (speed <= 0) return;
 
@@ -251,6 +269,38 @@ export class Building {
     return null;
   }
 
+  /** Find the closest tile of the given terrain within range (Manhattan distance from footprint). */
+  terrainTileInRange(grid: IsoGrid, terrain: number, range: number): Point | null {
+    let bestTile: Point | null = null;
+    let bestDist = Infinity;
+
+    const minX = this.x - range;
+    const maxX = this.x + this.w - 1 + range;
+    const minY = this.y - range;
+    const maxY = this.y + this.h - 1 + range;
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (!grid.inBounds(x, y)) continue;
+        if (grid.terrainAt(x, y) !== terrain) continue;
+
+        // Calculate distance to footprint
+        const dx = x < this.x ? (this.x - x) : (x >= this.x + this.w ? x - (this.x + this.w - 1) : 0);
+        const dy = y < this.y ? (this.y - y) : (y >= this.y + this.h ? y - (this.y + this.h - 1) : 0);
+        const dist = dx + dy;
+
+        if (dist <= range && dist > 0) {
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestTile = { x, y };
+          }
+        }
+      }
+    }
+    return bestTile;
+  }
+
+
   /** Walkable tiles orthogonally adjacent to the footprint (carrier targets). */
   accessTiles(grid: IsoGrid): Point[] {
     const tiles: Point[] = [];
@@ -290,6 +340,7 @@ export class Building {
       underConstruction: this.underConstruction,
       materialsRemaining: { ...this.materialsRemaining },
       buildTicks: this.buildTicks,
+      userPaused: this.userPaused,
     };
   }
 
@@ -306,6 +357,7 @@ export class Building {
     b.underConstruction = s.underConstruction;
     b.materialsRemaining = { ...s.materialsRemaining };
     b.buildTicks = s.buildTicks;
+    b.userPaused = s.userPaused ?? false;
     return b;
   }
 }

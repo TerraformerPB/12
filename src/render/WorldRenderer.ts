@@ -7,7 +7,8 @@ import type { Soldier } from '../entities/Soldier';
 import type { Worker } from '../entities/Worker';
 import type { Projectile } from '../systems/CombatSystem';
 import type { Camera } from '../world/Camera';
-import { gridToScreen, type IsoGrid } from '../world/IsoGrid';
+import { gridToScreen, type IsoGrid, Terrain, type Point } from '../world/IsoGrid';
+import { findPath } from '../world/Pathfinding';
 import type { GhostState } from '../systems/BuildSystem';
 import {
   PALETTE,
@@ -18,6 +19,8 @@ import {
   drawSoldier,
   drawTerrainTile,
   drawWorker,
+  drawFisheryBoat,
+  drawDecorativeNPC,
   footprintCorners,
 } from './placeholders';
 import { rotatedFootprint } from '../systems/BuildSystem';
@@ -40,6 +43,12 @@ interface BuildingViewEntry {
   /** Redraw trigger for the hp/construction overlay. */
   lastOverlayKey: string;
   lastLevel: number;
+  /** Floating upgrade-level badge (star pips), shown from level 2. */
+  levelBadge?: Graphics;
+  /** Redraw trigger for the level badge (level + construction state). */
+  lastBadgeKey?: string;
+  sailsGfx?: Graphics;
+  sailsAngle?: number;
 }
 
 interface UnitViewEntry {
@@ -52,6 +61,33 @@ interface UnitViewEntry {
   lastFrame: number;
   facing: number;
   lastKey: string;
+}
+
+interface DecorativeNPCState {
+  buildingId: number;
+  type: 'lumberjack' | 'miner' | 'quarryman' | 'farmer';
+  x: number;
+  y: number;
+  phase: 'toTarget' | 'working' | 'returning' | 'idle';
+  path: Point[];
+  pathIndex: number;
+  targetTile: Point | null;
+  timer: number;
+  view: Container;
+  sprite: Sprite | null;
+  gfx: Graphics;
+  set: UnitSpriteSet | null;
+  facing: number;
+  lastFrame: number;
+}
+
+interface FisheryBoatState {
+  buildingId: number;
+  x: number;
+  y: number;
+  view: Container;
+  gfx: Graphics;
+  bobTimer: number;
 }
 
 /** Everything the renderer needs to draw one frame. */
@@ -103,6 +139,10 @@ export class WorldRenderer {
   private ghostKey = '';
   private selectionView!: Graphics;
   private selectionKey = '';
+  private fogView!: Graphics;
+  private decorativeNPCs = new Map<number, DecorativeNPCState>();
+  private fisheryBoats = new Map<number, FisheryBoatState>();
+  private lastTime = performance.now();
 
   get canvas(): HTMLCanvasElement {
     return this.app.canvas;
@@ -143,20 +183,26 @@ export class WorldRenderer {
     this.selectionView.visible = false;
     this.markerLayer.addChild(this.selectionView);
 
+    this.fogView = new Graphics();
+    this.world.addChild(this.terrainLayer, this.markerLayer, this.objectLayer, this.fogView);
+
     this.resize(window.innerWidth, window.innerHeight);
   }
 
   resize(w: number, h: number): void {
+    if (!this.app) return;
     this.app.renderer.resize(w, h);
   }
 
   /** Seasonal map mood — terrain is baked into chunk textures, so one tint. */
   setSeasonTint(color: number): void {
+    if (!this.terrainLayer) return;
     this.terrainLayer.tint = color;
   }
 
   /** (Re)build the static terrain chunk textures. Call after terrain changes. */
   buildTerrain(grid: IsoGrid): void {
+    if (!this.terrainLayer) return;
     for (const chunk of this.terrainChunks.values()) chunk.view.destroy(true);
     this.terrainChunks.clear();
     this.terrainLayer.removeChildren();
@@ -171,6 +217,7 @@ export class WorldRenderer {
 
   /** Re-bake only the chunk containing the given tile (terrain changed). */
   rebuildChunkAt(grid: IsoGrid, gx: number, gy: number): void {
+    if (!this.terrainLayer) return;
     const cx = Math.floor(gx / TERRAIN_CHUNK_SIZE) * TERRAIN_CHUNK_SIZE;
     const cy = Math.floor(gy / TERRAIN_CHUNK_SIZE) * TERRAIN_CHUNK_SIZE;
     const key = (cy / TERRAIN_CHUNK_SIZE) * this.chunkCols + cx / TERRAIN_CHUNK_SIZE;
@@ -228,10 +275,14 @@ export class WorldRenderer {
     for (const entry of this.workerViews.values()) entry.view.destroy({ children: true });
     for (const entry of this.soldierViews.values()) entry.view.destroy({ children: true });
     for (const entry of this.enemyViews.values()) entry.view.destroy({ children: true });
+    for (const entry of this.decorativeNPCs.values()) entry.view.destroy({ children: true });
+    for (const entry of this.fisheryBoats.values()) entry.view.destroy({ children: true });
     this.buildingViews.clear();
     this.workerViews.clear();
     this.soldierViews.clear();
     this.enemyViews.clear();
+    this.decorativeNPCs.clear();
+    this.fisheryBoats.clear();
     this.projectileView?.clear();
     this.ghostKey = '';
     this.selectionKey = '';
@@ -289,16 +340,24 @@ export class WorldRenderer {
 
   /** Render one frame. `alpha` interpolates worker movement between ticks. */
   renderFrame(camera: Camera, state: RenderState, alpha: number): void {
+    if (!this.app) return;
+    const now = performance.now();
+    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    this.lastTime = now;
+
     camera.apply(this.world);
     this.syncBuildings(state);
     this.syncWorkers(state, alpha);
+    this.syncDecorativeNPCs(state, dt);
+    this.syncFisheryBoats(state, dt);
     this.syncSoldiers(state, alpha);
     this.syncEnemies(state, alpha);
     this.syncProjectiles(state);
     this.syncGhost(state);
     this.syncSelection(state);
     this.syncDuelNodes(state);
-    this.cull(camera);
+    this.syncFog(state, camera);
+    this.cull(camera, state);
     this.app.render();
   }
 
@@ -419,6 +478,27 @@ export class WorldRenderer {
   }
 
   /**
+   * Topmost building whose drawn sprite covers the world point — selection
+   * tests the full sprite rectangle (including the part overhanging the base
+   * tile), not just the footprint, so tall buildings are easy to tap even
+   * where they overlap a neighbour. Returns the frontmost (highest zIndex).
+   */
+  pickBuildingAt(worldX: number, worldY: number): number | null {
+    let bestId: number | null = null;
+    let bestZ = -Infinity;
+    for (const [id, entry] of this.buildingViews) {
+      const b = entry.bounds;
+      if (worldX < b.minX || worldX > b.maxX || worldY < b.minY || worldY > b.maxY) continue;
+      const z = entry.view.zIndex;
+      if (z > bestZ) {
+        bestZ = z;
+        bestId = id;
+      }
+    }
+    return bestId;
+  }
+
+  /**
    * Overlay above the roof (world px, relative to the anchor):
    * health bar for finished buildings, yellow progress bar for sites.
    */
@@ -439,6 +519,42 @@ export class WorldRenderer {
         .fill({ color: 0xe8b93c, alpha: 0.95 });
     } else {
       drawHpBar(entry.hpBar, cx, cy, width, b.hp / b.maxHp);
+    }
+  }
+
+  /**
+   * A floating chip with gold star pips above the roof — one pip per level,
+   * shown from level 2. Works for every building regardless of whether it
+   * uses an external sprite or a baked placeholder, so upgrades always read
+   * clearly on the map. Hidden while a building is still under construction.
+   */
+  private syncLevelBadge(entry: BuildingViewEntry, b: Building): void {
+    const key = `${b.level}:${b.underConstruction ? 1 : 0}`;
+    if (entry.lastBadgeKey === key) return;
+    entry.lastBadgeKey = key;
+    if (!entry.levelBadge) {
+      entry.levelBadge = new Graphics();
+      entry.view.addChild(entry.levelBadge);
+    }
+    const g = entry.levelBadge;
+    g.clear();
+    if (b.level < 2 || b.underConstruction) {
+      g.visible = false;
+      return;
+    }
+    g.visible = true;
+    const [n, , s] = footprintCorners(b.w, b.h);
+    const cx = (n[0] + s[0]) / 2;
+    const top = n[1] - b.def.art.height - 20;
+    const pips = b.level;
+    const gap = 11;
+    const w = pips * gap + 6;
+    g.roundRect(cx - w / 2, top - 8, w, 16, 8)
+      .fill({ color: 0x1c1710, alpha: 0.8 })
+      .stroke({ color: 0xe3b341, width: 1 });
+    for (let i = 0; i < pips; i++) {
+      const px = cx - w / 2 + 9 + i * gap;
+      g.star(px, top, 5, 4.4, 1.9).fill({ color: 0xf4d06a }).stroke({ color: 0x7a5a16, width: 0.6 });
     }
   }
 
@@ -464,6 +580,15 @@ export class WorldRenderer {
           this.updateOverlay(existing, b);
           existing.lastOverlayKey = overlayKey;
         }
+        this.syncLevelBadge(existing, b);
+        // Rotate sails if present
+        if (existing.sailsGfx) {
+          const active = !b.underConstruction && b.assignedWorkers > 0 && !b.productionHalted && !b.userPaused;
+          if (active) {
+            existing.sailsAngle = (existing.sailsAngle ?? 0) + 0.05;
+            existing.sailsGfx.rotation = existing.sailsAngle;
+          }
+        }
         continue;
       }
       const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
@@ -475,6 +600,40 @@ export class WorldRenderer {
       const hpBar = new Graphics();
       const view = new Container();
       view.addChild(sprite, hpBar);
+
+      // Create rotating sails for the Mill
+      let sailsGfx: Graphics | undefined;
+      let sailsAngle = 0;
+      if (b.defId === 'mill') {
+        sailsGfx = new Graphics();
+        // Draw the sails centered at (0, 0)
+        sailsGfx.moveTo(0, 0).lineTo(0, -6).stroke({ color: 0x4a3b28, width: 2.5 });
+        for (const a of [0.5, 2.07, 3.64, 5.21]) {
+          sailsGfx.moveTo(0, 0)
+            .lineTo(Math.cos(a) * 26, Math.sin(a) * 26)
+            .stroke({ color: 0xf4eee0, width: 4 });
+          // Draw a sail cloth
+          const start = 6;
+          const sx = Math.cos(a) * start;
+          const sy = Math.sin(a) * start;
+          const ex = Math.cos(a) * 26;
+          const ey = Math.sin(a) * 26;
+          // Draw perpendicular cloth
+          const perpAngle = a + Math.PI / 2;
+          const cx1 = sx + Math.cos(perpAngle) * 4;
+          const cy1 = sy + Math.sin(perpAngle) * 4;
+          const cx2 = ex + Math.cos(perpAngle) * 4;
+          const cy2 = ey + Math.sin(perpAngle) * 4;
+          sailsGfx.poly([sx, sy, cx1, cy1, cx2, cy2, ex, ey]).fill(0xfbf8eb).stroke({ color: 0x4a3b28, width: 0.8 });
+        }
+        // Offset for hub
+        const isExternal = (b.w === b.def.footprint.w && b.h === b.def.footprint.h) && this.buildingSprites.hasExternal(b.defId, b.level);
+        const hubX = isExternal ? 6 : 0;
+        const hubY = isExternal ? -56 : -52;
+        sailsGfx.position.set(hubX, hubY);
+        view.addChild(sailsGfx);
+      }
+
       const anchor = gridToScreen(b.x, b.y);
       view.position.set(anchor.x, anchor.y);
       view.zIndex = b.zIndex;
@@ -497,8 +656,11 @@ export class WorldRenderer {
         },
         lastOverlayKey: this.buildingOverlayKey(b),
         lastLevel: b.level,
+        sailsGfx,
+        sailsAngle,
       };
       this.updateOverlay(entry, b);
+      this.syncLevelBadge(entry, b);
       this.buildingViews.set(b.id, entry);
     }
   }
@@ -539,6 +701,389 @@ export class WorldRenderer {
     }
   }
 
+  private syncDecorativeNPCs(state: RenderState, dt: number): void {
+    const liveBuildingIds = new Set<number>();
+
+    for (const b of state.buildings.values()) {
+      if (b.defId !== 'lumberjack' && b.defId !== 'mine' && b.defId !== 'quarry' && b.defId !== 'farm') continue;
+      liveBuildingIds.add(b.id);
+
+      const active = !b.underConstruction && b.assignedWorkers > 0 && !b.productionHalted && !b.userPaused;
+      
+      // Determine target tile based on building type
+      let target: Point | null = null;
+      if (active) {
+        if (b.defId === 'lumberjack') {
+          target = b.terrainTileInRange(state.grid, Terrain.Forest, 4);
+        } else if (b.defId === 'mine') {
+          target = b.adjacentTerrainTile(state.grid, Terrain.Ore);
+        } else if (b.defId === 'quarry') {
+          target = b.adjacentTerrainTile(state.grid, Terrain.Rock);
+        } else if (b.defId === 'farm') {
+          const access = b.accessTiles(state.grid);
+          // door is access[0]. Target field spot is any other access tile.
+          target = access.length > 1 ? access[1 + ((b.id * 17) % (access.length - 1))] : (access[0] ?? { x: b.x, y: b.y });
+        }
+      }
+
+      let npc = this.decorativeNPCs.get(b.id);
+
+      if (!active || !target) {
+        if (npc) {
+          // Return worker to building door and despawn
+          if (npc.phase !== 'returning') {
+            const currentTile = { x: Math.round(npc.x), y: Math.round(npc.y) };
+            const path = findPath(state.grid, currentTile, b.accessTiles(state.grid));
+            if (path) {
+              npc.path = path;
+              npc.pathIndex = 0;
+              npc.phase = 'returning';
+              npc.targetTile = null;
+            } else {
+              npc.view.destroy({ children: true });
+              this.decorativeNPCs.delete(b.id);
+              continue;
+            }
+          }
+
+          // Move back to door
+          let budget = 2.2 * dt;
+          while (budget > 0 && npc.pathIndex < npc.path.length) {
+            const tgt = npc.path[npc.pathIndex];
+            const dx = tgt.x - npc.x;
+            const dy = tgt.y - npc.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist <= budget) {
+              npc.x = tgt.x;
+              npc.y = tgt.y;
+              budget -= dist;
+              npc.pathIndex++;
+            } else {
+              npc.x += (dx / dist) * budget;
+              npc.y += (dy / dist) * budget;
+              budget = 0;
+            }
+          }
+
+          if (npc.pathIndex >= npc.path.length) {
+            // Arrived at door, despawn
+            npc.view.destroy({ children: true });
+            this.decorativeNPCs.delete(b.id);
+            continue;
+          }
+
+          // Visual updates
+          const p = gridToScreen(npc.x, npc.y);
+          const bob = walkBob(npc.x, npc.y, true);
+          npc.view.position.set(p.x, p.y + bob);
+          npc.view.zIndex = npc.x + npc.y + 0.5;
+
+          if (npc.pathIndex < npc.path.length) {
+            const tgt = npc.path[npc.pathIndex];
+            const dxScreen = (tgt.x - npc.x) - (tgt.y - npc.y);
+            if (dxScreen < -0.001) npc.facing = -1;
+            else if (dxScreen > 0.001) npc.facing = 1;
+          }
+
+          if (npc.sprite && npc.set) {
+            const frame = unitFrame(npc.set, npc.x, npc.y, true);
+            if (frame !== npc.lastFrame) {
+              npc.sprite.texture = npc.set.textures[frame];
+              npc.lastFrame = frame;
+            }
+            npc.sprite.scale.set(npc.set.scale * npc.facing, npc.set.scale);
+          }
+          npc.view.rotation = 0;
+          drawDecorativeNPC(npc.gfx, npc.type, npc.phase, npc.sprite !== null);
+        }
+        continue;
+      }
+
+      // Building is active and has a target
+      if (!npc) {
+        const accessTiles = b.accessTiles(state.grid);
+        const spawn = accessTiles[0] ?? { x: b.x, y: b.y };
+        const entry = this.createUnitEntry('worker');
+        npc = {
+          buildingId: b.id,
+          type: b.defId === 'lumberjack' ? 'lumberjack' : b.defId === 'mine' ? 'miner' : b.defId === 'quarry' ? 'quarryman' : 'farmer',
+          x: spawn.x,
+          y: spawn.y,
+          phase: 'idle',
+          path: [],
+          pathIndex: 0,
+          targetTile: null,
+          timer: 0.5,
+          view: entry.view,
+          sprite: entry.sprite,
+          gfx: entry.gfx,
+          set: entry.set,
+          facing: 1,
+          lastFrame: -1,
+        };
+        this.decorativeNPCs.set(b.id, npc);
+      }
+
+      // Target validation check
+      let targetInvalid = npc.targetTile === null;
+      if (npc.targetTile) {
+        if (npc.type === 'lumberjack') {
+          targetInvalid = targetInvalid || state.grid.terrainAt(npc.targetTile.x, npc.targetTile.y) !== Terrain.Forest || (npc.targetTile.x !== target.x || npc.targetTile.y !== target.y);
+        } else if (npc.type === 'miner') {
+          targetInvalid = targetInvalid || state.grid.terrainAt(npc.targetTile.x, npc.targetTile.y) !== Terrain.Ore || (npc.targetTile.x !== target.x || npc.targetTile.y !== target.y);
+        } else if (npc.type === 'quarryman') {
+          targetInvalid = targetInvalid || state.grid.terrainAt(npc.targetTile.x, npc.targetTile.y) !== Terrain.Rock || (npc.targetTile.x !== target.x || npc.targetTile.y !== target.y);
+        } else if (npc.type === 'farmer') {
+          targetInvalid = targetInvalid || (npc.targetTile.x !== target.x || npc.targetTile.y !== target.y);
+        }
+      }
+
+      if (targetInvalid) {
+        npc.targetTile = target;
+        const currentTile = { x: Math.round(npc.x), y: Math.round(npc.y) };
+
+        if (npc.type === 'farmer') {
+          // Farmer walks directly to the target field/access tile
+          const path = findPath(state.grid, currentTile, [target]);
+          if (path) {
+            npc.path = path;
+            npc.pathIndex = 0;
+            npc.phase = 'toTarget';
+          } else {
+            npc.phase = 'idle';
+            npc.timer = 1.0;
+          }
+        } else {
+          // Miner, quarryman, lumberjack walk to a walkable neighbor of the target resource tile
+          const neighbors: Point[] = [];
+          const dirs = [[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,-1], [1,-1], [-1,1]] as const;
+          for (const [dx, dy] of dirs) {
+            const nx = target.x + dx;
+            const ny = target.y + dy;
+            if (state.grid.inBounds(nx, ny) && isFinite(state.grid.moveCost(nx, ny))) {
+              neighbors.push({ x: nx, y: ny });
+            }
+          }
+
+          const path = findPath(state.grid, currentTile, neighbors);
+          if (path) {
+            npc.path = path;
+            npc.pathIndex = 0;
+            npc.phase = 'toTarget';
+          } else {
+            npc.phase = 'idle';
+            npc.timer = 1.0;
+          }
+        }
+      }
+
+      // Phase updates
+      if (npc.phase === 'toTarget') {
+        let budget = 2.2 * dt;
+        while (budget > 0 && npc.pathIndex < npc.path.length) {
+          const tgt = npc.path[npc.pathIndex];
+          const dx = tgt.x - npc.x;
+          const dy = tgt.y - npc.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist <= budget) {
+            npc.x = tgt.x;
+            npc.y = tgt.y;
+            budget -= dist;
+            npc.pathIndex++;
+          } else {
+            npc.x += (dx / dist) * budget;
+            npc.y += (dy / dist) * budget;
+            budget = 0;
+          }
+        }
+        if (npc.pathIndex >= npc.path.length) {
+          npc.phase = 'working';
+          npc.timer = 3.0;
+          npc.path = [];
+          npc.pathIndex = 0;
+        }
+      } else if (npc.phase === 'working') {
+        npc.timer -= dt;
+        if (npc.timer <= 0) {
+          const currentTile = { x: Math.round(npc.x), y: Math.round(npc.y) };
+          const path = findPath(state.grid, currentTile, b.accessTiles(state.grid));
+          if (path) {
+            npc.path = path;
+            npc.pathIndex = 0;
+            npc.phase = 'returning';
+          } else {
+            npc.phase = 'idle';
+            npc.timer = 1.0;
+          }
+        }
+      } else if (npc.phase === 'returning') {
+        let budget = 2.2 * dt;
+        while (budget > 0 && npc.pathIndex < npc.path.length) {
+          const tgt = npc.path[npc.pathIndex];
+          const dx = tgt.x - npc.x;
+          const dy = tgt.y - npc.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist <= budget) {
+            npc.x = tgt.x;
+            npc.y = tgt.y;
+            budget -= dist;
+            npc.pathIndex++;
+          } else {
+            npc.x += (dx / dist) * budget;
+            npc.y += (dy / dist) * budget;
+            budget = 0;
+          }
+        }
+        if (npc.pathIndex >= npc.path.length) {
+          npc.phase = 'idle';
+          npc.timer = 1.0;
+          npc.path = [];
+          npc.pathIndex = 0;
+        }
+      } else if (npc.phase === 'idle') {
+        npc.timer -= dt;
+        if (npc.timer <= 0) {
+          const currentTile = { x: Math.round(npc.x), y: Math.round(npc.y) };
+          if (npc.type === 'farmer') {
+            const path = findPath(state.grid, currentTile, [target]);
+            if (path) {
+              npc.path = path;
+              npc.pathIndex = 0;
+              npc.phase = 'toTarget';
+            } else {
+              npc.timer = 1.0;
+            }
+          } else {
+            const neighbors: Point[] = [];
+            const dirs = [[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,-1], [1,-1], [-1,1]] as const;
+            for (const [dx, dy] of dirs) {
+              const nx = target.x + dx;
+              const ny = target.y + dy;
+              if (state.grid.inBounds(nx, ny) && isFinite(state.grid.moveCost(nx, ny))) {
+                neighbors.push({ x: nx, y: ny });
+              }
+            }
+            const path = findPath(state.grid, currentTile, neighbors);
+            if (path) {
+              npc.path = path;
+              npc.pathIndex = 0;
+              npc.phase = 'toTarget';
+            } else {
+              npc.timer = 1.0;
+            }
+          }
+        }
+      }
+
+      // Visual updates
+      const p = gridToScreen(npc.x, npc.y);
+      const moving = npc.phase === 'toTarget' || npc.phase === 'returning';
+      const bob = walkBob(npc.x, npc.y, moving);
+      npc.view.position.set(p.x, p.y + bob);
+      npc.view.zIndex = npc.x + npc.y + 0.5;
+
+      if (moving && npc.pathIndex < npc.path.length) {
+        const tgt = npc.path[npc.pathIndex];
+        const dxScreen = (tgt.x - npc.x) - (tgt.y - npc.y);
+        if (dxScreen < -0.001) npc.facing = -1;
+        else if (dxScreen > 0.001) npc.facing = 1;
+      } else if (npc.phase === 'working') {
+        if (npc.type === 'farmer') {
+          // Face the center of the 3x3 farm
+          const center = b.center;
+          const dxScreen = (center.x - npc.x) - (center.y - npc.y);
+          if (dxScreen < -0.001) npc.facing = -1;
+          else if (dxScreen > 0.001) npc.facing = 1;
+        } else if (npc.targetTile) {
+          const dxScreen = (npc.targetTile.x - npc.x) - (npc.targetTile.y - npc.y);
+          if (dxScreen < -0.001) npc.facing = -1;
+          else if (dxScreen > 0.001) npc.facing = 1;
+        }
+      }
+
+      if (npc.sprite && npc.set) {
+        const frame = unitFrame(npc.set, npc.x, npc.y, moving);
+        if (frame !== npc.lastFrame) {
+          npc.sprite.texture = npc.set.textures[frame];
+          npc.lastFrame = frame;
+        }
+        npc.sprite.scale.set(npc.set.scale * npc.facing, npc.set.scale);
+      }
+
+      if (npc.phase === 'working') {
+        npc.view.rotation = Math.sin(performance.now() * 0.015) * 0.25;
+      } else {
+        npc.view.rotation = 0;
+      }
+
+      drawDecorativeNPC(npc.gfx, npc.type, npc.phase, npc.sprite !== null);
+    }
+
+    // Clean up completely removed buildings
+    for (const [id, npc] of this.decorativeNPCs) {
+      if (!state.buildings.has(id)) {
+        npc.view.destroy({ children: true });
+        this.decorativeNPCs.delete(id);
+      }
+    }
+  }
+
+  private syncFisheryBoats(state: RenderState, dt: number): void {
+    const liveBuildingIds = new Set<number>();
+
+    for (const b of state.buildings.values()) {
+      if (b.defId !== 'fishery') continue;
+      liveBuildingIds.add(b.id);
+
+      const active = !b.underConstruction && b.assignedWorkers > 0 && !b.productionHalted && !b.userPaused;
+      let boat = this.fisheryBoats.get(b.id);
+
+      if (!active) {
+        if (boat) {
+          boat.view.destroy({ children: true });
+          this.fisheryBoats.delete(b.id);
+        }
+        continue;
+      }
+
+      if (!boat) {
+        const waterTile = b.adjacentTerrainTile(state.grid, Terrain.Water);
+        if (waterTile) {
+          const view = new Container();
+          const gfx = new Graphics();
+          view.addChild(gfx);
+          this.objectLayer.addChild(view);
+          boat = {
+            buildingId: b.id,
+            x: waterTile.x,
+            y: waterTile.y,
+            view,
+            gfx,
+            bobTimer: Math.random() * 10,
+          };
+          this.fisheryBoats.set(b.id, boat);
+        }
+      }
+
+      if (boat) {
+        boat.bobTimer += dt;
+        const bob = Math.sin(boat.bobTimer * 2) * 2;
+        const p = gridToScreen(boat.x, boat.y);
+        boat.view.position.set(p.x, p.y + bob);
+        boat.view.zIndex = boat.x + boat.y + 0.1;
+        drawFisheryBoat(boat.gfx, boat.bobTimer);
+      }
+    }
+
+    // Clean up completely removed buildings
+    for (const [id, boat] of this.fisheryBoats) {
+      if (!liveBuildingIds.has(id)) {
+        boat.view.destroy({ children: true });
+        this.fisheryBoats.delete(id);
+      }
+    }
+  }
+
   private syncGhost(state: RenderState): void {
     const ghost = state.ghost;
     if (!ghost) {
@@ -575,8 +1120,38 @@ export class WorldRenderer {
     this.selectionView.visible = true;
   }
 
-  /** Manual culling: hide everything outside the camera's view rectangle. */
-  private cull(camera: Camera): void {
+  private syncFog(state: RenderState, camera: Camera): void {
+    this.fogView.clear();
+    const view = camera.visibleRect();
+    const margin = TILE_W;
+    const minX = view.x - margin;
+    const maxX = view.x + view.w + margin;
+    const minY = view.y - margin;
+    const maxY = view.y + view.h + margin;
+
+    const grid = state.grid;
+    const halfW = TILE_W / 2;
+    const halfH = TILE_H / 2;
+
+    for (let gy = 0; gy < grid.height; gy++) {
+      for (let gx = 0; gx < grid.width; gx++) {
+        if (!grid.isExplored(gx, gy)) {
+          const p = gridToScreen(gx, gy);
+          if (p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) {
+            this.fogView.poly([
+              p.x, p.y - halfH - 0.5,
+              p.x + halfW + 0.5, p.y,
+              p.x, p.y + halfH + 0.5,
+              p.x - halfW - 0.5, p.y
+            ]).fill({ color: 0x0c0f16, alpha: 0.9 });
+          }
+        }
+      }
+    }
+  }
+
+  /** Manual culling: hide everything outside the camera's view rectangle or in unexplored FOW. */
+  private cull(camera: Camera, state: RenderState): void {
     const view = camera.visibleRect();
     const minX = view.x - CULL_MARGIN;
     const maxX = view.x + view.w + CULL_MARGIN;
@@ -586,18 +1161,38 @@ export class WorldRenderer {
       b.maxX >= minX && b.minX <= maxX && b.maxY >= minY && b.minY <= maxY;
 
     for (const chunk of this.terrainChunks.values()) chunk.view.visible = visible(chunk.bounds);
-    for (const entry of this.buildingViews.values()) entry.view.visible = visible(entry.bounds);
-    for (const entry of this.workerViews.values()) {
-      const { x, y } = entry.view.position;
-      entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
+    for (const [id, entry] of this.buildingViews) {
+      const b = state.buildings.get(id);
+      const explored = b ? state.grid.isExplored(b.x, b.y) : false;
+      entry.view.visible = explored && visible(entry.bounds);
     }
-    for (const entry of this.soldierViews.values()) {
+    for (const [id, entry] of this.workerViews) {
+      const w = state.workers.find((x) => x.id === id);
+      const explored = w ? state.grid.isExplored(Math.round(w.x), Math.round(w.y)) : false;
       const { x, y } = entry.view.position;
-      entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
+      entry.view.visible = explored && x >= minX && x <= maxX && y >= minY && y <= maxY;
     }
-    for (const entry of this.enemyViews.values()) {
+    for (const entry of this.decorativeNPCs.values()) {
+      const explored = state.grid.isExplored(Math.round(entry.x), Math.round(entry.y));
       const { x, y } = entry.view.position;
-      entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
+      entry.view.visible = explored && x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+    for (const entry of this.fisheryBoats.values()) {
+      const explored = state.grid.isExplored(Math.round(entry.x), Math.round(entry.y));
+      const { x, y } = entry.view.position;
+      entry.view.visible = explored && x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+    for (const [id, entry] of this.soldierViews) {
+      const s = state.soldiers.find((x) => x.id === id);
+      const explored = s ? state.grid.isExplored(Math.round(s.x), Math.round(s.y)) : false;
+      const { x, y } = entry.view.position;
+      entry.view.visible = explored && x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+    for (const [id, entry] of this.enemyViews) {
+      const e = state.enemies.find((x) => x.id === id);
+      const explored = e ? state.grid.isExplored(Math.round(e.x), Math.round(e.y)) : false;
+      const { x, y } = entry.view.position;
+      entry.view.visible = explored && x >= minX && x <= maxX && y >= minY && y <= maxY;
     }
   }
 }

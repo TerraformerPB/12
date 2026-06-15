@@ -44,17 +44,17 @@ export const MAX_FRAME_DELTA_MS = 250;
 
 export const TILE_W = 64;
 export const TILE_H = 32;
-export const MAP_W = 48;
-export const MAP_H = 48;
+export const MAP_W = 64;
+export const MAP_H = 64;
 
 /** Side length of square terrain render chunks, in tiles. */
 export const TERRAIN_CHUNK_SIZE = 12;
 
 // Terrain generation: river band, rock clusters, forest clusters.
-export const TERRAIN_ROCK_CLUSTERS = 6;
+export const TERRAIN_ROCK_CLUSTERS = 9;
 export const TERRAIN_ROCK_CLUSTER_MIN = 4;
 export const TERRAIN_ROCK_CLUSTER_MAX = 10;
-export const TERRAIN_FOREST_CLUSTERS = 12;
+export const TERRAIN_FOREST_CLUSTERS = 18;
 export const TERRAIN_FOREST_CLUSTER_MIN = 8;
 export const TERRAIN_FOREST_CLUSTER_MAX = 20;
 export const TERRAIN_RIVER_WIDTH = 2;
@@ -68,7 +68,7 @@ export const FOREST_WOOD_PER_TILE = 10;
 export const FOREST_REGROW_INTERVAL = 10;
 export const FOREST_REGROW_ATTEMPTS = 6;
 /** Ore a mine extracts before one adjacent ore-vein tile turns to rock. */
-export const ORE_PER_TILE = 12;
+export const ORE_PER_TILE = 40;
 /** Extra local storage per building level above 1 (phase 20). */
 export const UPGRADE_LOCAL_STORE = 2;
 /** Market sell-price bonus per market level above 1. */
@@ -98,7 +98,7 @@ export const DEMOLISH_REFUND = 0.5;
 // Generous enough that walls/towers stand before wave 1 even though
 // construction sites consume their materials from this stock (phase 13).
 export const START_RESOURCES: Record<ResourceId, number> = {
-  wood: 140,
+  wood: 200,
   stone: 50,
   ore: 0,
   weapons: 0,
@@ -187,7 +187,7 @@ export const UPGRADE_SPEED_BONUS = 0.3;
 export const UPGRADE_TOWER_DAMAGE_BONUS = 0.35;
 export const UPGRADE_TOWER_RANGE_BONUS = 0.75;
 /** Extra hut population per level above 1. */
-export const UPGRADE_HUT_POPULATION = 1;
+export const UPGRADE_HUT_POPULATION = 2;
 
 // --- Monetization (phase 6) -------------------------------------------------------
 
@@ -198,7 +198,7 @@ export const UPGRADE_HUT_POPULATION = 1;
  */
 export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
 /** Must be false in the store release. */
-export const ADMOB_USE_TEST_ADS = true;
+export const ADMOB_USE_TEST_ADS = false;
 
 // --- Consumption & morale (phase 12) -------------------------------------------------
 
@@ -245,17 +245,42 @@ export const WINTER_FOOD_FACTOR = 1.5;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 13;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
 /** User-facing app version (keep in sync with package.json / build.gradle). */
 export const APP_VERSION = '0.1.0';
+
+/**
+ * Legal / contact details for the imprint and privacy dialog. Required for
+ * the Play Store listing — replace every TODO with real data before release.
+ * Centralised here so it lives in exactly one place.
+ */
+export const LEGAL_INFO = {
+  /** Imprint (Impressum, § 5 TMG). */
+  provider: 'TODO: Anbietername / Firma',
+  street: 'TODO: Straße & Hausnummer',
+  city: 'TODO: PLZ & Ort',
+  country: 'Deutschland',
+  email: 'TODO: kontakt@example.com',
+  website: 'https://burgspiel.de',
+  /** Full online privacy policy (opened from the legal dialog). */
+  privacyUrl: 'https://burgspiel.de/privacy',
+} as const;
+
+/** True while any legal field still holds a placeholder (gates store build). */
+export const LEGAL_INFO_INCOMPLETE = Object.values(LEGAL_INFO).some((v) => v.startsWith('TODO'));
 
 // --- Wirtschaftssimulator (Phase 18, Szenario 'empire') ---------------------------
 
 /** Luxury demand per head and food interval (only in the empire scenario). */
 export const LUXURY_BEER_PER_POP = 0.12;
 export const LUXURY_CLOTH_PER_POP = 0.08;
+export const LUXURY_GOLD_PER_POP_L3 = 0.05;
+
+/** Morale gates for upgrading Huts */
+export const HUT_UPGRADE_MORALE_GATE_L2 = 80;
+export const HUT_UPGRADE_MORALE_GATE_L3 = 85;
 
 /** Prestige income per food interval. */
 export const PRESTIGE_PER_POP = 0.5;

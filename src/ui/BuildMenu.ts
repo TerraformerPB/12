@@ -126,6 +126,11 @@ export function createBuildMenu(uiRoot: HTMLElement, game: Game): void {
 
   uiRoot.appendChild(sheet);
 
+  // The map editor uses its own bottom toolbar — keep the build sheet out.
+  events.on('game:phaseChanged', ({ phase }) => {
+    sheet.hidden = phase === 'editor';
+  });
+
   // Rank gates (empire scenario): lock cards until the rank is reached.
   const applyRankLocks = (): void => {
     for (const [defId, card] of cards) {

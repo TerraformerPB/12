@@ -56,6 +56,7 @@ function sampleData(): SaveData {
     scenarioId: 'endless',
     prestige: 0,
     diplomacy: null,
+    victoryAnnounced: false,
   };
 }
 
@@ -114,6 +115,16 @@ describe('save/load roundtrip', () => {
     expect(migrated!.saveVersion).toBe(SAVE_VERSION);
     expect(migrated!.terrainOverrides).toEqual([]);
     expect(migrated!.buildings.every((b) => b.harvestProgress === 0)).toBe(true);
+  });
+
+  it('migrates v11 savegames: victoryAnnounced defaults to false', () => {
+    const v11 = JSON.parse(JSON.stringify(sampleData())) as SaveData;
+    v11.saveVersion = 11;
+    delete (v11 as any).victoryAnnounced;
+    const migrated = migrateSave(v11);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.victoryAnnounced).toBe(false);
   });
 
   it('records terrain overrides only after the baseline is sealed', () => {

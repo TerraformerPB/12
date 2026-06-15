@@ -6,6 +6,12 @@ export interface InputCallbacks {
   onTap(screenX: number, screenY: number): void;
   /** Pointer position changed (hover or drag) — drives the ghost preview. */
   onHover(screenX: number, screenY: number): void;
+  /**
+   * Map-editor brush stroke: a single-finger press/drag while paint mode is
+   * on (see setPaintMode). Panning then needs two fingers, so painting and
+   * navigating never fight each other.
+   */
+  onPaint?(screenX: number, screenY: number): void;
 }
 
 interface TrackedPointer {
@@ -40,6 +46,13 @@ export class InputController {
     hadMultiTouch: boolean;
   } | null = null;
   private pinch: { dist: number; midX: number; midY: number } | null = null;
+  /** When true, single-finger drag paints (map editor) instead of panning. */
+  private paintMode = false;
+
+  /** Toggle the map-editor brush behaviour for single-finger gestures. */
+  setPaintMode(active: boolean): void {
+    this.paintMode = active;
+  }
 
   constructor(el: HTMLCanvasElement, camera: Camera, cb: InputCallbacks) {
     this.el = el;
@@ -72,6 +85,8 @@ export class InputController {
         moved: false,
         hadMultiTouch: false,
       };
+      // First touch of a brush stroke paints immediately.
+      if (this.paintMode) this.cb.onPaint?.(p.x, p.y);
     } else if (this.pointers.size === 2) {
       if (this.gesture) this.gesture.hadMultiTouch = true;
       this.pinch = this.computePinch();
@@ -97,7 +112,12 @@ export class InputController {
       ) {
         this.gesture.moved = true;
       }
-      if (this.gesture.moved) this.camera.panBy(dx, dy);
+      // Paint mode: a single finger paints along its path; two fingers pan.
+      if (this.paintMode) {
+        this.cb.onPaint?.(p.x, p.y);
+      } else if (this.gesture.moved) {
+        this.camera.panBy(dx, dy);
+      }
       this.cb.onHover(p.x, p.y);
     } else if (this.pointers.size >= 2) {
       tracked.x = p.x;

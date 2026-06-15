@@ -1,7 +1,7 @@
 import { events } from '../core/EventBus';
 import { loadScores } from '../core/Highscores';
 import { loadDuelRating } from '../core/DuelRating';
-import { APP_VERSION } from '../data/config';
+import { APP_VERSION, LEGAL_INFO } from '../data/config';
 import { SCENARIO_IDS, getScenario } from '../data/scenarios';
 import type { Game } from '../core/Game';
 
@@ -83,11 +83,16 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
   onlineBtn.textContent = '🌐 Online';
   onlineBtn.addEventListener('click', () => events.emit('online:openMenu', undefined));
 
+  const editorBtn = document.createElement('button');
+  editorBtn.className = 'menu-btn';
+  editorBtn.textContent = '🗺️ Karten-Editor';
+  editorBtn.addEventListener('click', () => game.openMapEditor());
+
   const settingsBtn = document.createElement('button');
   settingsBtn.className = 'menu-btn';
   settingsBtn.textContent = '⚙️ Einstellungen';
 
-  buttons.append(continueBtn, newBtn, scenarioRow, duelBtn, onlineBtn, scoresBtn, settingsBtn);
+  buttons.append(continueBtn, newBtn, scenarioRow, duelBtn, onlineBtn, editorBtn, scoresBtn, settingsBtn);
 
   const footer = document.createElement('div');
   footer.className = 'menu-footer';
@@ -178,7 +183,65 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
   const settingsClose = document.createElement('button');
   settingsClose.textContent = 'Schließen';
   settingsClose.addEventListener('click', () => (settingsDlg.hidden = true));
-  settingsCard.append(settingsHeading, soundBtn, wipeBtn, aboutLine, settingsClose);
+
+  // --- Legal dialog (Impressum & Datenschutz) ---
+  const legalDlg = document.createElement('div');
+  legalDlg.className = 'pause-overlay menu-dialog';
+  legalDlg.hidden = true;
+  const legalCard = document.createElement('div');
+  legalCard.className = 'pause-card legal-card';
+  const legalHeading = document.createElement('h2');
+  legalHeading.textContent = '⚖️ Rechtliches';
+
+  const legalBody = document.createElement('div');
+  legalBody.className = 'legal-body';
+  const webHost = LEGAL_INFO.website.replace(/^https?:\/\//, '');
+  legalBody.innerHTML = `
+    <h3>Impressum</h3>
+    <p>
+      <strong>Angaben gemäß § 5 TMG:</strong><br>
+      ${LEGAL_INFO.provider}<br>
+      ${LEGAL_INFO.street}<br>
+      ${LEGAL_INFO.city}<br>
+      ${LEGAL_INFO.country}
+    </p>
+    <p>
+      <strong>Kontakt:</strong><br>
+      E-Mail: ${LEGAL_INFO.email}<br>
+      Web: <a href="${LEGAL_INFO.website}" target="_blank" style="color:var(--ui-accent)">${webHost}</a>
+    </p>
+
+    <h3>Datenschutzerklärung</h3>
+    <p>
+      Dieses Spiel speichert alle Spielstände lokal auf Ihrem Endgerät. Es werden standardmäßig keine personenbezogenen Daten an unsere Server übertragen.
+    </p>
+    <p>
+      <strong>Werbung (Google AdMob):</strong><br>
+      Zur Bereitstellung von optionalen Werbevideos nutzen wir Google AdMob. AdMob erhebt ggf. Werbe-IDs (z.B. Google Advertising ID) und Geräteinformationen, um personalisierte Anzeigen zu schalten und Betrug vorzubeugen.
+    </p>
+  `;
+
+  const onlinePrivacyBtn = document.createElement('button');
+  onlinePrivacyBtn.textContent = '🌐 Online-Datenschutzerklärung';
+  onlinePrivacyBtn.addEventListener('click', () => {
+    window.open(LEGAL_INFO.privacyUrl, '_system');
+  });
+
+  const legalClose = document.createElement('button');
+  legalClose.textContent = 'Zurück';
+  legalClose.addEventListener('click', () => (legalDlg.hidden = true));
+
+  legalCard.append(legalHeading, legalBody, onlinePrivacyBtn, legalClose);
+  legalDlg.appendChild(legalCard);
+  uiRoot.appendChild(legalDlg);
+
+  const legalBtn = document.createElement('button');
+  legalBtn.textContent = '⚖️ Impressum & Datenschutz';
+  legalBtn.addEventListener('click', () => {
+    legalDlg.hidden = false;
+  });
+
+  settingsCard.append(settingsHeading, soundBtn, wipeBtn, legalBtn, aboutLine, settingsClose);
   settingsDlg.appendChild(settingsCard);
   uiRoot.appendChild(settingsDlg);
 
@@ -194,6 +257,7 @@ export function createMainMenu(uiRoot: HTMLElement, game: Game): void {
     if (phase !== 'menu') {
       scoresDlg.hidden = true;
       settingsDlg.hidden = true;
+      legalDlg.hidden = true;
       return;
     }
     confirming = false;

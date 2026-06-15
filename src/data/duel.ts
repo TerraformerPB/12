@@ -105,11 +105,23 @@ export const DUEL_NODE_YIELD = 1;
  * Neutral resource depots on the battlefield (west coordinates; each gets a
  * mirrored twin so both sides face the same layout). Whoever holds units
  * nearby — and the opponent doesn't — earns the depot's resource.
+ *
+ * Positions are derived from the actual map size so the layout stays
+ * symmetric and proportional on any grid. The reference ratios reproduce the
+ * original 48×48 layout exactly: x = 21, y = cy ± 7.
  */
-export const DUEL_NODES: { x: number; y: number; resource: ResourceId; icon: string }[] = [
-  { x: 21, y: 17, resource: 'bread', icon: '🥖' },
-  { x: 21, y: 31, resource: 'weapons', icon: '⚔️' },
-];
+export function duelNodes(
+  mapW: number,
+  mapH: number,
+): { x: number; y: number; resource: ResourceId; icon: string }[] {
+  const cy = Math.floor(mapH / 2);
+  const x = Math.round(mapW * (21 / 48));
+  const dy = Math.round(mapH * (7 / 48));
+  return [
+    { x, y: cy - dy, resource: 'bread', icon: '🥖' },
+    { x, y: cy + dy, resource: 'weapons', icon: '⚔️' },
+  ];
+}
 
 /**
  * Cleared-to-grass rectangles for a duel map: both castle grounds, every
@@ -122,15 +134,16 @@ export function duelClearRects(
   mapH: number,
 ): { x: number; y: number; w: number; h: number }[] {
   const cy = Math.floor(mapH / 2);
+  const nodes = duelNodes(mapW, mapH);
   return [
     { x: 2, y: cy - 6, w: 10, h: 13 },
     { x: mapW - 12, y: cy - 6, w: 10, h: 13 },
-    ...DUEL_NODES.flatMap((n) => [
+    ...nodes.flatMap((n) => [
       { x: n.x - 2, y: n.y - 2, w: 5, h: 5 },
       { x: mapW - 1 - (n.x + 2), y: n.y - 2, w: 5, h: 5 },
     ]),
     { x: 11, y: cy - 1, w: mapW - 22, h: 3 },
-    ...DUEL_NODES.map((n) => ({ x: 11, y: n.y - 1, w: mapW - 22, h: 3 })),
+    ...nodes.map((n) => ({ x: 11, y: n.y - 1, w: mapW - 22, h: 3 })),
   ];
 }
 

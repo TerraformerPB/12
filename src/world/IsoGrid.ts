@@ -22,8 +22,8 @@ import {
  * TILE_W × TILE_H pixels around its center.
  *
  * Depth sorting: zIndex of an object standing on tile (gx, gy) is gx + gy.
- * Buildings with a footprint larger than 1×1 sort by their front corner:
- * (gx + w - 1) + (gy + h - 1).
+ * Buildings with a footprint larger than 1×1 sort by their center-based value:
+ * gx + gy + (w + h) / 2 - 0.5.
  */
 
 export interface Point {
@@ -103,6 +103,7 @@ export class IsoGrid {
   /** Terrain changes after generation (felled/regrown forest), for saves. */
   private overrides = new Map<number, Terrain>();
   private baselineSealed = false;
+  private exploredState: Uint8Array;
 
   constructor(width: number = MAP_W, height: number = MAP_H) {
     this.width = width;
@@ -110,10 +111,38 @@ export class IsoGrid {
     this.terrain = new Uint8Array(width * height); // all grass
     this.occupant = new Int32Array(width * height);
     this.passable = new Uint8Array(width * height);
+    this.exploredState = new Uint8Array(width * height); // all unexplored (0)
   }
 
   inBounds(gx: number, gy: number): boolean {
     return gx >= 0 && gy >= 0 && gx < this.width && gy < this.height;
+  }
+
+  isExplored(gx: number, gy: number): boolean {
+    if (!this.inBounds(gx, gy)) return false;
+    return this.exploredState[this.idx(gx, gy)] === 1;
+  }
+
+  setExplored(gx: number, gy: number, val: boolean): void {
+    if (!this.inBounds(gx, gy)) return;
+    this.exploredState[this.idx(gx, gy)] = val ? 1 : 0;
+  }
+
+  exploredIndices(): number[] {
+    const list: number[] = [];
+    for (let i = 0; i < this.exploredState.length; i++) {
+      if (this.exploredState[i] === 1) list.push(i);
+    }
+    return list;
+  }
+
+  applyExploredIndices(list: number[]): void {
+    this.exploredState.fill(0);
+    for (const idx of list) {
+      if (idx >= 0 && idx < this.exploredState.length) {
+        this.exploredState[idx] = 1;
+      }
+    }
   }
 
   private idx(gx: number, gy: number): number {

@@ -33,6 +33,12 @@ import {
   WINTER_FOOD_FACTOR,
 } from '../data/config';
 import { SCENARIOS, getScenario, type ScenarioId } from '../data/scenarios';
+import {
+  HUT_UPGRADE_MORALE_GATE_L2,
+  HUT_UPGRADE_MORALE_GATE_L3,
+  LUXURY_GOLD_PER_POP_L3,
+  START_WORKERS,
+} from '../data/config';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
@@ -70,9 +76,12 @@ import { createPauseMenu } from '../ui/PauseMenu';
 import { createGameOverMenu } from '../ui/GameOverMenu';
 import { createDuelMenu } from '../ui/DuelMenu';
 import { createMainMenu } from '../ui/MainMenu';
+import { createMapEditorPanel } from '../ui/MapEditorPanel';
+import { blankTerrain } from './MapStore';
 import { createStatsPanel } from '../ui/StatsPanel';
 import { createMarketPanel } from '../ui/MarketPanel';
 import { createOnlineMenu } from '../ui/OnlineMenu';
+import { OnlineClient } from '../online/OnlineClient';
 import { createDiplomacyPanel } from '../ui/DiplomacyPanel';
 import type { BuildingDef } from '../data/buildings';
 import { getTechDef, TECH_EFFECTS, type TechId } from '../data/techs';
@@ -93,12 +102,12 @@ import {
 import {
   DUEL_BUDGETS,
   DUEL_DEPLOY_COSTS,
-  DUEL_NODES,
   DUEL_NODE_INTERVAL,
   DUEL_NODE_RADIUS,
   DUEL_NODE_YIELD,
   DUEL_TIME_LIMIT,
   duelClearRects,
+  duelNodes,
   type DuelAiLevelId,
   type DuelBudgetId,
 } from '../data/duel';
@@ -132,6 +141,11 @@ export class Game {
   grid = new IsoGrid(MAP_W, MAP_H);
   camera = new Camera();
   renderer = new WorldRenderer();
+  /** Pointer input; held so the map editor can switch to brush mode. */
+  private input: InputController | null = null;
+  /** Map-editor brush: terrain id painted on tap/drag, and brush radius. */
+  private editorBrush: Terrain = Terrain.Water;
+  private editorBrushSize = 1;
   saveManager = new SaveManager();
   sound = new SoundManager();
 
@@ -160,6 +174,7 @@ export class Game {
   private lastRankIndex = 0;
   /** Swapped for an AdMob-backed provider in the store build (phase 6). */
   ads!: RewardedAdProvider;
+  onlineClient: OnlineClient | null = null;
   private reviveUsed = false;
   private lostWarehouseSpot: { x: number; y: number; rotated: boolean } | null = null;
   // --- Duel mode (Burg-Duell): mirrored 1v1 against a budgeted AI. ---
@@ -188,15 +203,16 @@ export class Game {
   diplomacyPanel: { toggle(): void } | null = null;
   /** True once the player has built anything beyond the starting warehouse. */
   hasProgress(): boolean {
-    return this.buildings.size > 1 || this.waveSystem.waveNumber > 0;
+    return this.buildings.size > 1 || (!this.empireMode && this.waveSystem.waveNumber > 0);
   }
 
   async init(root: HTMLElement, uiRoot: HTMLElement): Promise<void> {
     await this.renderer.init(root);
     await this.sound.preload();
-    new InputController(this.renderer.canvas, this.camera, {
+    this.input = new InputController(this.renderer.canvas, this.camera, {
       onTap: (x, y) => this.handleTap(x, y),
       onHover: (x, y) => this.handleHover(x, y),
+      onPaint: (x, y) => this.paintEditorTile(x, y),
     });
 
     createHUD(uiRoot, this);
@@ -207,10 +223,11 @@ export class Game {
     createTutorialBanner(uiRoot, this);
     createDuelMenu(uiRoot, this);
     createMainMenu(uiRoot, this);
+    createMapEditorPanel(uiRoot, this);
     this.statsPanel = createStatsPanel(uiRoot, this);
     this.marketPanel = createMarketPanel(uiRoot, this);
     this.diplomacyPanel = createDiplomacyPanel(uiRoot, this);
-    createOnlineMenu(uiRoot, this);
+    this.onlineClient = createOnlineMenu(uiRoot, this);
     createToast(uiRoot);
     if (Capacitor.isNativePlatform()) {
       const admob = new AdmobRewardedAdProvider();
@@ -247,6 +264,7 @@ export class Game {
   private resetWorld(
     seed: number,
     mirrorClearRects?: { x: number; y: number; w: number; h: number }[],
+    customTerrain?: number[],
   ): void {
     this.seed = seed;
     this.nextId = 1;
@@ -267,7 +285,16 @@ export class Game {
     this.reviveUsed = false;
     this.lostWarehouseSpot = null;
     this.grid = new IsoGrid(MAP_W, MAP_H);
-    generateTerrain(this.grid, seed);
+    if (customTerrain && customTerrain.length === MAP_W * MAP_H) {
+      // Player-made map from the editor: load its terrain verbatim, but keep
+      // the central building site clear so the starting warehouse always fits.
+      for (let i = 0; i < customTerrain.length; i++) {
+        this.grid.setTerrain(i % MAP_W, Math.floor(i / MAP_W), customTerrain[i] as Terrain);
+      }
+      this.clearCenterForStart();
+    } else {
+      generateTerrain(this.grid, seed);
+    }
     // Duel maps are mirrored at the middle so both sides face equal terrain.
     if (mirrorClearRects) mirrorTerrainEastWest(this.grid, mirrorClearRects);
     this.grid.sealBaseline();
@@ -353,8 +380,12 @@ export class Game {
     store.emitChanged();
   }
 
-  newGame(seed: number = (Math.random() * 0xffffffff) >>> 0, scenarioId: ScenarioId = 'endless'): void {
-    this.resetWorld(seed);
+  newGame(
+    seed: number = (Math.random() * 0xffffffff) >>> 0,
+    scenarioId: ScenarioId = 'endless',
+    customTerrain?: number[],
+  ): void {
+    this.resetWorld(seed, undefined, customTerrain);
     this.scenarioId = scenarioId;
     this.lastSeason = -1;
     this.setupSystems(new ResourceStore(START_RESOURCES));
@@ -368,6 +399,7 @@ export class Game {
 
     const center = gridToScreen(wx + warehouseDef.footprint.w / 2, wy + warehouseDef.footprint.h / 2);
     this.camera.centerOn(center.x, center.y);
+    this.updateExploration();
     events.emit('techs:changed', { researched: [] });
     events.emit('morale:changed', { morale: Math.round(this.morale) });
     this.lastRankEmit = '';
@@ -411,6 +443,7 @@ export class Game {
     else this.waveSystem.tick();
     this.combatSystem.tick();
     if (this.tickCount % (FOOD_INTERVAL * TICK_RATE) === 0) this.foodAndTaxTick();
+    if (this.tickCount % 10 === 0) this.updateExploration();
     // Tutorial conditions are cheap but need no per-tick precision.
     if (this.tickCount % 20 === 0) {
       this.checkTutorial();
@@ -443,7 +476,21 @@ export class Game {
   // --- Consumption, morale & taxes ---------------------------------------------------
 
   private foodAndTaxTick(): void {
-    const pop = this.economy.populationTotal();
+    let numL1 = 0;
+    let numL2 = 0;
+    let numL3 = 0;
+    for (const b of this.buildings.values()) {
+      if (b.owner === 'player' && b.defId === 'hut' && !b.underConstruction) {
+        if (b.level === 1) numL1++;
+        else if (b.level === 2) numL2++;
+        else if (b.level === 3) numL3++;
+      }
+    }
+    const popBauern = START_WORKERS + numL1 * 2;
+    const popBuerger = numL2 * 4;
+    const popHaendler = numL3 * 6;
+    const pop = popBauern + popBuerger + popHaendler;
+
     const winter = this.season === 3;
     let need = Math.ceil(pop * FOOD_PER_POP) + this.soldiers.length * FOOD_PER_SOLDIER;
     if (winter) need = Math.ceil(need * WINTER_FOOD_FACTOR);
@@ -464,35 +511,92 @@ export class Game {
         this.morale + MORALE_FED_BONUS + (variety ? MORALE_VARIETY_BONUS : 0),
       );
     }
+
+    let taxBauern = popBauern * TAX_GOLD_PER_POP * this.taxLevel;
+    let taxBuerger = popBuerger * TAX_GOLD_PER_POP * 2.0 * this.taxLevel;
+    let taxHaendler = popHaendler * TAX_GOLD_PER_POP * 5.0 * this.taxLevel;
+
+    if (this.empireMode) {
+      let beerSatisfied = true;
+      if (popBuerger > 0) {
+        const needB = Math.ceil(popBuerger * LUXURY_BEER_PER_POP);
+        const take = Math.min(needB, this.store.get('beer'));
+        if (take > 0) this.store.pay({ beer: take });
+        beerSatisfied = take >= needB;
+        if (!beerSatisfied) this.morale = Math.max(0, this.morale - 1);
+        else this.morale = Math.min(100, this.morale + 0.5);
+      }
+
+      let clothSatisfied = true;
+      if (popBuerger > 0) {
+        const needC = Math.ceil(popBuerger * LUXURY_CLOTH_PER_POP);
+        const take = Math.min(needC, this.store.get('cloth'));
+        if (take > 0) this.store.pay({ cloth: take });
+        clothSatisfied = take >= needC;
+        if (!clothSatisfied) this.morale = Math.max(0, this.morale - 1);
+        else this.morale = Math.min(100, this.morale + 0.5);
+      }
+
+      let merchantBeerSatisfied = true;
+      let merchantClothSatisfied = true;
+      if (popHaendler > 0) {
+        const needB = Math.ceil(popHaendler * LUXURY_BEER_PER_POP);
+        const takeB = Math.min(needB, this.store.get('beer'));
+        if (takeB > 0) this.store.pay({ beer: takeB });
+        merchantBeerSatisfied = takeB >= needB;
+        if (!merchantBeerSatisfied) this.morale = Math.max(0, this.morale - 1);
+        else this.morale = Math.min(100, this.morale + 0.5);
+
+        const needC = Math.ceil(popHaendler * LUXURY_CLOTH_PER_POP);
+        const takeC = Math.min(needC, this.store.get('cloth'));
+        if (takeC > 0) this.store.pay({ cloth: takeC });
+        merchantClothSatisfied = takeC >= needC;
+        if (!merchantClothSatisfied) this.morale = Math.max(0, this.morale - 1);
+        else this.morale = Math.min(100, this.morale + 0.5);
+      }
+
+      let merchantGoldSatisfied = true;
+      if (popHaendler > 0) {
+        const needG = Math.ceil(popHaendler * LUXURY_GOLD_PER_POP_L3);
+        const availableG = this.store.get('gold');
+        if (availableG >= needG) {
+          this.store.pay({ gold: needG });
+          merchantGoldSatisfied = true;
+          this.morale = Math.min(100, this.morale + 0.5);
+        } else {
+          merchantGoldSatisfied = false;
+          this.morale = Math.max(0, this.morale - 2);
+        }
+      }
+
+      // Apply satisfaction reductions to tax
+      if (!beerSatisfied) taxBuerger *= 0.5;
+      if (!clothSatisfied) taxBuerger *= 0.5;
+      if (!merchantBeerSatisfied) taxHaendler *= 0.5;
+      if (!merchantClothSatisfied) taxHaendler *= 0.5;
+      if (!merchantGoldSatisfied) taxHaendler *= 0.25;
+
+      // Prestige
+      let gained = pop * PRESTIGE_PER_POP;
+      if (popBuerger > 0) {
+        if (beerSatisfied) gained += PRESTIGE_LUXURY_BONUS;
+        if (clothSatisfied) gained += PRESTIGE_LUXURY_BONUS;
+      }
+      if (popHaendler > 0) {
+        if (merchantBeerSatisfied) gained += PRESTIGE_LUXURY_BONUS;
+        if (merchantClothSatisfied) gained += PRESTIGE_LUXURY_BONUS;
+        if (merchantGoldSatisfied) gained += PRESTIGE_LUXURY_BONUS * 1.5;
+      }
+      this.addPrestige(gained);
+    }
+
     if (this.taxLevel > 0) {
-      this.store.add('gold', Math.round(pop * TAX_GOLD_PER_POP * this.taxLevel));
+      const totalTax = Math.round(taxBauern + taxBuerger + taxHaendler);
+      this.store.add('gold', totalTax);
       this.morale = Math.max(0, this.morale - MORALE_TAX_PENALTY * this.taxLevel);
     }
-    if (this.empireMode) this.luxuryAndPrestigeTick(pop);
-    events.emit('morale:changed', { morale: Math.round(this.morale) });
-  }
 
-  /**
-   * Empire scenario: the population wants luxuries (beer, cloth) on top
-   * of food. Fulfilled needs lift morale and grant bonus prestige; the
-   * base prestige flow scales with population.
-   */
-  private luxuryAndPrestigeTick(pop: number): void {
-    let gained = pop * PRESTIGE_PER_POP;
-    for (const [resource, perPop] of [
-      ['beer', LUXURY_BEER_PER_POP],
-      ['cloth', LUXURY_CLOTH_PER_POP],
-    ] as const) {
-      const need = Math.ceil(pop * perPop);
-      if (need <= 0) continue;
-      const take = Math.min(need, this.store.get(resource));
-      if (take > 0) this.store.pay({ [resource]: take });
-      if (take >= need) {
-        gained += PRESTIGE_LUXURY_BONUS;
-        this.morale = Math.min(100, this.morale + 1);
-      }
-    }
-    this.addPrestige(gained);
+    events.emit('morale:changed', { morale: Math.round(this.morale) });
   }
 
   /** Add prestige and announce rank promotions. */
@@ -593,11 +697,13 @@ export class Game {
       })
     ) {
       this.victoryAnnounced = true;
-      recordScore({
-        waves: this.waveSystem.waveNumber,
-        kills: this.waveSystem.kills,
-        date: new Date().toLocaleDateString('de-DE'),
-      });
+      if (!this.empireMode) {
+        recordScore({
+          waves: this.waveSystem.waveNumber,
+          kills: this.waveSystem.kills,
+          date: new Date().toLocaleDateString('de-DE'),
+        });
+      }
       this.saveManager.clear();
       this.setPhase('gameover');
       this.sound.play('horn');
@@ -625,7 +731,7 @@ export class Game {
     const cy = Math.floor(MAP_H / 2);
     this.resetWorld((Math.random() * 0xffffffff) >>> 0, duelClearRects(MAP_W, MAP_H));
     this.setupSystems(new ResourceStore(budget.resources));
-    this.duelNodes = DUEL_NODES.flatMap((n) => [
+    this.duelNodes = duelNodes(MAP_W, MAP_H).flatMap((n) => [
       { ...n, owner: 'none' as const },
       { ...n, x: MAP_W - 1 - n.x, owner: 'none' as const },
     ]);
@@ -708,6 +814,105 @@ export class Game {
       }
     }
     return { x: MAP_W - 12, y: cy };
+  }
+
+  // --- Map editor ----------------------------------------------------------------
+
+  /** Force the central building site to grass (start warehouse always fits). */
+  private clearCenterForStart(): void {
+    const cx = Math.floor(MAP_W / 2);
+    const cy = Math.floor(MAP_H / 2);
+    for (let y = cy - 2; y <= cy + 1; y++) {
+      for (let x = cx - 2; x <= cx + 1; x++) {
+        if (this.grid.inBounds(x, y)) this.grid.setTerrain(x, y, Terrain.Grass);
+      }
+    }
+  }
+
+  /**
+   * Open the map editor on a blank (or supplied) terrain grid. The world is
+   * shown through the normal renderer; single-finger drag paints terrain.
+   */
+  openMapEditor(terrain: number[] = blankTerrain()): void {
+    // The editor reuses the live world, so persist any running game first —
+    // exitMapEditor restores it, keeping the editor non-destructive.
+    if (this.phase === 'playing' || this.phase === 'paused') this.saveNow();
+    this.duelMode = false;
+    this.resetWorld(0, undefined, terrain.slice());
+    this.setupSystems(new ResourceStore({}));
+    this.warehouseId = 0;
+    const center = gridToScreen(MAP_W / 2, MAP_H / 2);
+    this.camera.centerOn(center.x, center.y);
+    this.input?.setPaintMode(true);
+    this.setPhase('editor');
+    this.emitEditorState();
+  }
+
+  /** Leave the editor back to the title screen, restoring any saved game. */
+  exitMapEditor(): void {
+    this.input?.setPaintMode(false);
+    const data = this.saveManager.load();
+    if (data) this.loadFromData(data);
+    else this.newGame();
+    this.setPhase('menu');
+  }
+
+  setEditorBrush(t: Terrain): void {
+    this.editorBrush = t;
+    this.emitEditorState();
+  }
+
+  setEditorBrushSize(size: number): void {
+    this.editorBrushSize = Math.max(1, Math.min(4, Math.floor(size)));
+    this.emitEditorState();
+  }
+
+  /** Paint the brush terrain at the screen position (editor phase only). */
+  private paintEditorTile(sx: number, sy: number): void {
+    if (this.phase !== 'editor') return;
+    const world = this.camera.screenToWorld(sx, sy);
+    const tile = screenToTile(world.x, world.y);
+    const r = this.editorBrushSize - 1;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = tile.x + dx;
+        const y = tile.y + dy;
+        if (!this.grid.inBounds(x, y)) continue;
+        if (this.grid.terrainAt(x, y) === this.editorBrush) continue;
+        this.grid.setTerrain(x, y, this.editorBrush);
+        this.renderer.rebuildChunkAt(this.grid, x, y);
+      }
+    }
+  }
+
+  /** Flood the whole map with one terrain (editor tool). */
+  fillEditor(t: Terrain): void {
+    if (this.phase !== 'editor') return;
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) this.grid.setTerrain(x, y, t);
+    }
+    this.renderer.buildTerrain(this.grid);
+  }
+
+  /** The current editor terrain as a flat array (row-major), for saving. */
+  editorTerrain(): number[] {
+    const out: number[] = [];
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) out.push(this.grid.terrainAt(x, y));
+    }
+    return out;
+  }
+
+  /** Start a normal endless game on the current editor terrain. */
+  playEditorMap(): void {
+    const terrain = this.editorTerrain();
+    this.input?.setPaintMode(false);
+    this.newGame(undefined, 'endless', terrain);
+    this.setPhase('playing');
+  }
+
+  private emitEditorState(): void {
+    events.emit('editor:changed', { brush: this.editorBrush, brushSize: this.editorBrushSize });
   }
 
   /** Resolve duel outcomes outside the combat iteration (safe point). */
@@ -887,7 +1092,9 @@ export class Game {
 
   /** A lumberjack felled one adjacent forest tile. */
   private fellForest(b: Building): void {
-    const tile = b.adjacentTerrainTile(this.grid, Terrain.Forest);
+    const tile = b.defId === 'lumberjack'
+      ? b.terrainTileInRange(this.grid, Terrain.Forest, 4)
+      : b.adjacentTerrainTile(this.grid, Terrain.Forest);
     if (!tile) return;
     this.grid.setTerrain(tile.x, tile.y, Terrain.Grass);
     this.renderer.rebuildChunkAt(this.grid, tile.x, tile.y);
@@ -923,6 +1130,48 @@ export class Game {
         this.grid.setTerrain(nx, ny, Terrain.Forest);
         this.renderer.rebuildChunkAt(this.grid, nx, ny);
       }
+    }
+  }
+
+  private exploreCircle(cx: number, cy: number, radius: number): void {
+    const r2 = radius * radius;
+    const minX = Math.max(0, cx - radius);
+    const maxX = Math.min(this.grid.width - 1, cx + radius);
+    const minY = Math.max(0, cy - radius);
+    const maxY = Math.min(this.grid.height - 1, cy + radius);
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - cx;
+        const dy = y - cy;
+        if (dx * dx + dy * dy <= r2) {
+          this.grid.setExplored(x, y, true);
+        }
+      }
+    }
+  }
+
+  updateExploration(): void {
+    // Reveal around buildings
+    for (const b of this.buildings.values()) {
+      if (b.owner !== 'player') continue;
+      const radius = (b.defId === 'keep' || b.defId === 'tower') ? 8 : 5;
+      const bc = b.center;
+      this.exploreCircle(Math.round(bc.x), Math.round(bc.y), radius);
+    }
+    // Workers
+    for (const w of this.workers) {
+      if (w.pendingDespawn) continue;
+      this.exploreCircle(Math.round(w.x), Math.round(w.y), 3);
+    }
+    // Soldiers
+    for (const s of this.soldiers) {
+      this.exploreCircle(Math.round(s.x), Math.round(s.y), 5);
+    }
+    // Warehouse guarantee
+    const warehouse = this.buildings.get(this.warehouseId);
+    if (warehouse) {
+      const bc = warehouse.center;
+      this.exploreCircle(Math.round(bc.x), Math.round(bc.y), 14);
     }
   }
 
@@ -1062,8 +1311,12 @@ export class Game {
     }
 
     this.selectSoldier(null);
-    // The opposing castle cannot be inspected — send soldiers instead.
-    const hit = occupant === NO_OCCUPANT ? null : (this.buildings.get(occupant) ?? null);
+    // Selection tests the full sprite (incl. the part overhanging the base
+    // tile), so a tall house is easy to tap even where it overlaps a
+    // neighbour. The footprint occupant is the fallback for flat tiles.
+    const pickedId = this.renderer.pickBuildingAt(world.x, world.y);
+    const targetId = pickedId ?? (occupant !== NO_OCCUPANT ? occupant : null);
+    const hit = targetId !== null ? (this.buildings.get(targetId) ?? null) : null;
     if (hit && hit.owner === 'foe') {
       events.emit('toast:show', { message: 'Feindliche Burg — schicke deine Soldaten!' });
       this.select(null);
@@ -1150,7 +1403,7 @@ export class Game {
     // Roads, the starting warehouse, duel castles and def-swap upgrades
     // appear instantly; everything else is a supplied construction site.
     const instant =
-      forceInstant || b.def.roadTier !== undefined || b.def.isWarehouse === true || this.duelMode;
+      forceInstant || b.def.roadTier !== undefined || (b.def.isWarehouse === true && b.defId !== 'smallWarehouse') || this.duelMode;
     if (!instant && Object.keys(b.def.cost).length > 0) {
       b.underConstruction = true;
       b.materialsRemaining = { ...b.def.cost };
@@ -1275,6 +1528,14 @@ export class Game {
       return;
     }
     if (b.level >= b.maxLevel) return;
+    if (b.defId === 'hut') {
+      const gate = b.level === 1 ? HUT_UPGRADE_MORALE_GATE_L2 : HUT_UPGRADE_MORALE_GATE_L3;
+      if (this.morale < gate) {
+        const nextClassName = b.level === 1 ? 'Bürger' : 'Händler';
+        events.emit('toast:show', { message: `Moral zu niedrig (min. ${gate}%) für Aufstieg zu ${nextClassName}!` });
+        return;
+      }
+    }
     const cost = this.levelUpgradeCost(b);
     const missing = missingResourcesMessage(this.store, cost);
     if (missing) {
@@ -1290,7 +1551,7 @@ export class Game {
 
   demolish(id: number): void {
     const b = this.buildings.get(id);
-    if (!b || b.owner !== 'player' || b.def.isWarehouse) return;
+    if (!b || b.owner !== 'player' || b.defId === 'warehouse' || b.defId === 'keep') return;
     this.grid.setOccupantRect(b.x, b.y, b.w, b.h, NO_OCCUPANT);
     this.buildings.delete(id);
     this.economy.onBuildingRemoved(id);
@@ -1315,13 +1576,13 @@ export class Game {
     events.emit('toast:show', { message: `${b.def.name} zerstört!` });
     if (this.duelMode) {
       if (b.owner === 'foe') this.duelStats.buildingsDestroyed++;
-      if (b.def.isWarehouse) {
+      if (b.defId === 'warehouse' || b.defId === 'keep') {
         // Resolved next tick (outside the combat iteration).
         this.duelOutcome = b.owner === 'foe' ? 'victory' : 'defeat';
       }
       return;
     }
-    if (b.def.isWarehouse) {
+    if (b.defId === 'warehouse' || b.defId === 'keep') {
       this.lostWarehouseSpot = { x: b.x, y: b.y, rotated: b.rotated };
       this.gameOver();
     }
@@ -1341,31 +1602,49 @@ export class Game {
     this.sound.play('gameover');
     // A lost run must not be resumable after reload.
     this.saveManager.clear();
-    recordScore({
-      waves: Math.max(0, this.waveSystem.waveNumber - 1),
-      kills: this.waveSystem.kills,
-      date: new Date().toLocaleDateString('de-DE'),
-    });
+    // The wave highscore board only makes sense for the endless mode — the
+    // economy (empire) mode has no waves, so don't pollute it with zeroes.
+    if (!this.empireMode) {
+      recordScore({
+        waves: Math.max(0, this.waveSystem.waveNumber - 1),
+        kills: this.waveSystem.kills,
+        date: new Date().toLocaleDateString('de-DE'),
+      });
+    }
     events.emit('game:over', {
       wavesSurvived: Math.max(0, this.waveSystem.waveNumber - 1),
       kills: this.waveSystem.kills,
+      empire: this.empireMode,
+      prestige: Math.floor(this.prestige),
+      rankName: rankFor(this.prestige).name,
     });
   }
 
-  /** One revive per run, paid with a rewarded ad (dev stub on the web). */
   canRevive(): boolean {
     return (
       this.phase === 'gameover' &&
       !this.reviveUsed &&
       this.lostWarehouseSpot !== null &&
-      this.ads.isAvailable()
+      (this.ads.isAvailable() || (this.onlineClient ? (this.onlineClient.loggedIn && !this.onlineClient.adsEnabled) : false))
     );
   }
 
   async reviveViaAd(): Promise<boolean> {
     if (!this.canRevive()) return false;
-    const rewarded = await this.ads.show();
+    let rewarded = false;
+    let actualAdWatched = false;
+    if (this.onlineClient?.loggedIn && !this.onlineClient.adsEnabled) {
+      rewarded = true;
+    } else {
+      rewarded = await this.ads.show();
+      actualAdWatched = rewarded;
+    }
     if (!rewarded) return false;
+
+    if (actualAdWatched && this.onlineClient?.loggedIn) {
+      void this.onlineClient.reportAdWatched();
+    }
+
     const spot = this.lostWarehouseSpot!;
     this.reviveUsed = true;
     this.lostWarehouseSpot = null;
@@ -1403,6 +1682,8 @@ export class Game {
       scenarioId: this.scenarioId,
       prestige: this.prestige,
       diplomacy: this.empireMode ? this.diplomacy.toSave() : null,
+      victoryAnnounced: this.victoryAnnounced,
+      explored: this.grid.exploredIndices(),
     };
   }
 
@@ -1420,6 +1701,11 @@ export class Game {
     }
     this.setupSystems(new ResourceStore(data.resources));
     this.nextId = data.nextEntityId;
+    if (data.explored && data.explored.length > 0) {
+      this.grid.applyExploredIndices(data.explored);
+    } else {
+      this.updateExploration();
+    }
 
     for (const bs of data.buildings) {
       const b = Building.fromSave(bs);
@@ -1453,6 +1739,7 @@ export class Game {
     this.prestige = data.prestige ?? 0;
     this.lastRankIndex = this.rankIndex;
     if (data.diplomacy) this.diplomacy.restore(data.diplomacy);
+    this.victoryAnnounced = data.victoryAnnounced ?? false;
     this.emitRank();
     this.lastSeason = -1;
     events.emit('morale:changed', { morale: Math.round(this.morale) });
@@ -1466,6 +1753,12 @@ export class Game {
       this.camera.centerOn(center.x, center.y);
     }
     events.emit('game:loaded', undefined);
+  }
+
+  continueEndlessAfterVictory(): void {
+    this.setPhase('playing');
+    this.saveNow();
+    events.emit('toast:show', { message: '👑 Endlosmodus gestartet!' });
   }
 
   /** Wipe the save and start over (pause menu action). */
