@@ -292,12 +292,14 @@ export class EconomySystem {
     const { workers } = this.ctx;
     let stables = 0;
     for (const b of this.ctx.buildings.values()) {
-      if (b.defId === 'stable' && b.owner === 'player') stables++;
+      if (b.defId === 'stable' && b.owner === 'player' && !b.underConstruction) stables++;
     }
     const target = stables * CARTS_PER_STABLE;
     const carts = workers.filter((w) => w.isCart);
     if (carts.length < target) {
-      const stable = [...this.ctx.buildings.values()].find((b) => b.defId === 'stable');
+      const stable = [...this.ctx.buildings.values()].find(
+        (b) => b.defId === 'stable' && b.owner === 'player' && !b.underConstruction,
+      );
       const spawn = stable
         ?.accessTiles(this.ctx.grid)
         .sort((a, b) => b.x + b.y - (a.x + a.y))[0];
