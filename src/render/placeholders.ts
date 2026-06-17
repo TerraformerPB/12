@@ -22,6 +22,10 @@ export const PALETTE = {
   rockTop: 0x9298a4,
   water: 0x3a6fc4,
   waterDeep: 0x315ea8,
+  sand: 0xdcc89a,
+  sandDark: 0xc9b176,
+  path: 0xa07e54,
+  pathDark: 0x856544,
   ghostValid: 0x3ed35e,
   ghostInvalid: 0xe24a4a,
   selection: 0xffd966,
@@ -195,6 +199,27 @@ export function drawTerrainTile(
       }
       break;
     }
+    case Terrain.Sand: {
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.sand : PALETTE.sandDark);
+      const ox = ((hash % 13) - 6) * 1.6;
+      const oy = ((hash % 7) - 3) * 1.4;
+      // Scattered grains / small shells.
+      g.circle(cx + ox, cy + oy, 1.1).fill({ color: shade(PALETTE.sandDark, 0.8), alpha: 0.6 });
+      g.circle(cx + ox + 4, cy + oy + 2, 0.8).fill({ color: shade(PALETTE.sandDark, 0.8), alpha: 0.5 });
+      if (hash % 17 === 0) g.circle(cx - ox, cy - oy, 1.6).fill({ color: 0xf2ead0, alpha: 0.7 });
+      break;
+    }
+    case Terrain.Path: {
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.path : PALETTE.pathDark);
+      const ox = ((hash % 13) - 6) * 1.4;
+      const oy = ((hash % 7) - 3) * 1.2;
+      // Pressed-earth ruts and pebbles.
+      g.moveTo(cx - HALF_W * 0.5, cy).lineTo(cx + HALF_W * 0.5, cy)
+        .stroke({ color: shade(PALETTE.pathDark, 0.85), width: 1, alpha: 0.5 });
+      g.circle(cx + ox, cy + oy, 1.2).fill({ color: shade(PALETTE.pathDark, 0.7), alpha: 0.6 });
+      if (hash % 11 === 0) g.circle(cx - ox, cy + oy, 1.4).fill({ color: PALETTE.rock, alpha: 0.7 });
+      break;
+    }
   }
 }
 
@@ -301,6 +326,61 @@ export function drawBuildingBlock(
   });
 }
 
+/**
+ * A raised wooden bridge: a plank deck with thickness, cross-planks and two
+ * side railings — replaces the old flat 1×1 plate.
+ */
+function drawBridge(g: Graphics, w: number, h: number): void {
+  const [n, e, s, wp] = footprintCorners(w, h);
+  const deck = 0x9b7340;
+  const lift = 5; // deck thickness above the water
+  const railH = 9; // railing height above the deck
+  const up = (p: number[], dy: number): number[] => [p[0], p[1] - dy];
+  const lerp = (a: number[], b: number[], t: number): number[] => [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+  ];
+
+  // Soft shadow on the water below the deck.
+  g.poly([...n, ...e, ...s, ...wp]).fill({ color: 0x000000, alpha: 0.18 });
+
+  const nt = up(n, lift);
+  const et = up(e, lift);
+  const st = up(s, lift);
+  const wt = up(wp, lift);
+
+  // Deck side faces give the slab some height.
+  g.poly([...e, ...s, ...st, ...et]).fill(shade(deck, 0.7));
+  g.poly([...s, ...wp, ...wt, ...st]).fill(shade(deck, 0.6));
+
+  // Deck top.
+  g.poly([...nt, ...et, ...st, ...wt])
+    .fill(deck)
+    .stroke({ color: shade(deck, 0.6), width: 1.2 });
+
+  // Cross-planks (parallel to the N–E edge).
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 5;
+    const a = lerp(nt, wt, t);
+    const b = lerp(et, st, t);
+    g.moveTo(a[0], a[1]).lineTo(b[0], b[1]).stroke({ color: shade(deck, 0.78), width: 1 });
+  }
+
+  // Two side railings (posts + top rail) along the NW and SE edges.
+  const rail = (a: number[], b: number[]): void => {
+    for (const t of [0, 0.5, 1]) {
+      const p = lerp(a, b, t);
+      const pt = up(p, railH);
+      g.moveTo(p[0], p[1]).lineTo(pt[0], pt[1]).stroke({ color: 0x4a3320, width: 2 });
+    }
+    const aTop = up(a, railH);
+    const bTop = up(b, railH);
+    g.moveTo(aTop[0], aTop[1]).lineTo(bTop[0], bTop[1]).stroke({ color: shade(deck, 0.9), width: 2 });
+  };
+  rail(nt, wt);
+  rail(et, st);
+}
+
 /** Small health bar centered at (cx, cy); only drawn when damaged. */
 export function drawHpBar(g: Graphics, cx: number, cy: number, width: number, ratio: number): void {
   if (ratio >= 1) return;
@@ -319,6 +399,10 @@ export function drawBuildingView(
   level = 1,
 ): void {
   g.clear();
+  if (def.id === 'bridge') {
+    drawBridge(g, w, h);
+    return;
+  }
   if (def.roadTier !== undefined) {
     // Flat paving instead of an extruded block.
     const [rn, re, rs, rw] = footprintCorners(w, h);

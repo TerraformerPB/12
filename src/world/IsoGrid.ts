@@ -68,6 +68,10 @@ export const Terrain = {
   Forest: 3,
   /** Ore vein: blocked like rock; mines need adjacency and deplete it. */
   Ore: 4,
+  /** Sand/beach: walkable like grass, decorative (not buildable). */
+  Sand: 5,
+  /** Dirt path: walkable and a touch faster; decorative (not buildable). */
+  Path: 6,
 } as const;
 export type Terrain = (typeof Terrain)[keyof typeof Terrain];
 
@@ -246,6 +250,10 @@ export class IsoGrid {
     switch (this.terrainAt(gx, gy)) {
       case Terrain.Grass:
         return 1;
+      case Terrain.Sand:
+        return 1;
+      case Terrain.Path:
+        return 0.85;
       case Terrain.Forest:
         return FOREST_MOVE_COST;
       default:
@@ -270,6 +278,10 @@ export class IsoGrid {
       switch (this.terrainAt(gx, gy)) {
         case Terrain.Grass:
           return 1;
+        case Terrain.Sand:
+          return 1;
+        case Terrain.Path:
+          return 0.85;
         case Terrain.Forest:
           return FOREST_MOVE_COST;
         default:

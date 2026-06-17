@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IsoGrid } from '../src/world/IsoGrid';
+import { IsoGrid, Terrain } from '../src/world/IsoGrid';
 import { checkPlacement } from '../src/systems/BuildSystem';
 import { getDef } from '../src/data/buildings';
 import { Game } from '../src/core/Game';
@@ -14,6 +14,18 @@ describe('Fog of War & Larger Map', () => {
     
     grid.setExplored(10, 10, true);
     expect(grid.isExplored(10, 10)).toBe(true);
+  });
+
+  it('sand and path are walkable (path slightly faster than grass)', () => {
+    const grid = new IsoGrid(8, 8);
+    grid.setTerrain(2, 2, Terrain.Sand);
+    grid.setTerrain(3, 3, Terrain.Path);
+    expect(Number.isFinite(grid.moveCost(2, 2))).toBe(true);
+    expect(grid.moveCost(2, 2)).toBe(grid.moveCost(0, 0)); // sand == grass
+    expect(grid.moveCost(3, 3)).toBeLessThan(grid.moveCost(0, 0)); // path faster
+    // Water stays blocked.
+    grid.setTerrain(4, 4, Terrain.Water);
+    expect(Number.isFinite(grid.moveCost(4, 4))).toBe(false);
   });
 
   it('revealAll uncovers the whole map (editor/duel)', () => {
