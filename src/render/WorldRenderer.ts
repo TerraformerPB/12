@@ -18,6 +18,7 @@ import {
   drawSelection,
   drawSoldier,
   drawTerrainTile,
+  drawTerrainEdges,
   drawWorker,
   drawFisheryBoat,
   drawDecorativeNPC,
@@ -239,7 +240,15 @@ export class WorldRenderer {
     for (let gy = cy; gy < maxY; gy++) {
       for (let gx = cx; gx < maxX; gx++) {
         const p = gridToScreen(gx, gy);
-        drawTerrainTile(g, p.x, p.y, grid.terrainAt(gx, gy), (gx + gy) % 2 === 0, gx, gy);
+        const self = grid.terrainAt(gx, gy);
+        drawTerrainTile(g, p.x, p.y, self, (gx + gy) % 2 === 0, gx, gy);
+        // Blend edges against the four orthogonal neighbours (foam, seams).
+        const nAt = (x: number, y: number): Terrain =>
+          grid.inBounds(x, y) ? grid.terrainAt(x, y) : self;
+        drawTerrainEdges(
+          g, p.x, p.y, self,
+          nAt(gx, gy - 1), nAt(gx + 1, gy), nAt(gx, gy + 1), nAt(gx - 1, gy),
+        );
         bounds.minX = Math.min(bounds.minX, p.x - TILE_W / 2);
         bounds.maxX = Math.max(bounds.maxX, p.x + TILE_W / 2);
         bounds.minY = Math.min(bounds.minY, p.y - TILE_H);

@@ -22,6 +22,7 @@ export const PALETTE = {
   rockTop: 0x9298a4,
   water: 0x3a6fc4,
   waterDeep: 0x315ea8,
+  foam: 0xdcecfb,
   sand: 0xdcc89a,
   sandDark: 0xc9b176,
   path: 0xa07e54,
@@ -224,6 +225,51 @@ export function drawTerrainTile(
 }
 
 /**
+ * Neighbour-aware edge transitions, drawn on top of a baked tile. `nN/nE/nS/nW`
+ * are the terrains of the four orthogonal grid neighbours. Produces a foam rim
+ * where land meets water (plus a faint waterline on the water side) and soft
+ * sandy seams where grass meets sand/path.
+ */
+export function drawTerrainEdges(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  self: Terrain,
+  nN: Terrain,
+  nE: Terrain,
+  nS: Terrain,
+  nW: Terrain,
+): void {
+  const n = [cx, cy - HALF_H];
+  const e = [cx + HALF_W, cy];
+  const s = [cx, cy + HALF_H];
+  const w = [cx - HALF_W, cy];
+  const edges: [number[], number[], Terrain][] = [
+    [n, e, nN], // north neighbour
+    [e, s, nE], // east neighbour
+    [s, w, nS], // south neighbour
+    [w, n, nW], // west neighbour
+  ];
+  const inset = (a: number[], k: number): number[] => [a[0] + (cx - a[0]) * k, a[1] + (cy - a[1]) * k];
+  const band = (a: number[], b: number[], k: number, color: number, alpha: number): void => {
+    const a2 = inset(a, k);
+    const b2 = inset(b, k);
+    g.poly([a[0], a[1], b[0], b[1], b2[0], b2[1], a2[0], a2[1]]).fill({ color, alpha });
+  };
+  const isWater = (t: Terrain): boolean => t === Terrain.Water;
+  for (const [a, b, nt] of edges) {
+    if (!isWater(self) && isWater(nt)) {
+      band(a, b, 0.34, PALETTE.foam, 0.5);
+      band(a, b, 0.16, PALETTE.foam, 0.28);
+    } else if (isWater(self) && !isWater(nt)) {
+      band(a, b, 0.22, 0x2a4f8f, 0.35);
+    } else if (self === Terrain.Grass && (nt === Terrain.Sand || nt === Terrain.Path)) {
+      band(a, b, 0.18, nt === Terrain.Sand ? PALETTE.sand : PALETTE.path, 0.3);
+    }
+  }
+}
+
+/**
  * Footprint corner offsets relative to the anchor (center of top-left tile).
  * Order: north, east, south, west.
  */
@@ -257,8 +303,15 @@ export function drawBuildingBlock(
   const lift = art.height;
   const [n, e, s, wp] = footprintCorners(w, h);
 
-  // Ground shadow under the block.
-  g.poly([...n, ...e, ...s, ...wp]).fill({ color: 0x000000, alpha: 0.25 * alpha });
+  // Soft drop shadow (light from the north-west → shadow cast to south-east).
+  const sox = 5;
+  const soy = 3;
+  g.poly([
+    n[0] + sox, n[1] + soy,
+    e[0] + sox, e[1] + soy,
+    s[0] + sox, s[1] + soy,
+    wp[0] + sox, wp[1] + soy,
+  ]).fill({ color: 0x000000, alpha: 0.22 * alpha });
   // Left wall (west-south face).
   g.poly([wp[0], wp[1], s[0], s[1], s[0], s[1] - lift, wp[0], wp[1] - lift]).fill({
     color: shade(color, 0.72),
