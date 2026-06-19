@@ -2,12 +2,13 @@ import { events } from '../core/EventBus';
 import { Terrain } from '../world/IsoGrid';
 import { deleteMap, exportMapCode, importMapCode, listMaps, loadMap, saveMap } from '../core/MapStore';
 import { MAP_H, MAP_W } from '../data/config';
+import type { EnemyDefId } from '../data/enemies';
 import type { Game } from '../core/Game';
 
 /**
- * Map editor toolbar (phase 'editor'): a terrain palette plus brush size and
- * save/load/play tools. The toolbar sits at the bottom so the painted map
- * stays visible; single-finger drag paints, two fingers pan/zoom.
+ * Map editor toolbar (phase 'editor'): a terrain palette, an enemy-NPC palette,
+ * brush size and save/load/play tools. The toolbar sits at the bottom so the
+ * painted map stays visible; single-finger drag paints, two fingers pan/zoom.
  */
 
 const BRUSHES: { id: Terrain; label: string; icon: string }[] = [
@@ -22,6 +23,15 @@ const BRUSHES: { id: Terrain; label: string; icon: string }[] = [
   { id: Terrain.Meadow, label: 'Wiese', icon: '🌼' },
   { id: Terrain.Marsh, label: 'Sumpf', icon: '🟢' },
   { id: Terrain.Gravel, label: 'Geröll', icon: '⚪' },
+];
+
+const ENEMIES: { id: EnemyDefId; label: string; icon: string }[] = [
+  { id: 'raider', label: 'Plünderer', icon: '🗡️' },
+  { id: 'brute', label: 'Brecher', icon: '🪓' },
+  { id: 'skirmisher', label: 'Plänkler', icon: '🏹' },
+  { id: 'ram', label: 'Rammbock', icon: '🪵' },
+  { id: 'catapult', label: 'Katapult', icon: '🎯' },
+  { id: 'warlord', label: 'Kriegsherr', icon: '👑' },
 ];
 
 export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
@@ -41,6 +51,24 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
     palette.appendChild(btn);
     brushButtons.set(b.id, btn);
   }
+
+  // --- Enemy palette ---
+  const enemyPalette = document.createElement('div');
+  enemyPalette.className = 'editor-palette';
+  const enemyButtons = new Map<EnemyDefId, HTMLButtonElement>();
+  for (const e of ENEMIES) {
+    const btn = document.createElement('button');
+    btn.className = 'editor-brush';
+    btn.innerHTML = `<span>${e.icon}</span>${e.label}`;
+    btn.addEventListener('click', () => game.setEditorEnemy(e.id));
+    enemyPalette.appendChild(btn);
+    enemyButtons.set(e.id, btn);
+  }
+  const eraseBtn = document.createElement('button');
+  eraseBtn.className = 'editor-brush';
+  eraseBtn.innerHTML = `<span>🧽</span>Radierer`;
+  eraseBtn.addEventListener('click', () => game.setEditorEraseEnemies());
+  enemyPalette.appendChild(eraseBtn);
 
   // --- Brush size ---
   const sizeWrap = document.createElement('div');
@@ -71,6 +99,9 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
   tool('🧹 Leeren', () => {
     if (confirm('Ganze Karte mit Gras überschreiben?')) game.fillEditor(Terrain.Grass);
   });
+  tool('💀 Gegner weg', () => {
+    if (confirm('Alle platzierten Gegner entfernen?')) game.clearEditorEnemies();
+  });
   tool('💾 Speichern', () => saveCurrent());
   tool('📂 Laden', () => openLoad());
   tool('🔗 Teilen', () => openShare());
@@ -78,11 +109,14 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
   tool('▶ Spielen', () => game.playEditorMap(), 'primary');
   tool('✖ Beenden', () => game.exitMapEditor());
 
+  const enemyLabel = document.createElement('span');
+  enemyLabel.textContent = 'Gegner';
+
   const hint = document.createElement('div');
   hint.className = 'editor-hint';
-  hint.textContent = 'Ziehen zum Malen · zwei Finger zum Bewegen/Zoomen';
+  hint.textContent = 'Ziehen zum Malen/Platzieren · zwei Finger zum Bewegen/Zoomen';
 
-  bar.append(palette, sizeLabel, sizeWrap, tools, hint);
+  bar.append(palette, enemyLabel, enemyPalette, sizeLabel, sizeWrap, tools, hint);
   uiRoot.appendChild(bar);
 
   // --- Save / Load dialogs ---
@@ -100,7 +134,7 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
   function saveCurrent(): void {
     const name = prompt('Name der Karte:', '');
     if (name === null) return;
-    if (saveMap(name, MAP_W, MAP_H, game.editorTerrain())) {
+    if (saveMap(name, MAP_W, MAP_H, game.editorTerrain(), game.editorEnemiesData())) {
       events.emit('toast:show', { message: `Karte „${name.trim()}“ gespeichert` });
     } else {
       events.emit('toast:show', { message: 'Bitte einen gültigen Namen eingeben' });
@@ -117,7 +151,7 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
     const area = document.createElement('textarea');
     area.className = 'editor-code';
     area.readOnly = true;
-    area.value = exportMapCode(MAP_W, MAP_H, game.editorTerrain());
+    area.value = exportMapCode(MAP_W, MAP_H, game.editorTerrain(), game.editorEnemiesData());
     area.addEventListener('focus', () => area.select());
     const copy = document.createElement('button');
     copy.textContent = '📋 Kopieren';
@@ -138,7 +172,7 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
     if (code === null) return;
     const map = importMapCode(code);
     if (map && map.width === MAP_W && map.height === MAP_H) {
-      game.openMapEditor(map.terrain);
+      game.openMapEditor(map.terrain, map.enemies as { x: number; y: number; defId: EnemyDefId }[]);
       events.emit('toast:show', { message: 'Karte importiert' });
     } else {
       events.emit('toast:show', { message: 'Ungültiger Karten-Code' });
@@ -165,7 +199,7 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
       open.addEventListener('click', () => {
         const map = loadMap(name);
         if (map) {
-          game.openMapEditor(map.terrain);
+          game.openMapEditor(map.terrain, map.enemies as { x: number; y: number; defId: EnemyDefId }[]);
           closeDialog();
         }
       });
@@ -189,9 +223,13 @@ export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
   }
 
   // --- Reactivity ---
-  events.on('editor:changed', ({ brush, brushSize }) => {
-    for (const [id, btn] of brushButtons) btn.classList.toggle('active', id === brush);
+  events.on('editor:changed', ({ brush, brushSize, tool, enemyType, enemyCount }) => {
+    const terrainActive = tool === 'terrain';
+    for (const [id, btn] of brushButtons) btn.classList.toggle('active', terrainActive && id === brush);
+    for (const [id, btn] of enemyButtons) btn.classList.toggle('active', tool === 'enemy' && id === enemyType);
+    eraseBtn.classList.toggle('active', tool === 'erase');
     sizeButtons.forEach((btn, i) => btn.classList.toggle('active', i + 1 === brushSize));
+    enemyLabel.textContent = `Gegner (${enemyCount})`;
   });
 
   events.on('game:phaseChanged', ({ phase }) => {

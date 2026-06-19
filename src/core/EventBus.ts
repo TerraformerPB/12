@@ -41,7 +41,13 @@ export interface GameEvents {
   };
   'duel:onlineResult': { opponentId: number; username: string; victory: boolean };
   'online:openMenu': void;
-  'editor:changed': { brush: number; brushSize: number };
+  'editor:changed': {
+    brush: number;
+    brushSize: number;
+    tool: 'terrain' | 'enemy' | 'erase';
+    enemyType: string;
+    enemyCount: number;
+  };
   'morale:changed': { morale: number };
   'diplomacy:changed': void;
   'rank:changed': { rank: number; name: string; icon: string; prestige: number };

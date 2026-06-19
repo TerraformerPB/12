@@ -66,6 +66,22 @@ describe('map encode/decode', () => {
     expect(decodeMap('2x2:99.4')).toBeNull(); // invalid terrain id
   });
 
+  it('round-trips placed enemies and stays backward compatible', () => {
+    const terrain = blankTerrain(2, 2);
+    const enemies = [
+      { defId: 'raider', x: 1, y: 0 },
+      { defId: 'brute', x: 0, y: 1 },
+    ];
+    const code = encodeMap(2, 2, terrain, enemies);
+    expect(code).toContain('|');
+    const back = decodeMap(code);
+    expect(back!.enemies).toEqual(enemies);
+    // Old codes without an enemy section decode to an empty list.
+    expect(decodeMap('2x2:0.4')!.enemies).toEqual([]);
+    // Unknown enemy id is rejected.
+    expect(decodeMap('2x2:0.4|dragon,0,0')).toBeNull();
+  });
+
   it('blankTerrain is all grass at the right size', () => {
     const t = blankTerrain();
     expect(t.length).toBe(MAP_W * MAP_H);

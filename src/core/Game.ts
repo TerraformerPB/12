@@ -47,6 +47,7 @@ import { getDef, LATE_GAME_PREREQS, type BuildingDefId } from '../data/buildings
 import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
 import { Enemy } from '../entities/Enemy';
+import type { EnemyDefId } from '../data/enemies';
 import { Soldier } from '../entities/Soldier';
 import { Worker } from '../entities/Worker';
 import { WorldRenderer } from '../render/WorldRenderer';
@@ -150,6 +151,11 @@ export class Game {
   /** Map-editor brush: terrain id painted on tap/drag, and brush radius. */
   private editorBrush: Terrain = Terrain.Water;
   private editorBrushSize = 1;
+  /** Map-editor tool: paint terrain, place enemies, or erase enemies. */
+  private editorTool: 'terrain' | 'enemy' | 'erase' = 'terrain';
+  private editorEnemyType: EnemyDefId = 'raider';
+  /** Enemy NPCs placed in the editor (spawned attacking when the map plays). */
+  private editorEnemies: { x: number; y: number; defId: EnemyDefId }[] = [];
   saveManager = new SaveManager();
   sound = new SoundManager();
 
@@ -922,7 +928,10 @@ export class Game {
    * Open the map editor on a blank (or supplied) terrain grid. The world is
    * shown through the normal renderer; single-finger drag paints terrain.
    */
-  openMapEditor(terrain: number[] = blankTerrain()): void {
+  openMapEditor(
+    terrain: number[] = blankTerrain(),
+    enemies: { x: number; y: number; defId: EnemyDefId }[] = [],
+  ): void {
     // The editor reuses the live world, so persist any running game first —
     // exitMapEditor restores it, keeping the editor non-destructive.
     if (this.phase === 'playing' || this.phase === 'paused') this.saveNow();
@@ -931,6 +940,8 @@ export class Game {
     this.setupSystems(this.newStore());
     this.warehouseId = 0;
     this.grid.revealAll(); // the editor never uses fog of war
+    this.editorEnemies = enemies.map((e) => ({ ...e }));
+    this.syncEditorEnemies();
     const center = gridToScreen(MAP_W / 2, MAP_H / 2);
     this.camera.centerOn(center.x, center.y);
     this.input?.setPaintMode(true);
@@ -949,6 +960,7 @@ export class Game {
 
   setEditorBrush(t: Terrain): void {
     this.editorBrush = t;
+    this.editorTool = 'terrain';
     this.emitEditorState();
   }
 
@@ -957,11 +969,51 @@ export class Game {
     this.emitEditorState();
   }
 
+  /** Switch the editor to placing a given enemy NPC type. */
+  setEditorEnemy(defId: EnemyDefId): void {
+    this.editorEnemyType = defId;
+    this.editorTool = 'enemy';
+    this.emitEditorState();
+  }
+
+  /** Switch the editor to erasing placed enemy NPCs. */
+  setEditorEraseEnemies(): void {
+    this.editorTool = 'erase';
+    this.emitEditorState();
+  }
+
+  /** Remove all placed enemy NPCs. */
+  clearEditorEnemies(): void {
+    this.editorEnemies = [];
+    this.syncEditorEnemies();
+  }
+
+  /** Mirror the placed-enemy list into the (static) render entity list. */
+  private syncEditorEnemies(): void {
+    this.enemies.length = 0;
+    for (const e of this.editorEnemies) {
+      this.enemies.push(new Enemy(this.nextId++, e.x, e.y, e.defId));
+    }
+  }
+
+  /** Placed enemies as plain data, for saving/sharing the map. */
+  editorEnemiesData(): { x: number; y: number; defId: EnemyDefId }[] {
+    return this.editorEnemies.map((e) => ({ ...e }));
+  }
+
   /** Paint the brush terrain at the screen position (editor phase only). */
   private paintEditorTile(sx: number, sy: number): void {
     if (this.phase !== 'editor') return;
     const world = this.camera.screenToWorld(sx, sy);
     const tile = screenToTile(world.x, world.y);
+    if (this.editorTool === 'enemy') {
+      this.placeEditorEnemy(tile.x, tile.y);
+      return;
+    }
+    if (this.editorTool === 'erase') {
+      this.eraseEditorEnemies(tile.x, tile.y);
+      return;
+    }
     const r = this.editorBrushSize - 1;
     // Round brush: paint tiles within a circular radius for organic shapes.
     const rad2 = (r + 0.35) * (r + 0.35);
@@ -975,6 +1027,31 @@ export class Game {
         this.grid.setTerrain(x, y, this.editorBrush);
         this.renderer.rebuildChunkAt(this.grid, x, y);
       }
+    }
+  }
+
+  /** Place one enemy NPC of the current type (editor; deduped per tile). */
+  private placeEditorEnemy(tx: number, ty: number): void {
+    if (!this.grid.inBounds(tx, ty)) return;
+    if (!Number.isFinite(this.grid.moveCost(tx, ty))) return; // not on water/rock/etc.
+    for (const e of this.editorEnemies) {
+      if (Math.abs(e.x - tx) < 0.7 && Math.abs(e.y - ty) < 0.7) return; // already one here
+    }
+    this.editorEnemies.push({ x: tx, y: ty, defId: this.editorEnemyType });
+    this.syncEditorEnemies();
+    this.emitEditorState();
+  }
+
+  /** Remove placed enemies near the brush (editor). */
+  private eraseEditorEnemies(tx: number, ty: number): void {
+    const r = this.editorBrushSize;
+    const before = this.editorEnemies.length;
+    this.editorEnemies = this.editorEnemies.filter(
+      (e) => Math.abs(e.x - tx) > r || Math.abs(e.y - ty) > r,
+    );
+    if (this.editorEnemies.length !== before) {
+      this.syncEditorEnemies();
+      this.emitEditorState();
     }
   }
 
@@ -996,16 +1073,28 @@ export class Game {
     return out;
   }
 
-  /** Start a normal endless game on the current editor terrain. */
+  /** Start a normal endless game on the current editor terrain + enemies. */
   playEditorMap(): void {
     const terrain = this.editorTerrain();
+    const placed = this.editorEnemies.map((e) => ({ ...e }));
     this.input?.setPaintMode(false);
     this.newGame(undefined, 'endless', terrain);
+    // Pre-placed enemies join the battle immediately (combat routes them to
+    // the warehouse on the next tick).
+    for (const e of placed) {
+      this.enemies.push(new Enemy(this.nextId++, e.x, e.y, e.defId));
+    }
     this.setPhase('playing');
   }
 
   private emitEditorState(): void {
-    events.emit('editor:changed', { brush: this.editorBrush, brushSize: this.editorBrushSize });
+    events.emit('editor:changed', {
+      brush: this.editorBrush,
+      brushSize: this.editorBrushSize,
+      tool: this.editorTool,
+      enemyType: this.editorEnemyType,
+      enemyCount: this.editorEnemies.length,
+    });
   }
 
   /** Resolve duel outcomes outside the combat iteration (safe point). */

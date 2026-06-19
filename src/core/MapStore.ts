@@ -1,5 +1,15 @@
 import { MAP_H, MAP_W } from '../data/config';
+import { ENEMY_DEFS } from '../data/enemies';
 import { Terrain } from '../world/IsoGrid';
+
+/** An enemy NPC placed in the editor. */
+export interface EditorEnemy {
+  x: number;
+  y: number;
+  defId: string;
+}
+
+const ENEMY_VALID = new Set<string>(Object.keys(ENEMY_DEFS));
 
 /**
  * Storage and (de)serialisation for player-made maps (the map editor).
@@ -14,6 +24,8 @@ export interface CustomMap {
   height: number;
   /** width*height terrain values (see Terrain enum). */
   terrain: number[];
+  /** Pre-placed enemy NPCs. */
+  enemies: EditorEnemy[];
 }
 
 const STORAGE_KEY = 'burgspiel.maps';
@@ -28,8 +40,17 @@ function store(): Storage | null {
   }
 }
 
-/** Run-length encode a terrain array into "WxH:v.count,v.count,…". */
-export function encodeMap(width: number, height: number, terrain: number[]): string {
+/**
+ * Run-length encode terrain into "WxH:v.count,…", optionally followed by an
+ * enemy section "|defId,x,y;defId,x,y" (omitted when there are no enemies, so
+ * old codes stay byte-for-byte identical).
+ */
+export function encodeMap(
+  width: number,
+  height: number,
+  terrain: number[],
+  enemies: EditorEnemy[] = [],
+): string {
   const runs: string[] = [];
   let i = 0;
   while (i < terrain.length) {
@@ -39,19 +60,26 @@ export function encodeMap(width: number, height: number, terrain: number[]): str
     runs.push(`${v}.${n}`);
     i += n;
   }
-  return `${width}x${height}:${runs.join(',')}`;
+  let code = `${width}x${height}:${runs.join(',')}`;
+  if (enemies.length > 0) {
+    code += '|' + enemies.map((e) => `${e.defId},${Math.round(e.x)},${Math.round(e.y)}`).join(';');
+  }
+  return code;
 }
 
 /** Inverse of encodeMap; returns null on malformed input. */
-export function decodeMap(code: string): { width: number; height: number; terrain: number[] } | null {
-  const head = code.indexOf(':');
+export function decodeMap(
+  code: string,
+): { width: number; height: number; terrain: number[]; enemies: EditorEnemy[] } | null {
+  const [mapPart, enemyPart] = code.split('|');
+  const head = mapPart.indexOf(':');
   if (head < 0) return null;
-  const dims = code.slice(0, head).split('x');
+  const dims = mapPart.slice(0, head).split('x');
   const width = Number(dims[0]);
   const height = Number(dims[1]);
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return null;
   const terrain: number[] = [];
-  const body = code.slice(head + 1);
+  const body = mapPart.slice(head + 1);
   if (body.length > 0) {
     for (const run of body.split(',')) {
       const [vs, ns] = run.split('.');
@@ -62,7 +90,18 @@ export function decodeMap(code: string): { width: number; height: number; terrai
     }
   }
   if (terrain.length !== width * height) return null;
-  return { width, height, terrain };
+  const enemies: EditorEnemy[] = [];
+  if (enemyPart) {
+    for (const tok of enemyPart.split(';')) {
+      if (!tok) continue;
+      const [defId, xs, ys] = tok.split(',');
+      const x = Number(xs);
+      const y = Number(ys);
+      if (!ENEMY_VALID.has(defId) || !Number.isInteger(x) || !Number.isInteger(y)) return null;
+      enemies.push({ defId, x, y });
+    }
+  }
+  return { width, height, terrain, enemies };
 }
 
 /** A fresh all-grass terrain array for the default map size. */
@@ -100,11 +139,17 @@ export function listMaps(): string[] {
 }
 
 /** Save (or overwrite) a map under a trimmed name. Returns false if invalid. */
-export function saveMap(name: string, width: number, height: number, terrain: number[]): boolean {
+export function saveMap(
+  name: string,
+  width: number,
+  height: number,
+  terrain: number[],
+  enemies: EditorEnemy[] = [],
+): boolean {
   const clean = name.trim().slice(0, 40);
   if (!clean || terrain.length !== width * height) return false;
   const maps = readAll().filter((m) => m.name.toLowerCase() !== clean.toLowerCase());
-  maps.push({ name: clean, code: encodeMap(width, height, terrain), updatedAt: Date.now() });
+  maps.push({ name: clean, code: encodeMap(width, height, terrain, enemies), updatedAt: Date.now() });
   writeAll(maps);
   return true;
 }
@@ -124,15 +169,20 @@ export function deleteMap(name: string): void {
 /** Versioned prefix for shareable map codes (copy/paste between players). */
 const SHARE_PREFIX = 'BURGMAP1.';
 
-/** A portable, shareable code for a terrain grid. */
-export function exportMapCode(width: number, height: number, terrain: number[]): string {
-  return SHARE_PREFIX + encodeMap(width, height, terrain);
+/** A portable, shareable code for a terrain grid (with enemies). */
+export function exportMapCode(
+  width: number,
+  height: number,
+  terrain: number[],
+  enemies: EditorEnemy[] = [],
+): string {
+  return SHARE_PREFIX + encodeMap(width, height, terrain, enemies);
 }
 
 /** Parse a shareable code back into a terrain grid; null if invalid. */
 export function importMapCode(
   code: string,
-): { width: number; height: number; terrain: number[] } | null {
+): { width: number; height: number; terrain: number[]; enemies: EditorEnemy[] } | null {
   const trimmed = code.trim();
   if (!trimmed.startsWith(SHARE_PREFIX)) return null;
   return decodeMap(trimmed.slice(SHARE_PREFIX.length));
