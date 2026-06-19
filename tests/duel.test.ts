@@ -4,6 +4,7 @@ import { DUEL_ARMY_CAP, computeArmy } from '../src/data/duel';
 
 const RES = {
   wood: 0, stone: 0, ore: 0, weapons: 0, wheat: 0, flour: 0, bread: 0, fish: 0, beer: 0, wool: 0, cloth: 0, gold: 0,
+  honig: 0, met: 0, schmuck: 0,
 };
 
 describe('castle codes', () => {
@@ -165,15 +166,20 @@ describe('clash-style duel (phase 14)', () => {
   });
 
   it('deploy costs and depots are defined consistently', async () => {
-    const { DUEL_DEPLOY_COSTS, DUEL_NODES } = await import('../src/data/duel');
+    const { DUEL_DEPLOY_COSTS, duelNodes } = await import('../src/data/duel');
+    const { MAP_W, MAP_H } = await import('../src/data/config');
     expect((DUEL_DEPLOY_COSTS.soldier.bread ?? 0)).toBeGreaterThan(0);
     expect((DUEL_DEPLOY_COSTS.knight.weapons ?? 0)).toBeGreaterThan(0);
-    expect(DUEL_NODES.length).toBeGreaterThan(0);
-    for (const n of DUEL_NODES) {
+    const nodes = duelNodes(MAP_W, MAP_H);
+    expect(nodes.length).toBeGreaterThan(0);
+    const cy = Math.floor(MAP_H / 2);
+    for (const n of nodes) {
       // West half only — the mirrored twin is derived at duel start.
-      expect(n.x).toBeLessThan(24);
+      expect(n.x).toBeLessThan(Math.floor(MAP_W / 2));
       expect(['bread', 'weapons', 'fish'].includes(n.resource)).toBe(true);
     }
+    // Depots sit symmetrically above and below the centre line.
+    expect(nodes[0].y + nodes[1].y).toBe(2 * cy);
   });
 });
 

@@ -4,67 +4,133 @@
       "file": "warehouse.png",
       "anchorX": 136,
       "anchorY": 160,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "warehouse.png",
+        "warehouse_l2.png",
+        "warehouse_l3.png"
+      ]
+    },
+    "smallWarehouse": {
+      "file": "smallWarehouse.png",
+      "anchorX": 72,
+      "anchorY": 114,
+      "scale": 0.5,
+      "levels": [
+        "smallWarehouse.png",
+        "smallWarehouse_l2.png",
+        "smallWarehouse_l3.png"
+      ]
     },
     "lumberjack": {
       "file": "lumberjack.png",
       "anchorX": 136,
       "anchorY": 126,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "lumberjack.png",
+        "lumberjack_l2.png",
+        "lumberjack_l3.png"
+      ]
     },
     "quarry": {
       "file": "quarry.png",
       "anchorX": 136,
       "anchorY": 136,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "quarry.png",
+        "quarry_l2.png",
+        "quarry_l3.png"
+      ]
     },
     "mine": {
       "file": "mine.png",
       "anchorX": 136,
       "anchorY": 112,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "mine.png",
+        "mine_l2.png",
+        "mine_l3.png"
+      ]
     },
     "smithy": {
       "file": "smithy.png",
       "anchorX": 136,
       "anchorY": 160,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "smithy.png",
+        "smithy_l2.png",
+        "smithy_l3.png"
+      ]
     },
     "fishery": {
       "file": "fishery.png",
       "anchorX": 72,
       "anchorY": 100,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "fishery.png",
+        "fishery_l2.png",
+        "fishery_l3.png"
+      ]
     },
     "farm": {
       "file": "farm.png",
       "anchorX": 200,
       "anchorY": 108,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "farm.png",
+        "farm_l2.png",
+        "farm_l3.png"
+      ]
     },
     "mill": {
       "file": "mill.png",
       "anchorX": 136,
       "anchorY": 212,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "mill.png",
+        "mill_l2.png",
+        "mill_l3.png"
+      ]
     },
     "bakery": {
       "file": "bakery.png",
       "anchorX": 136,
       "anchorY": 160,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "bakery.png",
+        "bakery_l2.png",
+        "bakery_l3.png"
+      ]
     },
     "brewery": {
       "file": "brewery.png",
       "anchorX": 136,
       "anchorY": 144,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "brewery.png",
+        "brewery_l2.png",
+        "brewery_l3.png"
+      ]
     },
     "hut": {
       "file": "hut.png",
       "anchorX": 72,
-      "anchorY": 106,
-      "scale": 0.5
+      "anchorY": 126,
+      "scale": 0.5,
+      "levels": [
+        "hut.png",
+        "hut_l2.png",
+        "hut_l3.png"
+      ]
     },
     "wall": {
       "file": "wall.png",
@@ -82,12 +148,89 @@
       "file": "tower.png",
       "anchorX": 136,
       "anchorY": 188,
-      "scale": 0.5
+      "scale": 0.5,
+      "levels": [
+        "tower.png",
+        "tower_l2.png",
+        "tower_l3.png"
+      ]
     },
     "barracks": {
       "file": "barracks.png",
       "anchorX": 200,
       "anchorY": 168,
+      "scale": 0.5,
+      "levels": [
+        "barracks.png",
+        "barracks_l2.png",
+        "barracks_l3.png"
+      ]
+    },
+    "keep": {
+      "file": "keep.png",
+      "anchorX": 136,
+      "anchorY": 192,
+      "scale": 0.5,
+      "levels": [
+        "keep.png",
+        "keep_l2.png",
+        "keep_l3.png"
+      ]
+    },
+    "market": {
+      "file": "market.png",
+      "anchorX": 136,
+      "anchorY": 104,
+      "scale": 0.5,
+      "levels": [
+        "market.png",
+        "market_l2.png",
+        "market_l3.png"
+      ]
+    },
+    "sheepFarm": {
+      "file": "sheepFarm.png",
+      "anchorX": 136,
+      "anchorY": 96,
+      "scale": 0.5,
+      "levels": [
+        "sheepFarm.png",
+        "sheepFarm_l2.png",
+        "sheepFarm_l3.png"
+      ]
+    },
+    "weavery": {
+      "file": "weavery.png",
+      "anchorX": 136,
+      "anchorY": 124,
+      "scale": 0.5,
+      "levels": [
+        "weavery.png",
+        "weavery_l2.png",
+        "weavery_l3.png"
+      ]
+    },
+    "stable": {
+      "file": "stable.png",
+      "anchorX": 136,
+      "anchorY": 108,
+      "scale": 0.5,
+      "levels": [
+        "stable.png",
+        "stable_l2.png",
+        "stable_l3.png"
+      ]
+    },
+    "wallStrong": {
+      "file": "wallStrong.png",
+      "anchorX": 72,
+      "anchorY": 140,
+      "scale": 0.5
+    },
+    "gateIron": {
+      "file": "gateIron.png",
+      "anchorX": 72,
+      "anchorY": 120,
       "scale": 0.5
     }
   },

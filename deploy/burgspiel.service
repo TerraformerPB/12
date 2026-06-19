@@ -1,0 +1,32 @@
+# systemd-Unit für das Burgspiel-Node-Backend.
+# Kopieren nach /etc/systemd/system/burgspiel.service, dann:
+#   systemctl daemon-reload && systemctl enable --now burgspiel
+#
+# Konfiguration über die Environment-Zeilen unten (siehe README.md).
+
+[Unit]
+Description=Burgspiel Backend (Node)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__APP_DIR__
+# Backend nur lokal erreichbar; nginx terminiert HTTPS und proxyt.
+Environment=PORT=8787
+Environment=BURGSPIEL_DATA=__APP_DIR__/server-data/burgspiel.json
+Environment=BURGSPIEL_CORS=*
+# Hinter nginx/Cloudflare: echte Client-IP aus X-Forwarded-For fürs Rate-Limit.
+Environment=BURGSPIEL_TRUST_PROXY=1
+# Admin-Seed beim ersten Start (sonst wird der erste Account Admin):
+# Environment=BURGSPIEL_ADMIN_USER=admin
+# Environment=BURGSPIEL_ADMIN_PASSWORD=bitte-aendern
+ExecStart=/usr/bin/node __APP_DIR__/server/dist/index.js
+Restart=on-failure
+RestartSec=3
+# Härtung
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

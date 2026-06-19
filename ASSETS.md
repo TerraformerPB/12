@@ -25,7 +25,14 @@ Gebäudehöhe. Richtwerte (Breite × Höhe, 1x — für 2x verdoppeln):
 | Hütte, Mauer, Tor, Straße | 1×1 | 64 × 70 px |
 | Fischerhütte | 2×1 | 96 × 70 px |
 | Holzfäller, Steinbruch, Erzmine, Mühle, Bäckerei, Brauerei, Schmiede, Lagerhaus, Wachturm | 2×2 | 128 × 110 px |
+| Imkerei, Methaus, Goldschmiede (Luxus, Endgame) | 2×2 | 128 × 110 px |
 | Weizenfarm, Kaserne | 3×3 | 192 × 130 px |
+
+> **Neu:** Die Brücke hat jetzt einen prozeduralen 3D-Look (Deck mit Geländern);
+> für ein eigenes Sprite den Manifest-Schlüssel `bridge` (Footprint 1×1) anlegen.
+> Die neuen Luxusgebäude nutzen die Schlüssel `imkerei`, `methaus`, `goldschmiede`.
+> Die Map-Editor-Geländetypen **Sand** und **Weg** sind rein prozedural und
+> brauchen keine Sprites.
 
 ## Ankerpunkt (wichtig!)
 

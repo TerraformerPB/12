@@ -22,8 +22,8 @@ import {
  * TILE_W × TILE_H pixels around its center.
  *
  * Depth sorting: zIndex of an object standing on tile (gx, gy) is gx + gy.
- * Buildings with a footprint larger than 1×1 sort by their front corner:
- * (gx + w - 1) + (gy + h - 1).
+ * Buildings with a footprint larger than 1×1 sort by their center-based value:
+ * gx + gy + (w + h) / 2 - 0.5.
  */
 
 export interface Point {
@@ -68,8 +68,25 @@ export const Terrain = {
   Forest: 3,
   /** Ore vein: blocked like rock; mines need adjacency and deplete it. */
   Ore: 4,
+  /** Sand/beach: walkable like grass, decorative (not buildable). */
+  Sand: 5,
+  /** Dirt path: walkable and a touch faster; decorative (not buildable). */
+  Path: 6,
+  /** Snow: flat buildable ground, walkable. */
+  Snow: 7,
+  /** Flower meadow: flat buildable ground, walkable. */
+  Meadow: 8,
+  /** Marsh/swamp: walkable but slow, not buildable. */
+  Marsh: 9,
+  /** Gravel: flat buildable ground, walkable. */
+  Gravel: 10,
 } as const;
 export type Terrain = (typeof Terrain)[keyof typeof Terrain];
+
+/** Flat ground a building can stand on (grass and grass-like terrains). */
+export function isBuildableGround(t: Terrain): boolean {
+  return t === Terrain.Grass || t === Terrain.Snow || t === Terrain.Meadow || t === Terrain.Gravel;
+}
 
 export const NO_OCCUPANT = 0;
 
@@ -103,6 +120,7 @@ export class IsoGrid {
   /** Terrain changes after generation (felled/regrown forest), for saves. */
   private overrides = new Map<number, Terrain>();
   private baselineSealed = false;
+  private exploredState: Uint8Array;
 
   constructor(width: number = MAP_W, height: number = MAP_H) {
     this.width = width;
@@ -110,10 +128,43 @@ export class IsoGrid {
     this.terrain = new Uint8Array(width * height); // all grass
     this.occupant = new Int32Array(width * height);
     this.passable = new Uint8Array(width * height);
+    this.exploredState = new Uint8Array(width * height); // all unexplored (0)
   }
 
   inBounds(gx: number, gy: number): boolean {
     return gx >= 0 && gy >= 0 && gx < this.width && gy < this.height;
+  }
+
+  isExplored(gx: number, gy: number): boolean {
+    if (!this.inBounds(gx, gy)) return false;
+    return this.exploredState[this.idx(gx, gy)] === 1;
+  }
+
+  setExplored(gx: number, gy: number, val: boolean): void {
+    if (!this.inBounds(gx, gy)) return;
+    this.exploredState[this.idx(gx, gy)] = val ? 1 : 0;
+  }
+
+  /** Reveal the whole map (used by the map editor and duels — no fog there). */
+  revealAll(): void {
+    this.exploredState.fill(1);
+  }
+
+  exploredIndices(): number[] {
+    const list: number[] = [];
+    for (let i = 0; i < this.exploredState.length; i++) {
+      if (this.exploredState[i] === 1) list.push(i);
+    }
+    return list;
+  }
+
+  applyExploredIndices(list: number[]): void {
+    this.exploredState.fill(0);
+    for (const idx of list) {
+      if (idx >= 0 && idx < this.exploredState.length) {
+        this.exploredState[idx] = 1;
+      }
+    }
   }
 
   private idx(gx: number, gy: number): number {
@@ -211,9 +262,17 @@ export class IsoGrid {
     }
     switch (this.terrainAt(gx, gy)) {
       case Terrain.Grass:
+      case Terrain.Sand:
+      case Terrain.Snow:
+      case Terrain.Meadow:
+      case Terrain.Gravel:
         return 1;
+      case Terrain.Path:
+        return 0.85;
       case Terrain.Forest:
         return FOREST_MOVE_COST;
+      case Terrain.Marsh:
+        return 1.6;
       default:
         return Infinity;
     }
@@ -235,9 +294,17 @@ export class IsoGrid {
       }
       switch (this.terrainAt(gx, gy)) {
         case Terrain.Grass:
+        case Terrain.Sand:
+        case Terrain.Snow:
+        case Terrain.Meadow:
+        case Terrain.Gravel:
           return 1;
+        case Terrain.Path:
+          return 0.85;
         case Terrain.Forest:
           return FOREST_MOVE_COST;
+        case Terrain.Marsh:
+          return 1.6;
         default:
           return Infinity;
       }

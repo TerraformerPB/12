@@ -34,6 +34,10 @@ export interface SaveData {
   /** Since save version 10 (empire scenario). */
   prestige: number;
   diplomacy: DiplomacySave | null;
+  /** Since save version 12 (endless gameplay). */
+  victoryAnnounced?: boolean;
+  /** Since save version 13 (fog of war). */
+  explored?: number[];
 }
 
 /**
@@ -96,11 +100,33 @@ export function migrateSave(data: SaveData): SaveData | null {
     // collision-free since both are unbuildable). Data shape is unchanged.
     data.saveVersion = 11;
   }
+  if (data.saveVersion === 11) {
+    // v11 → v12: victoryAnnounced property added.
+    data.victoryAnnounced = false;
+    data.saveVersion = 12;
+  }
+  if (data.saveVersion === 12) {
+    // v12 → v13: Fog of War explored tiles.
+    data.explored = [];
+    data.saveVersion = 13;
+  }
+  if (data.saveVersion === 13) {
+    // v13 → v14: per-warehouse local storage. Old saves keep no per-building
+    // stock; Game deposits the global `resources` into the main warehouse on
+    // load, so no data needs reshaping here.
+    data.saveVersion = 14;
+  }
   return data.saveVersion === SAVE_VERSION ? data : null;
 }
 
 /** Minimal storage interface so tests can inject a fake. */
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+const memoryStorage: KeyValueStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
 
 /**
  * localStorage persistence. Game state assembly/restoration lives in Game;
@@ -110,7 +136,10 @@ export class SaveManager {
   private storage: KeyValueStorage;
   private key: string;
 
-  constructor(storage: KeyValueStorage = localStorage, key: string = SAVE_KEY) {
+  constructor(
+    storage: KeyValueStorage = typeof localStorage !== 'undefined' ? localStorage : memoryStorage,
+    key: string = SAVE_KEY,
+  ) {
     this.storage = storage;
     this.key = key;
   }

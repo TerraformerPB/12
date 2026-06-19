@@ -3,7 +3,7 @@ import type { BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Soldier } from '../entities/Soldier';
 
-export type GamePhase = 'loading' | 'menu' | 'playing' | 'paused' | 'gameover';
+export type GamePhase = 'loading' | 'menu' | 'playing' | 'paused' | 'gameover' | 'editor';
 
 /**
  * All events flowing between game logic and DOM UI.
@@ -23,7 +23,13 @@ export interface GameEvents {
   'techs:changed': { researched: string[] };
   'tutorial:changed': { text: string | null };
   'wave:status': { wave: number; nextInSeconds: number; enemiesAlive: number; kills: number };
-  'game:over': { wavesSurvived: number; kills: number };
+  'game:over': {
+    wavesSurvived: number;
+    kills: number;
+    empire: boolean;
+    prestige: number;
+    rankName: string;
+  };
   'duel:openMenu': void;
   'duel:status': { ownHp: number; foeHp: number; foes: number };
   'duel:ended': {
@@ -35,6 +41,13 @@ export interface GameEvents {
   };
   'duel:onlineResult': { opponentId: number; username: string; victory: boolean };
   'online:openMenu': void;
+  'editor:changed': {
+    brush: number;
+    brushSize: number;
+    tool: 'terrain' | 'enemy' | 'erase';
+    enemyType: string;
+    enemyCount: number;
+  };
   'morale:changed': { morale: number };
   'diplomacy:changed': void;
   'rank:changed': { rank: number; name: string; icon: string; prestige: number };

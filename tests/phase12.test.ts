@@ -7,6 +7,7 @@ import {
   TICK_RATE,
   VETERAN_BONUS,
   VETERAN_THRESHOLDS,
+  ORE_PER_TILE,
 } from '../src/data/config';
 import { getDef } from '../src/data/buildings';
 import { SELL_PRICE } from '../src/data/market';
@@ -201,7 +202,8 @@ describe('empire scenario (phase 18)', () => {
     const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
     const { ResourceStore } = await import('../src/systems/EconomySystem');
     const { TICK_RATE, RELATION_START, GIFT_RELATION_GAIN } = await import('../src/data/config');
-    const store = new ResourceStore({ gold: 500, bread: 100 });
+    const store = new ResourceStore();
+    store.setLoose({ gold: 500, bread: 100 });
     let raids = 0;
     const diplo = new DiplomacySystem({
       store,
@@ -232,7 +234,8 @@ describe('empire scenario (phase 18)', () => {
     const { ResourceStore } = await import('../src/systems/EconomySystem');
     const { CARAVAN_BATCH, CARAVAN_TRAVEL_SECONDS, TICK_RATE } = await import('../src/data/config');
     const { factionPrice } = await import('../src/data/factions');
-    const store = new ResourceStore({ bread: 50 });
+    const store = new ResourceStore();
+    store.setLoose({ bread: 50 });
     let prestige = 0;
     const diplo = new DiplomacySystem({
       store,
@@ -274,7 +277,8 @@ describe('empire depth (phase 19)', () => {
   async function makeDiplo(initial: Partial<Record<string, number>> = {}) {
     const { DiplomacySystem } = await import('../src/systems/DiplomacySystem');
     const { ResourceStore } = await import('../src/systems/EconomySystem');
-    const store = new ResourceStore(initial as never);
+    const store = new ResourceStore();
+    store.setLoose(initial as never);
     let contracts = 0;
     const diplo = new DiplomacySystem({
       store,
@@ -376,6 +380,7 @@ describe('ore, keep & level effects (phase 20)', () => {
     const { checkPlacement } = await import('../src/systems/BuildSystem');
     const { getDef } = await import('../src/data/buildings');
     const grid = new IsoGrid(12, 12);
+    for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) grid.setExplored(x, y, true);
     const mine = getDef('mine');
     expect(checkPlacement(grid, mine, 4, 4, false).ok).toBe(false);
     grid.setTerrain(3, 4, Terrain.Ore);
@@ -444,7 +449,7 @@ describe('ore depletion (phase 20)', () => {
       onConstructionFinished: () => {},
     });
     // ORE_PER_TILE outputs deplete the vein; afterwards production halts.
-    for (let t = 0; t < 20 * 7 * 13 + 40; t++) {
+    for (let t = 0; t < 20 * 7 * (ORE_PER_TILE + 1) + 40; t++) {
       eco.tick();
       mine.outputStore = 0; // drain so the local store never blocks
     }

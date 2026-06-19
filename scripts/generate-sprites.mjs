@@ -140,11 +140,31 @@ function doorSE(c, w, h, t = 0.5, dh = 13, dw = 8) {
     '#3d2b1a', { stroke: OUTLINE, sw: 1 });
 }
 
+/** Programmatic upgrade visuals: Timber bracing at L2, gold trim + banner at L3. */
+function drawLevelDetails(c, w, h, L, level) {
+  if (level < 2) return;
+  const { E, S, W, N } = corners(w, h);
+  const lift = L;
+  // Timber corner posts on the corner edges
+  for (const pts of [S, W, E]) {
+    line(c, pts, up(pts, lift), '#4a3826', 3.5);
+  }
+  if (level >= 3) {
+    // Gold rim highlight
+    poly(c, [up(N, lift), up(E, lift), up(S, lift), up(W, lift)], 'none', { stroke: '#e3b341', sw: 2.2 });
+    // Small roof banner
+    const cx = (N[0] + S[0]) / 2;
+    const cy = (N[1] + S[1]) / 2 - lift;
+    line(c, [cx, cy], [cx, cy - 18], '#4a3b28', 2);
+    poly(c, [[cx, cy - 18], [cx + 10, cy - 15], [cx, cy - 12]], '#e3b341', { stroke: OUTLINE, sw: 1 });
+  }
+}
+
 // --- buildings -----------------------------------------------------------------
 
 /** Each returns { c, top } where top = highest point above anchor (positive px). */
 const builders = {
-  warehouse(c) {
+  warehouse(c, level = 1) {
     prism(c, 2, 2, 36, '#cdb38a', { noTop: true });
     timber(c, 2, 2, 36);
     const r = hipRoof(c, 2, 2, 36, 18, '#9e4a36');
@@ -154,9 +174,22 @@ const builders = {
     const { S } = corners(2, 2);
     rect(c, S[0] + 8, S[1] - 12, 9, 8, '#a8845a', { stroke: OUTLINE });
     rect(c, S[0] + 12, S[1] - 18, 7, 6, '#bb9668', { stroke: OUTLINE });
+    drawLevelDetails(c, 2, 2, 36, level);
     return 36 + 18 + HH + 6;
   },
-  lumberjack(c) {
+  smallWarehouse(c, level = 1) {
+    prism(c, 1, 1, 22, '#cdb38a', { noTop: true });
+    timber(c, 1, 1, 22);
+    const r = hipRoof(c, 1, 1, 22, 11, '#9e4a36');
+    doorSE(c, 1, 1, 0.5, 12, 7);
+    windowSE(c, 1, 1, 22, 0.8, 0.5, 5);
+    // single crate by the entrance
+    const { S } = corners(1, 1);
+    rect(c, S[0] + 4, S[1] - 6, 6, 5, '#a8845a', { stroke: OUTLINE });
+    drawLevelDetails(c, 1, 1, 22, level);
+    return 22 + 11 + HH + 4;
+  },
+  lumberjack(c, level = 1) {
     prism(c, 2, 2, 24, '#8a5d33', { noTop: true });
     // log courses
     const { E, S, W } = corners(2, 2);
@@ -171,9 +204,10 @@ const builders = {
       circle(c, S[0] + ox, S[1] + oy, 4, '#7d5630', { stroke: OUTLINE });
       circle(c, S[0] + ox, S[1] + oy, 1.8, '#c9a061');
     }
+    drawLevelDetails(c, 2, 2, 24, level);
     return 24 + 13 + HH + 6;
   },
-  quarry(c) {
+  quarry(c, level = 1) {
     prism(c, 2, 2, 20, '#8f959e', { noTop: true });
     const { N, E, S, W } = corners(2, 2);
     poly(c, [up(N, 20), up(E, 20), up(S, 20), up(W, 20)], '#7b818b', { stroke: OUTLINE });
@@ -188,9 +222,10 @@ const builders = {
     line(c, [-14, -20], [-14, -38], '#54381f', 2.5);
     line(c, [-14, -38], [6, -30], '#54381f', 2.5);
     line(c, [6, -30], [6, -24], '#3a2a18', 1.2);
+    drawLevelDetails(c, 2, 2, 20, level);
     return 44 + HH + 4;
   },
-  mine(c) {
+  mine(c, level = 1) {
     prism(c, 2, 2, 22, '#7a6a55', { noTop: true });
     hipRoof(c, 2, 2, 22, 10, '#6e645c', 3);
     // adit with timber frame on SE face
@@ -203,9 +238,10 @@ const builders = {
     ellipse(c, p[0] + 16, p[1] - 2, 6, 3.4, '#4d4138');
     circle(c, p[0] + 14, p[1] - 4, 1.6, '#9b8b74');
     circle(c, p[0] + 18, p[1] - 4.5, 1.6, '#8d7d66');
+    drawLevelDetails(c, 2, 2, 22, level);
     return 22 + 10 + HH + 4;
   },
-  smithy(c) {
+  smithy(c, level = 1) {
     prism(c, 2, 2, 26, '#5e5754', { noTop: true });
     hipRoof(c, 2, 2, 26, 12, '#46413f');
     // chimney + smoke
@@ -221,7 +257,7 @@ const builders = {
     rect(c, S[0] + 13, S[1] - 7, 4, 4, '#2c2c33');
     return 26 + 12 + 22 + HH;
   },
-  fishery(c) {
+  fishery(c, level = 1) {
     prism(c, 2, 1, 16, '#7d96a8', { noTop: true });
     hipRoof(c, 2, 1, 16, 10, '#3f6b8a');
     doorSE(c, 2, 1, 0.3, 11, 7);
@@ -231,9 +267,10 @@ const builders = {
     line(c, [E[0] + 10, E[1] - 26], [E[0] + 10, E[1] - 2], '#d8d8d8', 1);
     circle(c, E[0] + 10, E[1] - 1, 2, '#7fb6d9');
     ellipse(c, S[0] + 6, S[1] - 2, 5, 2.5, '#5d7d92');
+    drawLevelDetails(c, 2, 1, 16, level);
     return 16 + 10 + HH + 4;
   },
-  farm(c) {
+  farm(c, level = 1) {
     const { N, E, S, W } = corners(3, 3);
     ellipse(c, ...mid(N, S), 3 * HW + 8, 3 * HH + 4, '#000', 0.18);
     // field
@@ -252,9 +289,10 @@ const builders = {
     // haystack
     ellipse(c, S[0] + 4, S[1] - 8, 8, 5, '#d9b84f');
     ellipse(c, S[0] + 4, S[1] - 12, 5.5, 3.5, '#e7ca66');
+    drawLevelDetails(c, 3, 3, 18, level);
     return 18 + 10 + HH + 6;
   },
-  mill(c) {
+  mill(c, level = 1) {
     // tapered tower: draw as prism with slight inset top via two trapezoids
     const { N, E, S, W } = corners(2, 2);
     ellipse(c, ...mid(N, S), 2 * HW + 6, 2 * HH + 3, '#000', 0.2);
@@ -271,19 +309,14 @@ const builders = {
     const capC = mid(Wt, Et);
     ellipse(c, capC[0], capC[1] - 2, 22, 10, '#7a4a30');
     ellipse(c, capC[0], capC[1] - 5, 16, 7, '#8f5a3a');
-    // blades
+    // hub (axle only, sails are drawn dynamically in WorldRenderer)
     const hub = [capC[0] + 6, capC[1] - 14];
-    for (const a of [0.6, 2.17, 3.74, 5.31]) {
-      const tip = [hub[0] + Math.cos(a) * 30, hub[1] + Math.sin(a) * 30 * 0.8];
-      line(c, hub, tip, '#54381f', 2.5);
-      const t1 = lerp(hub, tip, 0.25);
-      poly(c, [t1, [t1[0] + 6, t1[1] + 3], [tip[0] + 6, tip[1] + 3], tip], '#f4eee0', { stroke: '#54381f', sw: 1 });
-    }
     circle(c, hub[0], hub[1], 3, '#3a2a18');
     doorSE(c, 2, 2, 0.35, 14, 9);
+    drawLevelDetails(c, 2, 2, 42, level);
     return 42 + 14 + 30 + HH;
   },
-  bakery(c) {
+  bakery(c, level = 1) {
     prism(c, 2, 2, 28, '#c98a5b', { noTop: true });
     timber(c, 2, 2, 28, '#7a4a2a');
     hipRoof(c, 2, 2, 28, 14, '#7a4a32');
@@ -293,9 +326,10 @@ const builders = {
     windowSE(c, 2, 2, 28, 0.25, 0.5);
     // bretzel sign
     circle(c, 22, -2, 5, '#e8b34c', { stroke: '#7a4a2a', sw: 1.4 });
+    drawLevelDetails(c, 2, 2, 28, level);
     return 28 + 14 + 18 + HH;
   },
-  brewery(c) {
+  brewery(c, level = 1) {
     prism(c, 2, 2, 30, '#a07b46', { noTop: true });
     timber(c, 2, 2, 30);
     hipRoof(c, 2, 2, 30, 14, '#5d4a2e');
@@ -310,14 +344,33 @@ const builders = {
       line(c, [S[0] + ox - 5, S[1] + oy + 2], [S[0] + ox + 5, S[1] + oy + 2], '#5a4026', 1.2);
     }
     doorSE(c, 2, 2, 0.3);
+    drawLevelDetails(c, 2, 2, 30, level);
     return 30 + 14 + HH + 8;
   },
-  hut(c) {
-    prism(c, 1, 1, 18, '#a8835c', { noTop: true });
-    hipRoof(c, 1, 1, 18, 11, '#6d6253');
-    doorSE(c, 1, 1, 0.45, 11, 7);
-    windowSE(c, 1, 1, 18, 0.85, 0.55, 4.5);
-    return 18 + 11 + HH + 4;
+  hut(c, level = 1) {
+    if (level === 1) {
+      prism(c, 1, 1, 18, '#d8af84', { noTop: true });
+      hipRoof(c, 1, 1, 18, 11, '#b89f68');
+      doorSE(c, 1, 1, 0.45, 11, 7);
+      windowSE(c, 1, 1, 18, 0.85, 0.55, 4.5);
+      drawLevelDetails(c, 1, 1, 18, level);
+      return 18 + 11 + HH + 4;
+    } else if (level === 2) {
+      prism(c, 1, 1, 22, '#e8e2d8', { noTop: true });
+      timber(c, 1, 1, 22, '#4a301a');
+      hipRoof(c, 1, 1, 22, 12, '#a84832');
+      doorSE(c, 1, 1, 0.45, 12, 7);
+      windowSE(c, 1, 1, 22, 0.85, 0.55, 4.5);
+      drawLevelDetails(c, 1, 1, 22, level);
+      return 22 + 12 + HH + 4;
+    } else {
+      prism(c, 1, 1, 26, '#7a828a', { noTop: true });
+      hipRoof(c, 1, 1, 26, 13, '#3f5a7a');
+      doorSE(c, 1, 1, 0.45, 13, 7);
+      windowSE(c, 1, 1, 26, 0.85, 0.55, 5);
+      drawLevelDetails(c, 1, 1, 26, level);
+      return 26 + 13 + HH + 4;
+    }
   },
   wall(c) {
     const { N, E, S, W } = corners(1, 1);
@@ -347,7 +400,7 @@ const builders = {
     line(c, [p[0] + 2, p[1] - 2.5], [p[0] + 2, p[1] - 18], '#6a4f2c', 1.4);
     return 28 + 8 + HH;
   },
-  tower(c) {
+  tower(c, level = 1) {
     const L = 54;
     prism(c, 2, 2, L, '#79808c', { noTop: true });
     const { N, E, S, W } = corners(2, 2);
@@ -369,9 +422,10 @@ const builders = {
     const fc = mid(up(N, L), up(S, L));
     line(c, fc, [fc[0], fc[1] - 18], '#54381f', 2);
     poly(c, [[fc[0], fc[1] - 18], [fc[0] + 13, fc[1] - 14.5], [fc[0], fc[1] - 11]], '#c23b3b', { stroke: OUTLINE, sw: 1 });
+    drawLevelDetails(c, 2, 2, L, level);
     return 54 + 18 + HH + 2;
   },
-  barracks(c) {
+  barracks(c, level = 1) {
     prism(c, 3, 3, 30, '#8c6a72', { noTop: true });
     timber(c, 3, 3, 30, '#4a3340');
     hipRoof(c, 3, 3, 30, 16, '#5b4148');
@@ -385,7 +439,133 @@ const builders = {
     poly(c, [[fc[0], fc[1] - 16], [fc[0] + 12, fc[1] - 12.5], [fc[0], fc[1] - 9]], '#c23b3b', { stroke: OUTLINE, sw: 1 });
     line(c, [S[0] + 12, S[1] - 4], [S[0] + 16, S[1] - 18], '#9aa1ab', 2);
     line(c, [S[0] + 18, S[1] - 6], [S[0] + 22, S[1] - 20], '#9aa1ab', 2);
+    drawLevelDetails(c, 3, 3, 30, level);
     return 30 + 16 + 18 + HH;
+  },
+  keep(c, level = 1) {
+    const L = 52;
+    prism(c, 2, 2, L, '#8d8d99', { noTop: true });
+    const { N, E, S, W } = corners(2, 2);
+    // Mortar lines
+    for (const t of [0.25, 0.5, 0.75]) {
+      line(c, up(W, L * t), up(S, L * t), '#60646c', 1.2, 0.75);
+      line(c, up(S, L * t), up(E, L * t), '#545860', 1.2, 0.75);
+    }
+    poly(c, [up(N, L), up(E, L), up(S, L), up(W, L)], '#a3a8b2', { stroke: OUTLINE });
+    // Crenellations along front edges
+    for (const tt of [0.1, 0.35, 0.6, 0.85]) {
+      const a = lerp(up(W, L), up(S, L), tt);
+      poly(c, [[a[0], a[1] + 3], [a[0] + 7, a[1] + 6], [a[0] + 7, a[1] - 2], [a[0], a[1] - 5]], '#b3b8c2', { stroke: OUTLINE, sw: 1 });
+      const b = lerp(up(S, L), up(E, L), tt);
+      poly(c, [[b[0], b[1] + 6], [b[0] + 7, b[1] + 3], [b[0] + 7, b[1] - 5], [b[0], b[1] - 2]], '#9fa4ae', { stroke: OUTLINE, sw: 1 });
+    }
+    // Huge arched door
+    const p = lerp(S, E, 0.5);
+    poly(c, [[p[0] - 12, p[1] + 1], [p[0] + 12, p[1] - 4], [p[0] + 12, p[1] - 22], [p[0] - 12, p[1] - 18]], '#3a2a18', { stroke: OUTLINE });
+    line(c, [p[0], p[1] - 2], [p[0], p[1] - 20], OUTLINE, 1.5);
+    // Flag
+    const fc = mid(up(N, L), up(S, L));
+    line(c, fc, [fc[0], fc[1] - 24], '#54381f', 2.5);
+    poly(c, [[fc[0], fc[1] - 24], [fc[0] + 16, fc[1] - 20], [fc[0], fc[1] - 16]], '#c23b3b', { stroke: OUTLINE, sw: 1 });
+    drawLevelDetails(c, 2, 2, L, level);
+    return L + 24 + HH;
+  },
+  market(c, level = 1) {
+    prism(c, 2, 2, 14, '#b3893c', { noTop: true });
+    timber(c, 2, 2, 14);
+    // Draw some tents on top
+    const { N, E, S, W } = corners(2, 2);
+    // Tent 1 (red/white stripes)
+    const t1 = up(mid(W, S), 14);
+    poly(c, [[t1[0] - 16, t1[1] + 4], [t1[0] + 4, t1[1] - 4], [t1[0] - 6, t1[1] - 18]], '#c23b3b', { stroke: OUTLINE });
+    poly(c, [[t1[0] - 12, t1[1] + 2], [t1[0] - 2, t1[1] - 2], [t1[0] - 6, t1[1] - 18]], '#ffffff', { stroke: OUTLINE });
+    // Tent 2 (blue/white stripes)
+    const t2 = up(mid(S, E), 14);
+    poly(c, [[t2[0] - 4, t2[1] + 2], [t2[0] + 16, t2[1] - 6], [t2[0] + 6, t2[1] - 18]], '#3a6fc4', { stroke: OUTLINE });
+    poly(c, [[t2[0] + 1, t2[1]], [t2[0] + 11, t2[1] - 4], [t2[0] + 6, t2[1] - 18]], '#ffffff', { stroke: OUTLINE });
+    // Crates
+    const { S: Sc } = corners(2, 2);
+    rect(c, Sc[0] - 4, Sc[1] - 6, 6, 5, '#caa66a', { stroke: OUTLINE });
+    drawLevelDetails(c, 2, 2, 14, level);
+    return 14 + 18 + HH;
+  },
+  sheepFarm(c, level = 1) {
+    prism(c, 2, 2, 16, '#c4b5a2', { noTop: true });
+    timber(c, 2, 2, 16);
+    hipRoof(c, 2, 2, 16, 12, '#6d5a4c');
+    // Draw some white puff sheep near the building
+    const { S } = corners(2, 2);
+    // Sheep 1
+    ellipse(c, S[0] - 12, S[1] - 6, 5, 3.5, '#ffffff');
+    circle(c, S[0] - 16, S[1] - 8, 2, '#444444');
+    // Sheep 2
+    ellipse(c, S[0] + 8, S[1] - 8, 4.5, 3.2, '#f6f6f6');
+    circle(c, S[0] + 4, S[1] - 9, 1.8, '#444444');
+    drawLevelDetails(c, 2, 2, 16, level);
+    return 16 + 12 + HH;
+  },
+  weavery(c, level = 1) {
+    prism(c, 2, 2, 28, '#ab8295', { noTop: true });
+    timber(c, 2, 2, 28, '#5b3a4a');
+    hipRoof(c, 2, 2, 28, 14, '#9a5a74');
+    doorSE(c, 2, 2, 0.4, 13, 8);
+    // Fabrics hanging from a window
+    const { E, S } = corners(2, 2);
+    const p = up(lerp(S, E, 0.75), 28 * 0.6);
+    poly(c, [[p[0] - 4, p[1]], [p[0] + 4, p[1] - 2], [p[0] + 4, p[1] - 8], [p[0] - 4, p[1] - 6]], '#9a5a74', { stroke: OUTLINE });
+    // Hanging cloth
+    poly(c, [[p[0] - 3, p[1]], [p[0] + 3, p[1] - 1.5], [p[0] + 3, p[1] + 12], [p[0] - 3, p[1] + 14]], '#9a5a74', { stroke: OUTLINE });
+    drawLevelDetails(c, 2, 2, 28, level);
+    return 28 + 14 + HH;
+  },
+  stable(c, level = 1) {
+    prism(c, 2, 2, 22, '#96793f', { noTop: true });
+    timber(c, 2, 2, 22);
+    hipRoof(c, 2, 2, 22, 12, '#5e4e32');
+    // Open barn door
+    const { E, S } = corners(2, 2);
+    const p = lerp(S, E, 0.5);
+    poly(c, [[p[0] - 9, p[1]], [p[0] + 9, p[1] - 4], [p[0] + 9, p[1] - 16], [p[0] - 9, p[1] - 12]], '#241a10', { stroke: OUTLINE });
+    // Water trough
+    rect(c, S[0] + 12, S[1] - 6, 8, 4, '#5d7d92', { stroke: OUTLINE });
+    drawLevelDetails(c, 2, 2, 22, level);
+    return 22 + 12 + HH;
+  },
+  wallStrong(c) {
+    const { N, E, S, W } = corners(1, 1);
+    const L = 40;
+    prism(c, 1, 1, L, '#6e7480', { noTop: true });
+    poly(c, [up(N, L), up(E, L), up(S, L), up(W, L)], '#868c98', { stroke: OUTLINE });
+    for (const t of [0.25, 0.5, 0.75]) {
+      line(c, up(W, L * t), up(S, L * t), '#4c525c', 1.2, 0.8);
+      line(c, up(S, L * t), up(E, L * t), '#424850', 1.2, 0.8);
+    }
+    // crenellations
+    for (const t of [0.15, 0.55]) {
+      const a = lerp(up(W, L), up(N, L), t);
+      poly(c, [[a[0], a[1] + 3], [a[0] + 9, a[1] + 7.5], [a[0] + 9, a[1] - 1.5], [a[0], a[1] - 6]], '#9aa0ac', { stroke: OUTLINE, sw: 1 });
+    }
+    // Iron reinforcement lines
+    line(c, up(W, L * 0.4), up(S, L * 0.4), '#2c2d30', 2, 0.8);
+    line(c, up(S, L * 0.4), up(E, L * 0.4), '#2c2d30', 2, 0.8);
+    return L + 10 + HH;
+  },
+  gateIron(c) {
+    const L = 32;
+    prism(c, 1, 1, L, '#76695a', { noTop: true });
+    poly(c, [up(corners(1, 1).N, L), up(corners(1, 1).E, L), up(corners(1, 1).S, L), up(corners(1, 1).W, L)], '#8c7e6e', { stroke: OUTLINE });
+    // Arch
+    const { E, S } = corners(1, 1);
+    const p = lerp(S, E, 0.5);
+    c.body.push(`<path d="M ${p[0] - 8} ${p[1] + 1} L ${p[0] - 8} ${p[1] - 14} Q ${p[0]} ${p[1] - 25} ${p[0] + 8} ${p[1] - 18} L ${p[0] + 8} ${p[1] - 3} Z" fill="#1b1612" stroke="${OUTLINE}"/>`);
+    // Iron bars grid (portcullis)
+    for (const dx of [-5, 0, 5]) {
+      line(c, [p[0] + dx, p[1] - (dx * 0.5)], [p[0] + dx, p[1] - 18 - (dx * 0.5)], '#444c58', 1.8);
+    }
+    for (const dy of [5, 11]) {
+      line(c, [p[0] - 6, p[1] - dy], [p[0] + 6, p[1] - dy - 6], '#444c58', 1.5);
+    }
+    return L + 8 + HH;
   },
 };
 
@@ -559,6 +739,9 @@ const FOOTPRINTS = {
   warehouse: [2, 2], lumberjack: [2, 2], quarry: [2, 2], mine: [2, 2], smithy: [2, 2],
   fishery: [2, 1], farm: [3, 3], mill: [2, 2], bakery: [2, 2], brewery: [2, 2],
   hut: [1, 1], wall: [1, 1], gate: [1, 1], tower: [2, 2], barracks: [3, 3],
+  keep: [2, 2], market: [2, 2], sheepFarm: [2, 2], weavery: [2, 2], stable: [2, 2],
+  smallWarehouse: [1, 1],
+  wallStrong: [1, 1], gateIron: [1, 1],
 };
 
 async function main() {
@@ -569,25 +752,40 @@ async function main() {
 
   const manifest = { buildings: {} };
   for (const [id, build] of Object.entries(builders)) {
-    gradCounter = 0;
     const [w, h] = FOOTPRINTS[id];
-    const c = ctx();
-    const top = build(c);
-    const minX = -h * HW - MARGIN;
-    const width = (w + h) * HW + 2 * MARGIN;
-    const minY = -top - MARGIN;
-    const height = top + (w + h - 1) * HH + HH + 2 * MARGIN;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}"><defs>${c.defs.join('')}</defs>${c.body.join('')}</svg>`;
-    await page.setContent(`<style>body{margin:0;display:inline-block}</style>${svg}`);
-    const el = page.locator('svg');
-    await el.screenshot({ omitBackground: true, path: join(OUT, `${id}.png`) });
+    const hasLevels = id !== 'wall' && id !== 'gate' && id !== 'wallStrong' && id !== 'gateIron';
+    const numLevels = hasLevels ? 3 : 1;
+    const files = [];
+    let anchor = null;
+
+    for (let level = 1; level <= numLevels; level++) {
+      gradCounter = 0;
+      const c = ctx();
+      const top = build(c, level);
+      const minX = -h * HW - MARGIN;
+      const width = (w + h) * HW + 2 * MARGIN;
+      const minY = -top - MARGIN;
+      const height = top + (w + h - 1) * HH + HH + 2 * MARGIN;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}"><defs>${c.defs.join('')}</defs>${c.body.join('')}</svg>`;
+      await page.setContent(`<style>body{margin:0;display:inline-block}</style>${svg}`);
+      const el = page.locator('svg');
+      const file = level === 1 ? `${id}.png` : `${id}_l${level}.png`;
+      await el.screenshot({ omitBackground: true, path: join(OUT, file) });
+      files.push(file);
+      anchor = {
+        x: (0 - minX) * 2,
+        y: (0 - minY) * 2,
+      };
+      console.log(`${file} (${width}x${height} @2x)`);
+    }
+
     manifest.buildings[id] = {
-      file: `${id}.png`,
-      anchorX: (0 - minX) * 2,
-      anchorY: (0 - minY) * 2,
+      file: files[0],
+      anchorX: anchor.x,
+      anchorY: anchor.y,
       scale: 0.5,
+      ...(hasLevels ? { levels: files } : {}),
     };
-    console.log(`${id}.png (${width}x${height} @2x)`);
   }
   // Units: idle frame + walk cycle frames, anchor at the feet.
   manifest.units = {};

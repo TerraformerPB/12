@@ -3,13 +3,21 @@ import {
   UPGRADE_LOCAL_STORE,
   BUILDING_MAX_LEVEL,
   CONSTRUCTION_TIME_PER_TILE,
+  DEFAULT_WAREHOUSE_CAP,
   LOCAL_STORE_CAP,
+  RESOURCE_IDS,
   TICK_RATE,
   UPGRADE_HP_BONUS,
   UPGRADE_HUT_POPULATION,
   UPGRADE_SPEED_BONUS,
+  WAREHOUSE_CAP_PER_LEVEL,
   type ResourceId,
 } from '../data/config';
+
+/** A zero-filled stock record over all resources. */
+function zeroStock(): Record<ResourceId, number> {
+  return Object.fromEntries(RESOURCE_IDS.map((r) => [r, 0])) as Record<ResourceId, number>;
+}
 import { getDef, type BuildingDef, type BuildingDefId } from '../data/buildings';
 import type { IsoGrid, Point } from '../world/IsoGrid';
 
@@ -36,6 +44,12 @@ export interface BuildingSave {
   underConstruction: boolean;
   materialsRemaining: Partial<Record<ResourceId, number>>;
   buildTicks: number;
+  /** Since save version 13 (user pausing). */
+  userPaused?: boolean;
+  /** Warehouse only: physical per-resource stock. Since save version 14. */
+  stock?: Partial<Record<ResourceId, number>>;
+  /** Warehouse only: per-resource target levels (Sollwerte). Since save v14. */
+  storageTargets?: Partial<Record<ResourceId, number>>;
 }
 
 /**
@@ -72,6 +86,8 @@ export class Building {
   productionHalted = false;
   /** Construction site: waiting for materials, then building up. */
   underConstruction = false;
+  /** Manually paused by the player. */
+  userPaused = false;
   /** Materials still to be delivered before building starts. */
   materialsRemaining: Partial<Record<ResourceId, number>> = {};
   /** Remaining build time once materials arrived. */
@@ -86,6 +102,16 @@ export class Building {
   reservedOutput = 0;
   /** Input units on their way via delivery jobs. */
   incomingInput = 0;
+
+  // --- Warehouse storage (only meaningful when def.isWarehouse) ---
+  /** Physical per-resource stock held in this warehouse. */
+  stock: Record<ResourceId, number> = zeroStock();
+  /** Player-set target levels per resource; absent = no demand (sink only). */
+  storageTargets: Partial<Record<ResourceId, number>> = {};
+  /** Units of each resource promised to outgoing deliver/transfer jobs (transient). */
+  reservedStock: Record<ResourceId, number> = zeroStock();
+  /** Units en route into this warehouse (transient; reserves capacity). */
+  incomingStock = 0;
 
   constructor(id: number, defId: BuildingDefId, x: number, y: number, rotated = false) {
     this.id = id;
@@ -131,9 +157,23 @@ export class Building {
     return this.rotated ? f.w : f.h;
   }
 
-  /** Depth-sort key: the footprint's front (south) corner tile. */
+  /** Depth-sort key: center-based sorting to ensure correct overlap with units. */
   get zIndex(): number {
-    return this.x + this.w - 1 + this.y + this.h - 1;
+    if (this.def.roadTier !== undefined) {
+      // Roads and bridges are flat on the ground.
+      // Sorting them with an offset of -0.8 ensures that units on the same tile (at +0.5)
+      // and adjacent tiles (at -0.5) are always drawn on top of the road/bridge.
+      return this.x + this.y - 0.8;
+    }
+    if (this.defId === 'farm') {
+      // The farm has a 1x1 farmhouse at the north corner (this.x, this.y)
+      // and flat fields over the rest of the 3x3 footprint.
+      // Sorting as a 1x1 building (with a slightly reduced zIndex of 20.0 instead of 20.5)
+      // ensures that units on adjacent field tiles (NE/NW at 20.5) are drawn on top of the flat fields,
+      // while units behind the farmhouse (at the door NE/NW at 19.5) are correctly drawn behind it.
+      return this.x + this.y;
+    }
+    return this.x + this.y + (this.w + this.h) / 2 - 0.5;
   }
 
   get durationTicks(): number {
@@ -156,6 +196,40 @@ export class Building {
   /** Local input/output storage, growing with the level (phase 20). */
   get localCap(): number {
     return LOCAL_STORE_CAP + UPGRADE_LOCAL_STORE * (this.level - 1);
+  }
+
+  /** True if this building physically stores goods. */
+  get isWarehouse(): boolean {
+    return this.def.isWarehouse === true;
+  }
+
+  /** Total goods this warehouse can hold, grown by upgrade level. */
+  get storageCapacity(): number {
+    if (!this.isWarehouse) return 0;
+    const base = this.def.storageCap ?? DEFAULT_WAREHOUSE_CAP;
+    return Math.round(base * (1 + WAREHOUSE_CAP_PER_LEVEL * (this.level - 1)));
+  }
+
+  /** Sum of all goods currently stored here. */
+  totalStored(): number {
+    let sum = 0;
+    for (const r of RESOURCE_IDS) sum += this.stock[r];
+    return sum;
+  }
+
+  /** Free capacity, accounting for goods already on their way in. */
+  freeCapacity(): number {
+    return Math.max(0, this.storageCapacity - this.totalStored() - this.incomingStock);
+  }
+
+  /** Stock of one resource not already promised to an outgoing job. */
+  availableStock(r: ResourceId): number {
+    return Math.max(0, this.stock[r] - this.reservedStock[r]);
+  }
+
+  /** Target level for one resource (Sollwert); 0 when unset. */
+  targetFor(r: ResourceId): number {
+    return this.storageTargets[r] ?? 0;
   }
 
   /** Production speed factor from the upgrade level. */
@@ -182,7 +256,7 @@ export class Building {
     if (this.underConstruction) return;
     const recipe = this.def.recipe;
     if (!recipe) return;
-    if (this.productionHalted) return;
+    if (this.productionHalted || this.userPaused) return;
     const speed = this.staffingFactor * this.levelFactor * extFactor;
     if (speed <= 0) return;
 
@@ -251,6 +325,38 @@ export class Building {
     return null;
   }
 
+  /** Find the closest tile of the given terrain within range (Manhattan distance from footprint). */
+  terrainTileInRange(grid: IsoGrid, terrain: number, range: number): Point | null {
+    let bestTile: Point | null = null;
+    let bestDist = Infinity;
+
+    const minX = this.x - range;
+    const maxX = this.x + this.w - 1 + range;
+    const minY = this.y - range;
+    const maxY = this.y + this.h - 1 + range;
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (!grid.inBounds(x, y)) continue;
+        if (grid.terrainAt(x, y) !== terrain) continue;
+
+        // Calculate distance to footprint
+        const dx = x < this.x ? (this.x - x) : (x >= this.x + this.w ? x - (this.x + this.w - 1) : 0);
+        const dy = y < this.y ? (this.y - y) : (y >= this.y + this.h ? y - (this.y + this.h - 1) : 0);
+        const dist = dx + dy;
+
+        if (dist <= range && dist > 0) {
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestTile = { x, y };
+          }
+        }
+      }
+    }
+    return bestTile;
+  }
+
+
   /** Walkable tiles orthogonally adjacent to the footprint (carrier targets). */
   accessTiles(grid: IsoGrid): Point[] {
     const tiles: Point[] = [];
@@ -290,6 +396,9 @@ export class Building {
       underConstruction: this.underConstruction,
       materialsRemaining: { ...this.materialsRemaining },
       buildTicks: this.buildTicks,
+      userPaused: this.userPaused,
+      stock: this.isWarehouse ? { ...this.stock } : undefined,
+      storageTargets: this.isWarehouse ? { ...this.storageTargets } : undefined,
     };
   }
 
@@ -306,6 +415,11 @@ export class Building {
     b.underConstruction = s.underConstruction;
     b.materialsRemaining = { ...s.materialsRemaining };
     b.buildTicks = s.buildTicks;
+    b.userPaused = s.userPaused ?? false;
+    if (s.stock) {
+      for (const r of RESOURCE_IDS) b.stock[r] = s.stock[r] ?? 0;
+    }
+    if (s.storageTargets) b.storageTargets = { ...s.storageTargets };
     return b;
   }
 }

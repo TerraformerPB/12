@@ -27,7 +27,7 @@ function sampleData(): SaveData {
   const worker = new Worker(5, 24.5, 23);
   worker.phase = 'toDropoff';
   worker.carrying = 'wheat';
-  worker.job = { kind: 'deliver', buildingId: 2, resource: 'wheat' };
+  worker.job = { kind: 'deliver', buildingId: 2, warehouseId: 1, resource: 'wheat' };
 
   const soldier = new Soldier(7, 20, 21);
   soldier.mode = 'command';
@@ -41,7 +41,7 @@ function sampleData(): SaveData {
     saveVersion: SAVE_VERSION,
     seed: 1234567,
     nextEntityId: 10,
-    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9, fish: 5, beer: 1, wool: 0, cloth: 0, gold: 7 },
+    resources: { wood: 12, stone: 3, ore: 2, weapons: 1, wheat: 0, flour: 4, bread: 9, fish: 5, beer: 1, wool: 0, cloth: 0, gold: 7, honig: 0, met: 0, schmuck: 0 },
     buildings: [new Building(1, 'warehouse', 23, 23, false).toSave(), mill.toSave()],
     workers: [worker.toSave()],
     soldiers: [soldier.toSave()],
@@ -56,6 +56,7 @@ function sampleData(): SaveData {
     scenarioId: 'endless',
     prestige: 0,
     diplomacy: null,
+    victoryAnnounced: false,
   };
 }
 
@@ -114,6 +115,16 @@ describe('save/load roundtrip', () => {
     expect(migrated!.saveVersion).toBe(SAVE_VERSION);
     expect(migrated!.terrainOverrides).toEqual([]);
     expect(migrated!.buildings.every((b) => b.harvestProgress === 0)).toBe(true);
+  });
+
+  it('migrates v11 savegames: victoryAnnounced defaults to false', () => {
+    const v11 = JSON.parse(JSON.stringify(sampleData())) as SaveData;
+    v11.saveVersion = 11;
+    delete (v11 as any).victoryAnnounced;
+    const migrated = migrateSave(v11);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.saveVersion).toBe(SAVE_VERSION);
+    expect(migrated!.victoryAnnounced).toBe(false);
   });
 
   it('records terrain overrides only after the baseline is sealed', () => {

@@ -1,5 +1,5 @@
 import { events } from '../core/EventBus';
-import { RESOURCE_IDS, RESOURCE_INFO } from '../data/config';
+import { RESOURCE_IDS, RESOURCE_INFO, NON_PHYSICAL_RESOURCES, TAX_GOLD_PER_POP, LUXURY_BEER_PER_POP, LUXURY_CLOTH_PER_POP, LUXURY_GOLD_PER_POP_L3, LUXURY_MET_PER_POP, LUXURY_SCHMUCK_PER_POP, LUXURY_BOOM_TAX_FACTOR } from '../data/config';
 import { SOLDIER_TYPE_IDS, getSoldierType } from '../data/soldiers';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
@@ -44,6 +44,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
 
   const upgradeBtn = document.createElement('button');
   const repairBtn = document.createElement('button');
+  const pauseBtn = document.createElement('button');
 
   const demolishBtn = document.createElement('button');
   demolishBtn.className = 'demolish';
@@ -73,7 +74,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   tradeBtn.textContent = '🪙 Handeln';
   tradeBtn.addEventListener('click', () => game.marketPanel?.open());
 
-  buttons.append(closeBtn, ...recruitBtns, dismissBtn, tradeBtn, repairBtn, upgradeBtn, demolishBtn);
+  buttons.append(closeBtn, ...recruitBtns, dismissBtn, tradeBtn, pauseBtn, repairBtn, upgradeBtn, demolishBtn);
   panel.append(title, desc, stats, staffRow, buttons);
   uiRoot.appendChild(panel);
 
@@ -99,6 +100,13 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
   upgradeBtn.addEventListener('click', () => {
     if (current) game.upgradeBuilding(current.id);
   });
+  pauseBtn.addEventListener('click', () => {
+    if (current && current.def.recipe) {
+      current.userPaused = !current.userPaused;
+      updateActions(current);
+      renderStats(current);
+    }
+  });
   repairBtn.addEventListener('click', () => {
     if (current) {
       game.repairBuilding(current.id);
@@ -112,6 +120,10 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     tradeBtn.hidden = b.defId !== 'market' || b.underConstruction;
     for (const btn of recruitBtns) {
       btn.hidden = b.def.recruitsSoldiers !== true || b.underConstruction;
+    }
+    pauseBtn.hidden = !b.def.recipe || b.underConstruction;
+    if (!pauseBtn.hidden) {
+      pauseBtn.textContent = b.userPaused ? '▶️ Fortsetzen' : '⏸️ Pausieren';
     }
     if (b.underConstruction) {
       // Sites can only be cancelled; everything else unlocks on completion.
@@ -162,13 +174,80 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
     if (currentSoldier) game.dismissSoldier(currentSoldier.id);
   });
 
+  const buildingExists = (defId: BuildingDefId): boolean => {
+    for (const ob of game.buildings.values()) {
+      if (ob.owner === 'player' && ob.defId === defId && !ob.underConstruction) return true;
+    }
+    return false;
+  };
+
+  const getHouseTaxPerMin = (b: Building): { potential: number; actual: number } => {
+    const intervalsPerMin = 60 / 15; // 4
+    const pop = b.populationBonus;
+    const taxLevel = game.taxLevel;
+    if (taxLevel === 0) return { potential: 0, actual: 0 };
+    
+    const classMult = b.level === 1 ? 1.0 : b.level === 2 ? 2.0 : 5.0;
+    const baseTaxPerInterval = pop * TAX_GOLD_PER_POP * classMult * taxLevel;
+    const potential = baseTaxPerInterval * intervalsPerMin;
+    
+    if (!game.empireMode) {
+      return { potential, actual: potential };
+    }
+    
+    let actualMult = 1.0;
+    
+    let numL2 = 0;
+    let numL3 = 0;
+    for (const ob of game.buildings.values()) {
+      if (ob.owner === 'player' && ob.defId === 'hut' && !ob.underConstruction) {
+        if (ob.level === 2) numL2++;
+        else if (ob.level === 3) numL3++;
+      }
+    }
+    const popBuerger = numL2 * 4;
+    const popHaendler = numL3 * 6;
+    
+    const beerStock = game.store.get('beer');
+    const clothStock = game.store.get('cloth');
+    const goldStock = game.store.get('gold');
+    
+    if (b.level === 2) {
+      const needB = Math.ceil(popBuerger * LUXURY_BEER_PER_POP);
+      const needC = Math.ceil(popBuerger * LUXURY_CLOTH_PER_POP);
+      if (beerStock < needB) actualMult *= 0.5;
+      if (clothStock < needC) actualMult *= 0.5;
+    } else if (b.level === 3) {
+      const needB = Math.ceil(popHaendler * LUXURY_BEER_PER_POP);
+      const needC = Math.ceil(popHaendler * LUXURY_CLOTH_PER_POP);
+      const needG = Math.ceil(popHaendler * LUXURY_GOLD_PER_POP_L3);
+      if (beerStock < needB) actualMult *= 0.5;
+      if (clothStock < needC) actualMult *= 0.5;
+      if (goldStock < needG) actualMult *= 0.25;
+      // Late-game luxuries (only once their chain stands).
+      const hasMeadery = buildingExists('methaus');
+      const hasGoldsmith = buildingExists('goldschmiede');
+      const metOk = !hasMeadery || game.store.get('met') >= Math.ceil(popHaendler * LUXURY_MET_PER_POP);
+      const schmuckOk =
+        !hasGoldsmith || game.store.get('schmuck') >= Math.ceil(popHaendler * LUXURY_SCHMUCK_PER_POP);
+      if (hasMeadery && !metOk) actualMult *= 0.5;
+      if (hasGoldsmith && !schmuckOk) actualMult *= 0.5;
+      if (hasMeadery && hasGoldsmith && metOk && schmuckOk) actualMult *= LUXURY_BOOM_TAX_FACTOR;
+    }
+    
+    return {
+      potential,
+      actual: baseTaxPerInterval * actualMult * intervalsPerMin
+    };
+  };
+
   const renderStats = (b: Building): void => {
     stats.replaceChildren();
-    const addRow = (text: string, progress?: number): void => {
+    const addRow = (text: string, progress?: number): HTMLElement => {
       const row = document.createElement('div');
       row.className = 'row';
       const span = document.createElement('span');
-      span.textContent = text;
+      span.innerHTML = text;
       row.appendChild(span);
       if (progress !== undefined) {
         const bar = document.createElement('div');
@@ -179,6 +258,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
         row.appendChild(bar);
       }
       stats.appendChild(row);
+      return row;
     };
 
     if (b.underConstruction) {
@@ -193,34 +273,160 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       return;
     }
     if (b.hp < b.maxHp) {
-      addRow(`❤️ ${b.hp}/${b.maxHp}`, b.hp / b.maxHp);
+      addRow(`❤️ Trefferpunkte: ${b.hp}/${b.maxHp}`, b.hp / b.maxHp);
     }
     const recipe = b.def.recipe;
     if (recipe) {
+      const inputIcon = recipe.input ? `${RESOURCE_INFO[recipe.input].icon} ` : '';
+      const inputLabel = recipe.input ? `${RESOURCE_INFO[recipe.input].label}` : '';
+      const outputIcon = RESOURCE_INFO[recipe.output].icon;
+      const outputLabel = RESOURCE_INFO[recipe.output].label;
+      const recipeStr = recipe.input
+        ? `<strong>Rezept:</strong> 1x ${inputIcon}${inputLabel} ➔ 1x ${outputIcon} ${outputLabel}`
+        : `<strong>Rezept:</strong> ➔ 1x ${outputIcon} ${outputLabel}`;
+      addRow(recipeStr);
+      addRow(`<strong>Zyklusdauer:</strong> ${recipe.duration} Sekunden`);
+
+      const staffEff = Math.round(b.staffingFactor * 100);
+      const totalEff = Math.round(b.staffingFactor * b.levelFactor * 100);
+      addRow(`<strong>Auslastung (Personal):</strong> ${staffEff}%`);
+      addRow(`<strong>Gesamt-Produktivität:</strong> ${totalEff}%`);
+
       const progress = b.durationTicks > 0 ? b.progress / b.durationTicks : 0;
-      if (b.productionHalted) {
+      if (b.userPaused) {
+        addRow('⏸️ Produktion pausiert');
+      } else if (b.productionHalted) {
         addRow(
           b.def.placement === 'adjacentOre'
             ? '⛏️ Erzader erschöpft — keine Ader in Reichweite!'
             : '🌲 Kein Wald mehr in Reichweite!',
         );
       } else {
-        addRow(b.active ? 'Produziert …' : 'Wartet', b.active ? progress : 0);
+        addRow(b.active ? 'Status: Produziert …' : 'Status: Wartet auf Material', b.active ? progress : 0);
       }
       if (recipe.input) {
         addRow(
-          `${RESOURCE_INFO[recipe.input].icon} Eingang: ${b.inputStore}/${b.localCap}`,
+          `${RESOURCE_INFO[recipe.input].icon} Eingangslager: ${b.inputStore}/${b.localCap}`,
         );
       }
       addRow(
-        `${RESOURCE_INFO[recipe.output].icon} Ausgang: ${b.outputStore}/${b.localCap}`,
+        `${RESOURCE_INFO[recipe.output].icon} Ausgangslager: ${b.outputStore}/${b.localCap}`,
       );
     }
-    if (b.def.population) {
-      addRow(`👷 +${b.def.population} Bevölkerung`);
+    if (b.defId === 'hut') {
+      const className = b.level === 1 ? 'Bauern' : b.level === 2 ? 'Bürger' : 'Händler';
+      addRow(`👥 Klasse: ${className} (Träger: +${b.populationBonus})`);
+      addRow(`🎭 Lokale Moral: ${Math.round(game.morale)}%`);
+
+      const taxInfo = getHouseTaxPerMin(b);
+      addRow(`🪙 Steuereinnahmen: ${taxInfo.actual.toFixed(1)}/Min <small style="opacity: 0.7">(Potenzial: ${taxInfo.potential.toFixed(1)}/Min)</small>`);
+
+      if (game.empireMode) {
+        const check = (satisfied: boolean) => satisfied ? '<span style="color:#2ecc71">✔</span>' : '<span style="color:#e74c3c">✘</span>';
+        
+        let numL2 = 0;
+        let numL3 = 0;
+        for (const ob of game.buildings.values()) {
+          if (ob.owner === 'player' && ob.defId === 'hut' && !ob.underConstruction) {
+            if (ob.level === 2) numL2++;
+            else if (ob.level === 3) numL3++;
+          }
+        }
+        const popBuerger = numL2 * 4;
+        const popHaendler = numL3 * 6;
+
+        const breadStock = game.store.get('bread');
+        const fishStock = game.store.get('fish');
+        const beerStock = game.store.get('beer');
+        const clothStock = game.store.get('cloth');
+        const goldStock = game.store.get('gold');
+
+        const needB_L2 = Math.ceil(popBuerger * LUXURY_BEER_PER_POP);
+        const needC_L2 = Math.ceil(popBuerger * LUXURY_CLOTH_PER_POP);
+        const needB_L3 = Math.ceil(popHaendler * LUXURY_BEER_PER_POP);
+        const needC_L3 = Math.ceil(popHaendler * LUXURY_CLOTH_PER_POP);
+        const needG_L3 = Math.ceil(popHaendler * LUXURY_GOLD_PER_POP_L3);
+
+        let needsHTML = `<div class="needs-checklist-title">📋 Bedürfnis-Checkliste:</div><ul class="needs-list select-needs">`;
+        needsHTML += `<li>${check(breadStock > 0)} Brot (Nahrung)</li>`;
+        needsHTML += `<li>${check(fishStock > 0)} Fisch (Nahrung)</li>`;
+        
+        if (b.level === 2) {
+          needsHTML += `<li>${check(beerStock >= needB_L2)} Bier (${beerStock}/${needB_L2} auf Lager)</li>`;
+          needsHTML += `<li>${check(clothStock >= needC_L2)} Kleidung (${clothStock}/${needC_L2} auf Lager)</li>`;
+        } else if (b.level === 3) {
+          needsHTML += `<li>${check(beerStock >= needB_L3)} Bier (${beerStock}/${needB_L3} auf Lager)</li>`;
+          needsHTML += `<li>${check(clothStock >= needC_L3)} Kleidung (${clothStock}/${needC_L3} auf Lager)</li>`;
+          needsHTML += `<li>${check(goldStock >= needG_L3)} Gold (${goldStock}/${needG_L3} auf Lager)</li>`;
+          if (buildingExists('methaus')) {
+            const needMet = Math.ceil(popHaendler * LUXURY_MET_PER_POP);
+            const metStock = game.store.get('met');
+            needsHTML += `<li>${check(metStock >= needMet)} Met (${metStock}/${needMet} auf Lager)</li>`;
+          }
+          if (buildingExists('goldschmiede')) {
+            const needSch = Math.ceil(popHaendler * LUXURY_SCHMUCK_PER_POP);
+            const schStock = game.store.get('schmuck');
+            needsHTML += `<li>${check(schStock >= needSch)} Schmuck (${schStock}/${needSch} auf Lager)</li>`;
+          }
+        }
+        needsHTML += `</ul>`;
+        
+        const row = document.createElement('div');
+        row.className = 'needs-checklist-container';
+        row.innerHTML = needsHTML;
+        stats.appendChild(row);
+      } else {
+        addRow('📋 Alle Bedürfnisse erfüllt (nur im Wirtschaftsmodus aktiv)');
+      }
+    } else if (b.def.population) {
+      addRow(`👷 +${b.populationBonus} Bevölkerung`);
     }
-    if (b.def.isWarehouse) {
-      addRow('Hier lagern alle Waren.');
+    if (b.isWarehouse) {
+      const cap = b.storageCapacity;
+      const used = b.totalStored();
+      addRow(`📦 Belegung: ${used}/${cap}`, cap > 0 ? used / cap : 0);
+      if (b.owner === 'player') {
+        const hint = document.createElement('div');
+        hint.className = 'row';
+        hint.innerHTML =
+          '<span><small>Sollwerte: Träger transferieren Waren hierher, bis der Sollwert erreicht ist. ' +
+          'Lass alles auf 0, damit dieses Lager nur als Sammelstelle dient.</small></span>';
+        stats.appendChild(hint);
+
+        for (const r of RESOURCE_IDS) {
+          if (NON_PHYSICAL_RESOURCES.includes(r)) continue; // gold is treasury, not stored
+          const row = document.createElement('div');
+          row.className = 'row warehouse-target';
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.gap = '6px';
+
+          const label = document.createElement('span');
+          label.style.flex = '1';
+          label.innerHTML = `${RESOURCE_INFO[r].icon} ${b.stock[r]} <small style="opacity:.7">/ Soll ${b.targetFor(r)}</small>`;
+
+          const minus = document.createElement('button');
+          minus.className = 'staff-btn';
+          minus.textContent = '−';
+          minus.disabled = b.targetFor(r) <= 0;
+          minus.addEventListener('click', () => {
+            game.adjustStorageTarget(b.id, r, -10);
+            renderStats(b);
+          });
+
+          const plus = document.createElement('button');
+          plus.className = 'staff-btn';
+          plus.textContent = '+';
+          plus.disabled = b.targetFor(r) >= cap;
+          plus.addEventListener('click', () => {
+            game.adjustStorageTarget(b.id, r, 10);
+            renderStats(b);
+          });
+
+          row.append(label, minus, plus);
+          stats.appendChild(row);
+        }
+      }
     }
   };
 
@@ -239,10 +445,14 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
       return;
     }
     currentSoldier = null;
+    let name = building.def.name;
+    if (building.defId === 'hut') {
+      name = building.level === 1 ? 'Bauernhaus' : building.level === 2 ? 'Bürgerhaus' : 'Händlerhaus';
+    }
     title.textContent =
-      building.level > 1 ? `${building.def.name} ⭐${building.level}` : building.def.name;
+      building.level > 1 ? `${name} ⭐${building.level}` : name;
     desc.textContent = building.def.description;
-    demolishBtn.hidden = building.def.isWarehouse === true;
+    demolishBtn.hidden = building.defId === 'warehouse' || building.defId === 'keep';
     for (const b of recruitBtns) b.hidden = building.def.recruitsSoldiers !== true;
     dismissBtn.hidden = true;
     updateActions(building);

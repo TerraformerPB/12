@@ -6,8 +6,14 @@
 
 // --- Resources -------------------------------------------------------------
 
-export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'wool', 'cloth', 'gold'] as const;
+export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'wool', 'cloth', 'gold', 'honig', 'met', 'schmuck'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
+/**
+ * Currency-like resources that are NOT physically stored in warehouses: they
+ * occupy no capacity, are never hauled by carriers and live in a global
+ * treasury. Buildings that consume them (e.g. the goldsmith) draw directly.
+ */
+export const NON_PHYSICAL_RESOURCES: readonly ResourceId[] = ['gold'];
 
 export interface ResourceInfo {
   label: string;
@@ -29,6 +35,9 @@ export const RESOURCE_INFO: Record<ResourceId, ResourceInfo> = {
   wool: { label: 'Wolle', icon: '🐑', color: 0xe9e4d8 },
   cloth: { label: 'Tuch', icon: '🧵', color: 0xb05a7a },
   gold: { label: 'Gold', icon: '🪙', color: 0xe3b341 },
+  honig: { label: 'Honig', icon: '🍯', color: 0xe0a92a },
+  met: { label: 'Met', icon: '🍶', color: 0xc9962f },
+  schmuck: { label: 'Schmuck', icon: '💍', color: 0x6fd6e0 },
 };
 
 // --- Simulation ------------------------------------------------------------
@@ -44,17 +53,17 @@ export const MAX_FRAME_DELTA_MS = 250;
 
 export const TILE_W = 64;
 export const TILE_H = 32;
-export const MAP_W = 48;
-export const MAP_H = 48;
+export const MAP_W = 64;
+export const MAP_H = 64;
 
 /** Side length of square terrain render chunks, in tiles. */
 export const TERRAIN_CHUNK_SIZE = 12;
 
 // Terrain generation: river band, rock clusters, forest clusters.
-export const TERRAIN_ROCK_CLUSTERS = 6;
+export const TERRAIN_ROCK_CLUSTERS = 9;
 export const TERRAIN_ROCK_CLUSTER_MIN = 4;
 export const TERRAIN_ROCK_CLUSTER_MAX = 10;
-export const TERRAIN_FOREST_CLUSTERS = 12;
+export const TERRAIN_FOREST_CLUSTERS = 18;
 export const TERRAIN_FOREST_CLUSTER_MIN = 8;
 export const TERRAIN_FOREST_CLUSTER_MAX = 20;
 export const TERRAIN_RIVER_WIDTH = 2;
@@ -68,7 +77,7 @@ export const FOREST_WOOD_PER_TILE = 10;
 export const FOREST_REGROW_INTERVAL = 10;
 export const FOREST_REGROW_ATTEMPTS = 6;
 /** Ore a mine extracts before one adjacent ore-vein tile turns to rock. */
-export const ORE_PER_TILE = 12;
+export const ORE_PER_TILE = 40;
 /** Extra local storage per building level above 1 (phase 20). */
 export const UPGRADE_LOCAL_STORE = 2;
 /** Market sell-price bonus per market level above 1. */
@@ -88,6 +97,10 @@ export const TAP_MAX_PX = 10;
 
 /** Local output/input storage capacity of production buildings. */
 export const LOCAL_STORE_CAP = 5;
+/** Fallback total storage capacity of a warehouse (sum over all goods). */
+export const DEFAULT_WAREHOUSE_CAP = 200;
+/** Warehouse capacity growth per upgrade level above 1 (e.g. 0.25 = +25%). */
+export const WAREHOUSE_CAP_PER_LEVEL = 0.25;
 /** Carrier walking speed in tiles per second. */
 export const WORKER_SPEED = 2.2;
 /** Carriers available at game start. */
@@ -98,7 +111,7 @@ export const DEMOLISH_REFUND = 0.5;
 // Generous enough that walls/towers stand before wave 1 even though
 // construction sites consume their materials from this stock (phase 13).
 export const START_RESOURCES: Record<ResourceId, number> = {
-  wood: 140,
+  wood: 200,
   stone: 50,
   ore: 0,
   weapons: 0,
@@ -110,6 +123,9 @@ export const START_RESOURCES: Record<ResourceId, number> = {
   wool: 0,
   cloth: 0,
   gold: 0,
+  honig: 0,
+  met: 0,
+  schmuck: 0,
 };
 
 // --- Roads (phase 4) -------------------------------------------------------------
@@ -187,7 +203,7 @@ export const UPGRADE_SPEED_BONUS = 0.3;
 export const UPGRADE_TOWER_DAMAGE_BONUS = 0.35;
 export const UPGRADE_TOWER_RANGE_BONUS = 0.75;
 /** Extra hut population per level above 1. */
-export const UPGRADE_HUT_POPULATION = 1;
+export const UPGRADE_HUT_POPULATION = 2;
 
 // --- Monetization (phase 6) -------------------------------------------------------
 
@@ -198,14 +214,14 @@ export const UPGRADE_HUT_POPULATION = 1;
  */
 export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
 /** Must be false in the store release. */
-export const ADMOB_USE_TEST_ADS = true;
+export const ADMOB_USE_TEST_ADS = false;
 
 // --- Consumption & morale (phase 12) -------------------------------------------------
 
 /** Seconds between meals. */
 export const FOOD_INTERVAL = 15;
 /** Food units eaten per meal: population × this (rounded up) … */
-export const FOOD_PER_POP = 0.25;
+export const FOOD_PER_POP = 0.08;
 /** … plus one per soldier (they eat heartily). */
 export const FOOD_PER_SOLDIER = 1;
 export const MORALE_START = 70;
@@ -245,17 +261,47 @@ export const WINTER_FOOD_FACTOR = 1.5;
 // --- Persistence ---------------------------------------------------------------
 
 export const SAVE_KEY = 'burgspiel.save';
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 14;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
 /** User-facing app version (keep in sync with package.json / build.gradle). */
 export const APP_VERSION = '0.1.0';
+
+/**
+ * Legal / contact details for the imprint and privacy dialog. Required for
+ * the Play Store listing — replace every TODO with real data before release.
+ * Centralised here so it lives in exactly one place.
+ */
+export const LEGAL_INFO = {
+  /** Imprint (Impressum, § 5 TMG). */
+  provider: 'TODO: Anbietername / Firma',
+  street: 'TODO: Straße & Hausnummer',
+  city: 'TODO: PLZ & Ort',
+  country: 'Deutschland',
+  email: 'TODO: kontakt@example.com',
+  website: 'https://burgspiel.de',
+  /** Full online privacy policy (opened from the legal dialog). */
+  privacyUrl: 'https://burgspiel.de/privacy',
+} as const;
+
+/** True while any legal field still holds a placeholder (gates store build). */
+export const LEGAL_INFO_INCOMPLETE = Object.values(LEGAL_INFO).some((v) => v.startsWith('TODO'));
 
 // --- Wirtschaftssimulator (Phase 18, Szenario 'empire') ---------------------------
 
 /** Luxury demand per head and food interval (only in the empire scenario). */
 export const LUXURY_BEER_PER_POP = 0.12;
 export const LUXURY_CLOTH_PER_POP = 0.08;
+export const LUXURY_GOLD_PER_POP_L3 = 0.05;
+/** Late-game merchant luxuries (only demanded once their chain is built). */
+export const LUXURY_MET_PER_POP = 0.06;
+export const LUXURY_SCHMUCK_PER_POP = 0.04;
+/** Tax multiplier for L3 merchants when both late-game luxuries are supplied. */
+export const LUXURY_BOOM_TAX_FACTOR = 1.4;
+
+/** Morale gates for upgrading Huts */
+export const HUT_UPGRADE_MORALE_GATE_L2 = 80;
+export const HUT_UPGRADE_MORALE_GATE_L3 = 85;
 
 /** Prestige income per food interval. */
 export const PRESTIGE_PER_POP = 0.5;

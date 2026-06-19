@@ -121,7 +121,7 @@ function seedOreDeposits(grid: IsoGrid, rng: () => number): void {
     }
   }
   for (const c of cores) grid.setTerrain(c.x, c.y, Terrain.Ore);
-  if (cores.length >= 3) return;
+  if (cores.length >= 8) return;
   // Sparse map: promote a few random rock tiles with at least two hard
   // neighbours so every map has mineable veins.
   const candidates: { x: number; y: number }[] = [];
@@ -133,7 +133,7 @@ function seedOreDeposits(grid: IsoGrid, rng: () => number): void {
       if (n >= 2) candidates.push({ x, y });
     }
   }
-  for (let i = cores.length; i < 3 && candidates.length > 0; i++) {
+  for (let i = cores.length; i < 8 && candidates.length > 0; i++) {
     const pick = candidates.splice(Math.floor(rng() * candidates.length), 1)[0];
     grid.setTerrain(pick.x, pick.y, Terrain.Ore);
   }

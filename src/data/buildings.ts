@@ -49,6 +49,10 @@ export interface BuildingDef {
   population?: number;
   /** Central storage / carrier hub. Not buildable, exactly one per game. */
   isWarehouse?: boolean;
+  /** Total goods this warehouse can physically hold (sum over all resources). */
+  storageCap?: number;
+  /** Late-game gate: needs a level-3 house and every other economy building built. */
+  lateGame?: boolean;
   /** Own units may walk through this building's tiles (gates). */
   passable?: boolean;
   /** Walkable by everyone; own units move faster. 1 = road/bridge, 2 = paved. */
@@ -88,11 +92,25 @@ export const BUILDING_DEFS = {
     cost: {},
     placement: PlacementRule.Grass,
     isWarehouse: true,
+    storageCap: 400,
     upgradesTo: 'keep',
     upgradeCost: { wood: 40, stone: 20 },
-    description: 'Zentrales Lager. Träger liefern hier alle Waren ab.',
+    description: 'Hauptlager. Fasst 400 Waren. Träger liefern hier ab; von hier verteilst du per Sollwerten an die Außenlager.',
     maxHp: 150,
     art: { color: 0xb08a4f, height: 40 },
+  },
+  smallWarehouse: {
+    id: 'smallWarehouse',
+    category: 'economy',
+    name: 'Kleines Lagerhaus',
+    footprint: { w: 1, h: 1 },
+    cost: { wood: 20, stone: 10 },
+    placement: PlacementRule.Grass,
+    isWarehouse: true,
+    storageCap: 100,
+    description: 'Außenlager (100 Waren). Setze Sollwerte, damit Träger gezielt Waren hierher transferieren.',
+    maxHp: 80,
+    art: { color: 0xcd9f68, height: 25 },
   },
   keep: {
     id: 'keep',
@@ -102,6 +120,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 60, stone: 120 },
     placement: PlacementRule.Grass,
     isWarehouse: true,
+    storageCap: 300,
     shoots: true,
     population: 3,
     requiredRank: 3,
@@ -118,7 +137,7 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.AdjacentForest,
     recipe: { output: 'wood', duration: 4 },
     workersRequired: 1,
-    description: 'Produziert 1 Holz alle 4 Sekunden. Muss an Wald grenzen.',
+    description: 'Produziert 1 Holz alle 4 Sekunden. Muss an Wald grenzen, erntet Bäume im Umkreis von 4 Feldern.',
     art: { color: 0x7a5230, height: 26 },
   },
   quarry: {
@@ -258,6 +277,45 @@ export const BUILDING_DEFS = {
     description: 'Webt 1 Wolle zu 1 Tuch (6 Sekunden). Luxusgut.',
     art: { color: 0x9a5a74, height: 28 },
   },
+  imkerei: {
+    id: 'imkerei',
+    category: 'economy',
+    name: 'Imkerei',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 50, stone: 20 },
+    placement: PlacementRule.Grass,
+    recipe: { output: 'honig', duration: 8 },
+    workersRequired: 2,
+    lateGame: true,
+    description: 'Erntet 1 Honig alle 8 Sekunden. Grundstoff für Met. Endgame-Gebäude.',
+    art: { color: 0xe0a92a, height: 24 },
+  },
+  methaus: {
+    id: 'methaus',
+    category: 'economy',
+    name: 'Methaus',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 60, stone: 40 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'honig', output: 'met', duration: 7 },
+    workersRequired: 2,
+    lateGame: true,
+    description: 'Braut 1 Honig zu 1 Met (7 Sekunden). Luxus für Händler-Häuser. Endgame-Gebäude.',
+    art: { color: 0xc9962f, height: 30 },
+  },
+  goldschmiede: {
+    id: 'goldschmiede',
+    category: 'economy',
+    name: 'Goldschmiede',
+    footprint: { w: 2, h: 2 },
+    cost: { wood: 50, stone: 60 },
+    placement: PlacementRule.Grass,
+    recipe: { input: 'gold', output: 'schmuck', duration: 9 },
+    workersRequired: 2,
+    lateGame: true,
+    description: 'Verarbeitet 1 Gold zu 1 Schmuck (9 Sekunden). Höchster Luxus für Händler-Häuser. Endgame-Gebäude.',
+    art: { color: 0x6fd6e0, height: 30, material: 'stone' },
+  },
   stable: {
     id: 'stable',
     category: 'economy',
@@ -278,7 +336,7 @@ export const BUILDING_DEFS = {
     cost: { wood: 15 },
     placement: PlacementRule.Grass,
     population: 2,
-    description: 'Bietet Platz für 2 weitere Träger.',
+    description: 'Wohnhaus für Bewohner. Stufe 1: 2 Bauern (brauchen Brot/Fisch). Stufe 2: 4 Bürger (+Bier/Tuch). Stufe 3: 6 Händler (+Gold).',
     maxHp: 30,
     art: { color: 0x9c7b5a, height: 20 },
   },
@@ -405,29 +463,41 @@ export function getDef(id: BuildingDefId): BuildingDef {
   return BUILDING_DEFS[id] as BuildingDef;
 }
 
+/**
+ * Economy buildings that must all be standing before late-game luxury
+ * buildings unlock (alongside a level-3 house). Roads, warehouses, houses and
+ * the luxury buildings themselves are excluded.
+ */
+export const LATE_GAME_PREREQS: BuildingDefId[] = (Object.keys(BUILDING_DEFS) as BuildingDefId[]).filter(
+  (id) => {
+    const d = BUILDING_DEFS[id] as BuildingDef;
+    return (
+      d.category === 'economy' &&
+      d.roadTier === undefined &&
+      !d.isWarehouse &&
+      !d.lateGame &&
+      id !== 'hut'
+    );
+  },
+);
+
 /** Build menu sections, in display order. */
 export const BUILD_MENU_SECTIONS: { title: string; ids: BuildingDefId[] }[] = [
   {
-    title: 'Wirtschaft',
-    ids: [
-      'lumberjack',
-      'quarry',
-      'mine',
-      'fishery',
-      'farm',
-      'mill',
-      'bakery',
-      'brewery',
-      'sheepFarm',
-      'weavery',
-      'smithy',
-      'market',
-      'stable',
-      'hut',
-      'road',
-      'roadStone',
-      'bridge',
-    ],
+    title: 'Grundversorgung',
+    ids: ['lumberjack', 'quarry', 'mine', 'fishery', 'farm', 'sheepFarm'],
+  },
+  {
+    title: 'Verarbeitung',
+    ids: ['mill', 'bakery', 'brewery', 'weavery', 'smithy'],
+  },
+  {
+    title: 'Luxus (Endgame)',
+    ids: ['imkerei', 'methaus', 'goldschmiede'],
+  },
+  {
+    title: 'Logistik & Wohnen',
+    ids: ['hut', 'smallWarehouse', 'market', 'stable', 'road', 'roadStone', 'bridge'],
   },
   {
     title: 'Verteidigung',
