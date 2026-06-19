@@ -37,6 +37,7 @@ import {
   HUT_UPGRADE_MORALE_GATE_L2,
   HUT_UPGRADE_MORALE_GATE_L3,
   LUXURY_GOLD_PER_POP_L3,
+  NON_PHYSICAL_RESOURCES,
   LUXURY_MET_PER_POP,
   LUXURY_SCHMUCK_PER_POP,
   LUXURY_BOOM_TAX_FACTOR,
@@ -1823,6 +1824,17 @@ export class Game {
       this.buildings.set(b.id, b);
       this.grid.setOccupantRect(b.x, b.y, b.w, b.h, b.id, passModeOf(b.def));
       if (b.def.isWarehouse) this.warehouseId = b.id;
+    }
+    // Currency (gold) must never sit in a warehouse — sweep it from older saves
+    // back into the global treasury.
+    for (const b of this.buildings.values()) {
+      if (!b.isWarehouse) continue;
+      for (const r of NON_PHYSICAL_RESOURCES) {
+        if (b.stock[r] > 0) {
+          this.store.add(r, b.stock[r]);
+          b.stock[r] = 0;
+        }
+      }
     }
     // Pre-v14 saves carried no per-warehouse stock: seed the main warehouse
     // from the old global totals so existing games keep their goods.

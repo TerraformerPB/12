@@ -8,6 +8,12 @@
 
 export const RESOURCE_IDS = ['wood', 'stone', 'ore', 'weapons', 'wheat', 'flour', 'bread', 'fish', 'beer', 'wool', 'cloth', 'gold', 'honig', 'met', 'schmuck'] as const;
 export type ResourceId = (typeof RESOURCE_IDS)[number];
+/**
+ * Currency-like resources that are NOT physically stored in warehouses: they
+ * occupy no capacity, are never hauled by carriers and live in a global
+ * treasury. Buildings that consume them (e.g. the goldsmith) draw directly.
+ */
+export const NON_PHYSICAL_RESOURCES: readonly ResourceId[] = ['gold'];
 
 export interface ResourceInfo {
   label: string;
@@ -215,7 +221,7 @@ export const ADMOB_USE_TEST_ADS = false;
 /** Seconds between meals. */
 export const FOOD_INTERVAL = 15;
 /** Food units eaten per meal: population × this (rounded up) … */
-export const FOOD_PER_POP = 0.25;
+export const FOOD_PER_POP = 0.12;
 /** … plus one per soldier (they eat heartily). */
 export const FOOD_PER_SOLDIER = 1;
 export const MORALE_START = 70;

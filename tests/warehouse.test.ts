@@ -80,6 +80,17 @@ describe('ResourceStore network facade', () => {
     expect(main.stock.stone + small.stock.stone).toBe(5);
   });
 
+  it('keeps currency (gold) in the treasury, never in warehouse capacity', () => {
+    const main = new Building(1, 'warehouse', 0, 0, false);
+    const store = new ResourceStore(() => [main], () => main);
+    store.add('gold', 100);
+    expect(store.get('gold')).toBe(100);
+    expect(main.stock.gold).toBe(0); // not physically stored
+    expect(main.totalStored()).toBe(0); // gold occupies no capacity
+    store.add('wood', 50);
+    expect(main.totalStored()).toBe(50);
+  });
+
   it('detached store (no warehouses) works purely on the loose pool', () => {
     const store = new ResourceStore();
     store.setLoose({ gold: 100 });

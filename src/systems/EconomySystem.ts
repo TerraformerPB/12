@@ -4,6 +4,7 @@ import {
   CART_CAPACITY,
   CART_SPEED,
   FOREST_WOOD_PER_TILE,
+  NON_PHYSICAL_RESOURCES,
   ORE_PER_TILE,
   RESOURCE_IDS,
   START_WORKERS,
@@ -79,6 +80,12 @@ export class ResourceStore {
   /** Add goods to the network (market/diplomacy/refunds): main warehouse first. */
   add(resource: ResourceId, n: number): void {
     if (n <= 0) return;
+    // Currency lives in the global treasury, never in a physical warehouse.
+    if (NON_PHYSICAL_RESOURCES.includes(resource)) {
+      this.loose[resource] += n;
+      this.emitChanged();
+      return;
+    }
     let left = n;
     const ordered = this.warehousesMainFirst();
     for (const w of ordered) {
@@ -224,6 +231,19 @@ export class EconomySystem {
           }
         }
         continue;
+      }
+      // Currency inputs (e.g. the goldsmith's gold) are paid straight from the
+      // treasury — no carrier hauls coins, and they occupy no warehouse space.
+      const currencyInput = b.inputResource();
+      if (currencyInput && NON_PHYSICAL_RESOURCES.includes(currencyInput)) {
+        const need = b.localCap - b.inputStore;
+        if (need > 0) {
+          const take = Math.min(need, this.ctx.store.get(currencyInput));
+          if (take > 0) {
+            this.ctx.store.pay({ [currencyInput]: take });
+            b.inputStore += take;
+          }
+        }
       }
       const before = b.outputStore;
       b.tickProduction(b.defId === 'farm' ? this.ctx.getFarmFactor() : 1);
@@ -406,9 +426,10 @@ export class EconomySystem {
         continue;
       }
 
-      // Deliveries: fill processor input from warehouse stock.
+      // Deliveries: fill processor input from warehouse stock (currency inputs
+      // are drawn from the treasury in tick(), never hauled).
       const input = b.inputResource();
-      if (input) {
+      if (input && !NON_PHYSICAL_RESOURCES.includes(input)) {
         while (b.inputDemand() > 0) {
           const source = this.nearestSource(b, input);
           if (!source) break;

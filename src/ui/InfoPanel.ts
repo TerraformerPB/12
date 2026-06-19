@@ -1,5 +1,5 @@
 import { events } from '../core/EventBus';
-import { RESOURCE_IDS, RESOURCE_INFO, TAX_GOLD_PER_POP, LUXURY_BEER_PER_POP, LUXURY_CLOTH_PER_POP, LUXURY_GOLD_PER_POP_L3, LUXURY_MET_PER_POP, LUXURY_SCHMUCK_PER_POP, LUXURY_BOOM_TAX_FACTOR } from '../data/config';
+import { RESOURCE_IDS, RESOURCE_INFO, NON_PHYSICAL_RESOURCES, TAX_GOLD_PER_POP, LUXURY_BEER_PER_POP, LUXURY_CLOTH_PER_POP, LUXURY_GOLD_PER_POP_L3, LUXURY_MET_PER_POP, LUXURY_SCHMUCK_PER_POP, LUXURY_BOOM_TAX_FACTOR } from '../data/config';
 import { SOLDIER_TYPE_IDS, getSoldierType } from '../data/soldiers';
 import { getDef, type BuildingDefId } from '../data/buildings';
 import type { Building } from '../entities/Building';
@@ -394,6 +394,7 @@ export function createInfoPanel(uiRoot: HTMLElement, game: Game): void {
         stats.appendChild(hint);
 
         for (const r of RESOURCE_IDS) {
+          if (NON_PHYSICAL_RESOURCES.includes(r)) continue; // gold is treasury, not stored
           const row = document.createElement('div');
           row.className = 'row warehouse-target';
           row.style.display = 'flex';
