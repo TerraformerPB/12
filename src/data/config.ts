@@ -221,7 +221,7 @@ export const ADMOB_USE_TEST_ADS = false;
 /** Seconds between meals. */
 export const FOOD_INTERVAL = 15;
 /** Food units eaten per meal: population × this (rounded up) … */
-export const FOOD_PER_POP = 0.12;
+export const FOOD_PER_POP = 0.08;
 /** … plus one per soldier (they eat heartily). */
 export const FOOD_PER_SOLDIER = 1;
 export const MORALE_START = 70;
