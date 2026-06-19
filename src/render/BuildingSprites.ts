@@ -77,7 +77,14 @@ export class BuildingSprites {
   }
 
   /** Texture for a building type at a given size/level. */
-  get(renderer: Renderer, def: BuildingDef, w: number, h: number, level: number): SpriteEntry {
+  get(
+    renderer: Renderer,
+    def: BuildingDef,
+    w: number,
+    h: number,
+    level: number,
+    rotated = false,
+  ): SpriteEntry {
     // Real art first (exact level, then base) — but only in the default
     // orientation; rotated footprints fall back to the baked placeholder.
     if (w === def.footprint.w && h === def.footprint.h) {
@@ -85,11 +92,11 @@ export class BuildingSprites {
       if (ext) return ext;
     }
 
-    const key = `${def.id}:${w}x${h}:L${level}`;
+    const key = `${def.id}:${w}x${h}:${rotated ? 'r' : 'n'}:L${level}`;
     let entry = this.baked.get(key);
     if (!entry) {
       const g = new Graphics();
-      drawBuildingView(g, def, w, h, 1, level);
+      drawBuildingView(g, def, w, h, 1, level, rotated);
       const bounds = g.getLocalBounds();
       const texture = renderer.generateTexture({ target: g, resolution: BAKE_RESOLUTION });
       g.destroy();

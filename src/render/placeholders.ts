@@ -438,7 +438,7 @@ export function drawBuildingBlock(
  * A raised wooden bridge: a plank deck with thickness, cross-planks and two
  * side railings — replaces the old flat 1×1 plate.
  */
-function drawBridge(g: Graphics, w: number, h: number): void {
+function drawBridge(g: Graphics, w: number, h: number, rotated = false): void {
   const [n, e, s, wp] = footprintCorners(w, h);
   const deck = 0x9b7340;
   const lift = 5; // deck thickness above the water
@@ -457,7 +457,7 @@ function drawBridge(g: Graphics, w: number, h: number): void {
   const st = up(s, lift);
   const wt = up(wp, lift);
 
-  // Deck side faces give the slab some height.
+  // Deck side faces give the slab some height (always the iso front faces).
   g.poly([...e, ...s, ...st, ...et]).fill(shade(deck, 0.7));
   g.poly([...s, ...wp, ...wt, ...st]).fill(shade(deck, 0.6));
 
@@ -466,15 +466,6 @@ function drawBridge(g: Graphics, w: number, h: number): void {
     .fill(deck)
     .stroke({ color: shade(deck, 0.6), width: 1.2 });
 
-  // Cross-planks (parallel to the N–E edge).
-  for (let i = 1; i <= 4; i++) {
-    const t = i / 5;
-    const a = lerp(nt, wt, t);
-    const b = lerp(et, st, t);
-    g.moveTo(a[0], a[1]).lineTo(b[0], b[1]).stroke({ color: shade(deck, 0.78), width: 1 });
-  }
-
-  // Two side railings (posts + top rail) along the NW and SE edges.
   const rail = (a: number[], b: number[]): void => {
     for (const t of [0, 0.5, 1]) {
       const p = lerp(a, b, t);
@@ -485,8 +476,20 @@ function drawBridge(g: Graphics, w: number, h: number): void {
     const bTop = up(b, railH);
     g.moveTo(aTop[0], aTop[1]).lineTo(bTop[0], bTop[1]).stroke({ color: shade(deck, 0.9), width: 2 });
   };
-  rail(nt, wt);
-  rail(et, st);
+
+  // Railings run along the two edges parallel to the travel direction; planks
+  // cross them. Rotating the bridge swaps which diagonal it spans.
+  const [plankA1, plankA2, plankB1, plankB2, rail1a, rail1b, rail2a, rail2b] = rotated
+    ? [nt, et, wt, st, nt, et, wt, st] // span NW↔SE: rails on NE & SW edges
+    : [nt, wt, et, st, nt, wt, et, st]; // span NE↔SW: rails on NW & SE edges
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 5;
+    const a = lerp(plankA1, plankA2, t);
+    const b = lerp(plankB1, plankB2, t);
+    g.moveTo(a[0], a[1]).lineTo(b[0], b[1]).stroke({ color: shade(deck, 0.78), width: 1 });
+  }
+  rail(rail1a, rail1b);
+  rail(rail2a, rail2b);
 }
 
 /** Small health bar centered at (cx, cy); only drawn when damaged. */
@@ -505,10 +508,11 @@ export function drawBuildingView(
   h: number,
   hpRatio: number,
   level = 1,
+  rotated = false,
 ): void {
   g.clear();
   if (def.id === 'bridge') {
-    drawBridge(g, w, h);
+    drawBridge(g, w, h, rotated);
     return;
   }
   if (def.roadTier !== undefined) {

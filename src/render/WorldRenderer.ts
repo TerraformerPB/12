@@ -578,7 +578,7 @@ export class WorldRenderer {
       const existing = this.buildingViews.get(b.id);
       if (existing) {
         if (existing.lastLevel !== b.level) {
-          const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
+          const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level, b.rotated);
           existing.sprite.texture = tex.texture;
           existing.sprite.position.set(tex.offsetX, tex.offsetY);
           existing.sprite.scale.set(tex.scale);
@@ -600,7 +600,7 @@ export class WorldRenderer {
         }
         continue;
       }
-      const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level);
+      const tex = this.buildingSprites.get(this.app.renderer, b.def, b.w, b.h, b.level, b.rotated);
       const sprite = new Sprite(tex.texture);
       sprite.position.set(tex.offsetX, tex.offsetY);
       sprite.scale.set(tex.scale);
