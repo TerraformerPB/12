@@ -963,8 +963,11 @@ export class Game {
     const world = this.camera.screenToWorld(sx, sy);
     const tile = screenToTile(world.x, world.y);
     const r = this.editorBrushSize - 1;
+    // Round brush: paint tiles within a circular radius for organic shapes.
+    const rad2 = (r + 0.35) * (r + 0.35);
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > rad2) continue;
         const x = tile.x + dx;
         const y = tile.y + dy;
         if (!this.grid.inBounds(x, y)) continue;

@@ -63,7 +63,7 @@ describe('map encode/decode', () => {
   it('rejects malformed or wrong-sized codes', () => {
     expect(decodeMap('garbage')).toBeNull();
     expect(decodeMap('4x2:0.3')).toBeNull(); // too few tiles
-    expect(decodeMap('2x2:9.4')).toBeNull(); // invalid terrain id
+    expect(decodeMap('2x2:99.4')).toBeNull(); // invalid terrain id
   });
 
   it('blankTerrain is all grass at the right size', () => {

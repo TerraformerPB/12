@@ -72,8 +72,21 @@ export const Terrain = {
   Sand: 5,
   /** Dirt path: walkable and a touch faster; decorative (not buildable). */
   Path: 6,
+  /** Snow: flat buildable ground, walkable. */
+  Snow: 7,
+  /** Flower meadow: flat buildable ground, walkable. */
+  Meadow: 8,
+  /** Marsh/swamp: walkable but slow, not buildable. */
+  Marsh: 9,
+  /** Gravel: flat buildable ground, walkable. */
+  Gravel: 10,
 } as const;
 export type Terrain = (typeof Terrain)[keyof typeof Terrain];
+
+/** Flat ground a building can stand on (grass and grass-like terrains). */
+export function isBuildableGround(t: Terrain): boolean {
+  return t === Terrain.Grass || t === Terrain.Snow || t === Terrain.Meadow || t === Terrain.Gravel;
+}
 
 export const NO_OCCUPANT = 0;
 
@@ -249,13 +262,17 @@ export class IsoGrid {
     }
     switch (this.terrainAt(gx, gy)) {
       case Terrain.Grass:
-        return 1;
       case Terrain.Sand:
+      case Terrain.Snow:
+      case Terrain.Meadow:
+      case Terrain.Gravel:
         return 1;
       case Terrain.Path:
         return 0.85;
       case Terrain.Forest:
         return FOREST_MOVE_COST;
+      case Terrain.Marsh:
+        return 1.6;
       default:
         return Infinity;
     }
@@ -277,13 +294,17 @@ export class IsoGrid {
       }
       switch (this.terrainAt(gx, gy)) {
         case Terrain.Grass:
-          return 1;
         case Terrain.Sand:
+        case Terrain.Snow:
+        case Terrain.Meadow:
+        case Terrain.Gravel:
           return 1;
         case Terrain.Path:
           return 0.85;
         case Terrain.Forest:
           return FOREST_MOVE_COST;
+        case Terrain.Marsh:
+          return 1.6;
         default:
           return Infinity;
       }

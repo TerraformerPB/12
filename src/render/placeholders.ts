@@ -27,6 +27,14 @@ export const PALETTE = {
   sandDark: 0xc9b176,
   path: 0xa07e54,
   pathDark: 0x856544,
+  snow: 0xeef3f8,
+  snowDark: 0xdbe4ee,
+  meadow: 0x6bb04e,
+  meadowDark: 0x61a347,
+  marsh: 0x4f5e3a,
+  marshDark: 0x44512f,
+  gravel: 0x9a9690,
+  gravelDark: 0x868179,
   ghostValid: 0x3ed35e,
   ghostInvalid: 0xe24a4a,
   selection: 0xffd966,
@@ -219,6 +227,53 @@ export function drawTerrainTile(
         .stroke({ color: shade(PALETTE.pathDark, 0.85), width: 1, alpha: 0.5 });
       g.circle(cx + ox, cy + oy, 1.2).fill({ color: shade(PALETTE.pathDark, 0.7), alpha: 0.6 });
       if (hash % 11 === 0) g.circle(cx - ox, cy + oy, 1.4).fill({ color: PALETTE.rock, alpha: 0.7 });
+      break;
+    }
+    case Terrain.Snow: {
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.snow : PALETTE.snowDark);
+      const ox = ((hash % 13) - 6) * 1.5;
+      const oy = ((hash % 7) - 3) * 1.3;
+      // Sparkle + a faint bluish drift shadow.
+      g.ellipse(cx + ox, cy + oy + 2, 6, 2).fill({ color: 0xc8d6e6, alpha: 0.4 });
+      if (hash % 9 === 0) g.circle(cx - ox, cy - oy, 0.9).fill({ color: 0xffffff, alpha: 0.9 });
+      break;
+    }
+    case Terrain.Meadow: {
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.meadow : PALETTE.meadowDark);
+      const ox = ((hash % 13) - 6) * 1.6;
+      const oy = ((hash % 7) - 3) * 1.4;
+      // Dense little flowers.
+      const cols = [0xffd34d, 0xff7eb0, 0xffffff, 0x9a6cff];
+      for (let i = 0; i < 3; i++) {
+        const fx = cx + ox + ((hash >> (i * 2)) % 7) - 3;
+        const fy = cy + oy + ((hash >> (i * 3)) % 5) - 2;
+        g.circle(fx, fy, 1.1).fill(cols[(hash + i) % cols.length]);
+        g.circle(fx, fy, 0.4).fill(0xfff2c0);
+      }
+      break;
+    }
+    case Terrain.Marsh: {
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.marsh : PALETTE.marshDark);
+      const ox = ((hash % 13) - 6) * 1.4;
+      const oy = ((hash % 7) - 3) * 1.2;
+      // Murky water puddles + reeds.
+      g.ellipse(cx + ox, cy + oy, 5, 2.4).fill({ color: 0x35506a, alpha: 0.55 });
+      if (hash % 6 < 2) {
+        g.moveTo(cx - ox, cy - oy + 2).lineTo(cx - ox - 1, cy - oy - 5)
+          .stroke({ color: 0x6f7d4a, width: 1.1 });
+        g.moveTo(cx - ox + 2, cy - oy + 2).lineTo(cx - ox + 3, cy - oy - 4)
+          .stroke({ color: 0x6f7d4a, width: 1.1 });
+      }
+      break;
+    }
+    case Terrain.Gravel: {
+      g.poly(diamond(cx, cy)).fill(checker ? PALETTE.gravel : PALETTE.gravelDark);
+      // Scattered pebbles.
+      for (let i = 0; i < 4; i++) {
+        const px = cx + ((hash >> (i * 2)) % 13) - 6;
+        const py = cy + ((hash >> (i * 3)) % 9) - 4;
+        g.circle(px, py, 1 + (i % 2) * 0.6).fill(shade(PALETTE.gravelDark, i % 2 ? 0.8 : 1.2));
+      }
       break;
     }
   }

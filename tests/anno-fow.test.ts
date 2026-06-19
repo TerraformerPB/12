@@ -28,6 +28,19 @@ describe('Fog of War & Larger Map', () => {
     expect(Number.isFinite(grid.moveCost(4, 4))).toBe(false);
   });
 
+  it('new terrains: snow/meadow/gravel are buildable ground, marsh is slow & blocked', async () => {
+    const { isBuildableGround } = await import('../src/world/IsoGrid');
+    const grid = new IsoGrid(8, 8);
+    for (const t of [Terrain.Snow, Terrain.Meadow, Terrain.Gravel] as const) {
+      expect(isBuildableGround(t)).toBe(true);
+    }
+    expect(isBuildableGround(Terrain.Marsh)).toBe(false);
+    expect(isBuildableGround(Terrain.Sand)).toBe(false);
+    grid.setTerrain(2, 2, Terrain.Marsh);
+    expect(grid.moveCost(2, 2)).toBeGreaterThan(grid.moveCost(0, 0)); // marsh slows
+    expect(Number.isFinite(grid.moveCost(2, 2))).toBe(true); // but passable
+  });
+
   it('revealAll uncovers the whole map (editor/duel)', () => {
     const grid = new IsoGrid(8, 8);
     expect(grid.isExplored(0, 0)).toBe(false);

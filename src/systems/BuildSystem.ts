@@ -2,7 +2,7 @@ import { events } from '../core/EventBus';
 import { getDef, PlacementRule, type BuildingDef, type BuildingDefId } from '../data/buildings';
 import { RESOURCE_INFO, RESOURCE_IDS } from '../data/config';
 import type { ResourceStore } from './EconomySystem';
-import { IsoGrid, NO_OCCUPANT, Terrain, screenToGrid } from '../world/IsoGrid';
+import { IsoGrid, NO_OCCUPANT, Terrain, isBuildableGround, screenToGrid } from '../world/IsoGrid';
 
 export interface PlacementCheck {
   ok: boolean;
@@ -28,18 +28,20 @@ export function checkPlacement(
   rotated: boolean,
 ): PlacementCheck {
   const { w, h } = rotatedFootprint(def, rotated);
-  // Bridges stand on water; everything else needs grass.
-  const requiredTerrain = def.placement === PlacementRule.Water ? Terrain.Water : Terrain.Grass;
+  // Bridges stand on water; everything else needs flat buildable ground.
+  const needsWater = def.placement === PlacementRule.Water;
   for (let dy = 0; dy < h; dy++) {
     for (let dx = 0; dx < w; dx++) {
       const x = gx + dx;
       const y = gy + dy;
       if (!grid.inBounds(x, y)) return { ok: false, reason: 'Außerhalb der Karte' };
       if (!grid.isExplored(x, y)) return { ok: false, reason: 'Gelände nicht erkundet' };
-      if (grid.terrainAt(x, y) !== requiredTerrain) {
+      const t = grid.terrainAt(x, y);
+      const ok = needsWater ? t === Terrain.Water : isBuildableGround(t);
+      if (!ok) {
         return {
           ok: false,
-          reason: requiredTerrain === Terrain.Water ? 'Nur auf Wasser baubar' : 'Gelände blockiert',
+          reason: needsWater ? 'Nur auf Wasser baubar' : 'Gelände blockiert',
         };
       }
       if (grid.occupantAt(x, y) !== NO_OCCUPANT) return { ok: false, reason: 'Bereits bebaut' };

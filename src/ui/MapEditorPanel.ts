@@ -18,6 +18,10 @@ const BRUSHES: { id: Terrain; label: string; icon: string }[] = [
   { id: Terrain.Ore, label: 'Erz', icon: '⛏️' },
   { id: Terrain.Sand, label: 'Sand', icon: '🏖️' },
   { id: Terrain.Path, label: 'Weg', icon: '🟫' },
+  { id: Terrain.Snow, label: 'Schnee', icon: '❄️' },
+  { id: Terrain.Meadow, label: 'Wiese', icon: '🌼' },
+  { id: Terrain.Marsh, label: 'Sumpf', icon: '🟢' },
+  { id: Terrain.Gravel, label: 'Geröll', icon: '⚪' },
 ];
 
 export function createMapEditorPanel(uiRoot: HTMLElement, game: Game): void {
