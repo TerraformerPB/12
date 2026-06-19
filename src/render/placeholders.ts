@@ -775,6 +775,66 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number, le
       g.moveTo(dx + 5, dy - 7.5).lineTo(dx + 5, dy - 14.5).stroke({ color: 0x4a4a4a, width: 1.2 });
       break;
     }
+    case 'wall':
+    case 'wallStrong': {
+      // Battlements: merlons along the two front roof edges.
+      const merlon = shade(def.art.color, 1.22);
+      const gap = shade(def.art.color, 0.85);
+      const mh = def.id === 'wallStrong' ? 8 : 6;
+      for (let i = 0; i < 3; i++) {
+        const t = (i + 0.5) / 3;
+        // South-west edge (w → s)
+        g.rect(rw[0] + (rs[0] - rw[0]) * t - 2.5, rw[1] + (rs[1] - rw[1]) * t - mh, 5, mh).fill(merlon);
+        // South-east edge (s → e)
+        g.rect(rs[0] + (re[0] - rs[0]) * t - 2.5, rs[1] + (re[1] - rs[1]) * t - mh, 5, mh).fill(merlon);
+      }
+      // Walkway shadow line between the merlon rows.
+      g.moveTo(rw[0], rw[1]).lineTo(rs[0], rs[1]).lineTo(re[0], re[1]).stroke({
+        color: gap,
+        width: 1.5,
+        alpha: 0.6,
+      });
+      break;
+    }
+    case 'imkerei': {
+      // Two woven straw beehives on the roof, with a few bees.
+      const hive = (hx: number, hy: number, sc: number): void => {
+        for (let r = 0; r < 3; r++) {
+          g.ellipse(hx, hy - r * 3 * sc, (6 - r * 1.6) * sc, 2.4 * sc).fill(
+            shade(0xd9a441, 1 - r * 0.08),
+          );
+        }
+        g.circle(hx, hy + 1.5 * sc, 1.2 * sc).fill(0x3a2a14); // entrance
+      };
+      hive(roofCx - 7, roofCy + 1, 1);
+      hive(roofCx + 6, roofCy - 1, 0.85);
+      for (const [bx, by] of [[roofCx + 1, roofCy - 12], [roofCx - 3, roofCy - 9]] as const) {
+        g.circle(bx, by, 1).fill(0x2a2a2a);
+      }
+      break;
+    }
+    case 'methaus': {
+      // Stacked mead barrels on the roof.
+      const barrel = (bx: number, by: number): void => {
+        g.ellipse(bx, by, 5, 6).fill(shade(0x8a5a2c, 1.0));
+        g.ellipse(bx, by, 5, 6).stroke({ color: 0x5a3a1c, width: 1 });
+        g.moveTo(bx - 5, by).lineTo(bx + 5, by).stroke({ color: 0x3a2410, width: 1 });
+        g.rect(bx - 5.5, by - 1.5, 11, 3).fill({ color: 0xb8b8b8, alpha: 0.5 }); // hoop
+      };
+      barrel(roofCx - 6, roofCy);
+      barrel(roofCx + 6, roofCy - 1);
+      break;
+    }
+    case 'goldschmiede': {
+      // Anvil + glinting gold ingots on the roof.
+      g.rect(roofCx - 8, roofCy - 4, 10, 4).fill(0x33373d); // anvil base
+      g.rect(roofCx - 9, roofCy - 7, 13, 3).fill(0x44484f); // anvil top
+      for (const [ix, iy] of [[roofCx + 5, roofCy], [roofCx + 8, roofCy - 2]] as const) {
+        g.rect(ix, iy, 6, 3).fill(0xe3b341);
+        g.rect(ix + 0.6, iy + 0.4, 2, 0.8).fill(0xfff2c0); // glint
+      }
+      break;
+    }
     default:
       break;
   }
