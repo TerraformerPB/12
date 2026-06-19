@@ -518,13 +518,36 @@ export function drawBuildingView(
   if (def.roadTier !== undefined) {
     // Flat paving instead of an extruded block.
     const [rn, re, rs, rw] = footprintCorners(w, h);
+    const base = def.art.color;
     g.poly([...rn, ...re, ...rs, ...rw])
-      .fill(def.art.color)
-      .stroke({ color: shade(def.art.color, 0.75), width: 1.5, alpha: 0.8 });
-    g.poly([rn[0], rn[1] + 5, re[0] - 10, re[1], rs[0], rs[1] - 5, rw[0] + 10, rw[1]]).fill({
-      color: shade(def.art.color, 1.15),
-      alpha: 0.5,
-    });
+      .fill(base)
+      .stroke({ color: shade(base, 0.72), width: 1.2, alpha: 0.8 });
+    const cx = (rn[0] + rs[0]) / 2;
+    const cy = (rn[1] + rs[1]) / 2;
+    if (def.roadTier === 2) {
+      // Paved road: rows of cobblestones clipped to the diamond.
+      for (let r = -2; r <= 2; r++) {
+        for (let c = -2; c <= 2; c++) {
+          const sx = cx + c * 7 + (r & 1 ? 3.5 : 0);
+          const sy = cy + r * 4;
+          if (Math.abs(sx - cx) / HALF_W + Math.abs(sy - cy) / HALF_H > 0.78) continue;
+          g.ellipse(sx, sy, 3, 2).fill(shade(base, (r + c) & 1 ? 1.14 : 0.88));
+        }
+      }
+    } else {
+      // Dirt road: two wheel ruts and a couple of pebbles.
+      g.poly([rn[0], rn[1] + 5, re[0] - 10, re[1], rs[0], rs[1] - 5, rw[0] + 10, rw[1]]).fill({
+        color: shade(base, 1.13),
+        alpha: 0.5,
+      });
+      for (const dy of [-2.5, 2.5]) {
+        g.moveTo(rw[0] + 9, rw[1] + dy)
+          .lineTo(re[0] - 9, re[1] + dy)
+          .stroke({ color: shade(base, 0.76), width: 1.4, alpha: 0.55 });
+      }
+      g.circle(cx - 6, cy + 2, 1.4).fill(shade(base, 0.8));
+      g.circle(cx + 5, cy - 2, 1.2).fill(shade(base, 1.2));
+    }
     return;
   }
 
@@ -606,10 +629,18 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number, le
       break;
     }
     case 'barracks': {
+      // Banner pole + two hanging war banners and crossed weapons on the roof.
       g.moveTo(roofCx, roofCy).lineTo(roofCx, roofCy - 16).stroke({ color: 0x4a3b28, width: 2 });
-      g.poly([roofCx, roofCy - 16, roofCx + 11, roofCy - 12.5, roofCx, roofCy - 9]).fill(
-        PALETTE.flag,
-      );
+      g.poly([roofCx, roofCy - 16, roofCx + 11, roofCy - 12.5, roofCx, roofCy - 9]).fill(PALETTE.flag);
+      // Hanging banners on the two front roof faces.
+      for (const bx of [roofCx - 12, roofCx + 8]) {
+        g.rect(bx, roofCy - 4, 5, 11).fill(shade(PALETTE.flag, 0.9));
+        g.poly([bx, roofCy + 7, bx + 2.5, roofCy + 10, bx + 5, roofCy + 7]).fill(shade(PALETTE.flag, 0.9));
+        g.rect(bx + 1.8, roofCy - 2, 1.4, 8).fill({ color: 0xffe08a, alpha: 0.7 }); // emblem stripe
+      }
+      // Crossed spears.
+      g.moveTo(roofCx - 6, roofCy + 4).lineTo(roofCx + 6, roofCy - 6).stroke({ color: 0x6a5236, width: 1.4 });
+      g.moveTo(roofCx + 6, roofCy + 4).lineTo(roofCx - 6, roofCy - 6).stroke({ color: 0x6a5236, width: 1.4 });
       break;
     }
     case 'warehouse': {
@@ -776,10 +807,19 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number, le
       break;
     }
     case 'gate': {
-      // Arch opening.
+      // Arched opening with twin wooden doors and battlements over the arch.
       const dx2 = (s[0] + e[0]) / 2;
       const dy2 = (s[1] + e[1]) / 2;
       g.poly([dx2, dy2, dx2 + 7, dy2 - 3.5, dx2 + 7, dy2 - 16, dx2, dy2 - 12]).fill(0x241b12);
+      // Plank doors inside the arch.
+      g.poly([dx2, dy2 - 1, dx2 + 3.3, dy2 - 2.6, dx2 + 3.3, dy2 - 13, dx2, dy2 - 11.5]).fill(0x6a4a2a);
+      g.poly([dx2 + 3.7, dy2 - 2.8, dx2 + 7, dy2 - 4.4, dx2 + 7, dy2 - 14.5, dx2 + 3.7, dy2 - 13]).fill(0x5a3f24);
+      // Merlons on the wall walk above the two front roof edges.
+      for (let i = 0; i < 2; i++) {
+        const t = (i + 0.5) / 2;
+        g.rect(rw[0] + (rs[0] - rw[0]) * t - 2, rw[1] + (rs[1] - rw[1]) * t - 5, 4, 5).fill(shade(def.art.color, 1.2));
+        g.rect(rs[0] + (re[0] - rs[0]) * t - 2, rs[1] + (re[1] - rs[1]) * t - 5, 4, 5).fill(shade(def.art.color, 1.2));
+      }
       break;
     }
     case 'quarry': {
@@ -799,9 +839,17 @@ function drawDecorations(g: Graphics, def: BuildingDef, w: number, h: number, le
       break;
     }
     case 'market': {
-      // Colorful striped awnings on the roof.
-      g.rect(roofCx - 10, roofCy - 6, 8, 5).fill(0xc23b3b); // Red tent
-      g.rect(roofCx + 2, roofCy - 4, 7, 4).fill(0x3a6fc4); // Blue tent
+      // Striped market awnings + a goods crate and barrel.
+      const stall = (sx: number, sy: number, c: number): void => {
+        g.rect(sx, sy, 9, 5).fill(c);
+        for (let i = 0; i < 3; i++) g.rect(sx + i * 3, sy, 1.5, 5).fill({ color: 0xfdf3e0, alpha: 0.7 });
+        g.poly([sx, sy + 5, sx + 4.5, sy + 7.5, sx + 9, sy + 5]).fill(shade(c, 0.85)); // scalloped edge
+      };
+      stall(roofCx - 11, roofCy - 6, 0xc23b3b);
+      stall(roofCx + 1, roofCy - 4, 0x3a6fc4);
+      // Crate + barrel of wares in front.
+      g.rect(roofCx - 4, roofCy + 4, 6, 5).fill(0x8a5a2c).stroke({ color: 0x5a3a1c, width: 1 });
+      g.ellipse(roofCx + 6, roofCy + 6, 3.5, 4).fill(0x9b6a34);
       break;
     }
     case 'sheepFarm': {
