@@ -4,14 +4,17 @@ import {
   CART_CAPACITY,
   CART_SPEED,
   FOREST_WOOD_PER_TILE,
+  LUMBERJACK_RANGE,
   ORE_PER_TILE,
   RESOURCE_IDS,
   START_WORKERS,
   TICK_RATE,
+  WOODCUTTER_CHOP_SECONDS,
   WORKER_SPEED,
   type ResourceId,
 } from '../data/config';
 import { Building } from '../entities/Building';
+import { Woodcutter } from '../entities/Woodcutter';
 import { Worker, type Job } from '../entities/Worker';
 import { Terrain, type IsoGrid, type Point } from '../world/IsoGrid';
 import { findPath } from '../world/Pathfinding';
@@ -85,6 +88,8 @@ export interface EconomyContext {
   store: ResourceStore;
   buildings: Map<number, Building>;
   workers: Worker[];
+  /** Woodcutters out felling forest for the lumberjack huts. */
+  gatherers: Woodcutter[];
   getWarehouse(): Building | null;
   nextEntityId(): number;
   /** Soldiers occupy population slots that carriers can no longer use. */
@@ -93,6 +98,8 @@ export interface EconomyContext {
   getSpeedFactor(): number;
   /** A lumberjack consumed enough wood — fell one adjacent forest tile. */
   fellForestTile(building: Building): void;
+  /** A woodcutter exhausted a specific forest tile — turn it to grass. */
+  fellTileAt(tile: Point): void;
   /** A mine extracted enough ore — deplete one adjacent vein tile. */
   depleteOreTile(building: Building): void;
   /** Seasonal farm multiplier (autumn boost, winter standstill). */
@@ -161,9 +168,10 @@ export class EconomySystem {
     for (const b of this.ctx.buildings.values()) {
       // The duel opponent's castle has no economy of its own.
       if (b.owner !== 'player') continue;
-      // Lumberjacks need standing forest and slowly consume it.
+      // Lumberjacks need standing forest within their woodcutter's range.
       if (b.def.placement === 'adjacentForest' && b.def.recipe) {
-        b.productionHalted = b.adjacentTerrainTile(this.ctx.grid, Terrain.Forest) === null;
+        b.productionHalted =
+          b.nearestTerrainTile(this.ctx.grid, Terrain.Forest, LUMBERJACK_RANGE) === null;
       }
       // Mines need an ore vein and deplete it (phase 20).
       if (b.def.placement === 'adjacentOre' && b.def.recipe) {
@@ -180,15 +188,11 @@ export class EconomySystem {
         }
         continue;
       }
+      // Lumberjacks don't produce passively — their woodcutter hauls the wood
+      // in (see syncGatherers/advanceGatherers).
+      if (b.def.placement === 'adjacentForest') continue;
       const before = b.outputStore;
       b.tickProduction(b.defId === 'farm' ? this.ctx.getFarmFactor() : 1);
-      if (b.outputStore > before && b.def.placement === 'adjacentForest') {
-        b.harvestProgress++;
-        if (b.harvestProgress >= FOREST_WOOD_PER_TILE) {
-          b.harvestProgress = 0;
-          this.ctx.fellForestTile(b);
-        }
-      }
       if (b.outputStore > before && b.def.placement === 'adjacentOre') {
         b.harvestProgress++;
         if (b.harvestProgress >= ORE_PER_TILE) {
@@ -199,9 +203,11 @@ export class EconomySystem {
     }
     this.syncWorkerCount();
     this.syncCartCount();
+    this.syncGatherers();
     this.generateJobs();
     this.assignJobs();
     this.advanceWorkers();
+    this.advanceGatherers();
     this.emitPopulationIfChanged();
   }
 
@@ -268,6 +274,111 @@ export class EconomySystem {
         }
       }
     }
+  }
+
+  /** One woodcutter per staffed lumberjack hut; despawn when the hut is gone. */
+  private syncGatherers(): void {
+    const { gatherers } = this.ctx;
+    const staffedHuts = new Set<number>();
+    for (const b of this.ctx.buildings.values()) {
+      if (b.owner !== 'player') continue;
+      if (b.def.placement !== 'adjacentForest' || !b.def.recipe) continue;
+      if (b.underConstruction || b.assignedWorkers < b.workersRequired) continue;
+      staffedHuts.add(b.id);
+    }
+    const existing = new Set(gatherers.map((g) => g.homeId));
+    for (const id of staffedHuts) {
+      if (existing.has(id)) continue;
+      const hut = this.ctx.buildings.get(id);
+      const spawn = hut?.accessTiles(this.ctx.grid)[0];
+      if (spawn) gatherers.push(new Woodcutter(this.ctx.nextEntityId(), spawn.x, spawn.y, id));
+    }
+    // Drop woodcutters whose hut is gone or no longer staffed.
+    for (let i = gatherers.length - 1; i >= 0; i--) {
+      if (!staffedHuts.has(gatherers[i].homeId)) gatherers.splice(i, 1);
+    }
+  }
+
+  /** Walk woodcutters between their hut and the forest, felling and hauling. */
+  private advanceGatherers(): void {
+    for (const g of this.ctx.gatherers) {
+      const hut = this.ctx.buildings.get(g.homeId);
+      if (!hut) continue;
+      switch (g.phase) {
+        case 'idle': {
+          g.rest();
+          // Wait while the hut's local store is full (carriers will free it).
+          if (hut.outputStore >= hut.localCap) break;
+          const target = hut.nearestTerrainTile(this.ctx.grid, Terrain.Forest, LUMBERJACK_RANGE);
+          if (!target) break;
+          const path = findPath(this.ctx.grid, g.tile, [target]);
+          if (!path) break;
+          g.target = target;
+          g.setPath(path);
+          g.phase = 'toTree';
+          break;
+        }
+        case 'toTree': {
+          if (this.stepGatherer(g)) {
+            g.phase = 'chopping';
+            g.chopTicks = Math.max(1, Math.round((WOODCUTTER_CHOP_SECONDS * TICK_RATE) / hut.levelFactor));
+          }
+          break;
+        }
+        case 'chopping': {
+          g.rest();
+          // The tree may have been felled by regrowth/another cause meanwhile.
+          if (!g.target || this.ctx.grid.terrainAt(g.target.x, g.target.y) !== Terrain.Forest) {
+            g.phase = 'idle';
+            g.target = null;
+            break;
+          }
+          if (--g.chopTicks > 0) break;
+          // Chop done: one wood gathered; fell the tile once exhausted.
+          g.carrying = true;
+          hut.harvestProgress++;
+          if (hut.harvestProgress >= FOREST_WOOD_PER_TILE) {
+            hut.harvestProgress = 0;
+            this.ctx.fellTileAt(g.target);
+          }
+          g.target = null;
+          this.sendGathererHome(g, hut);
+          break;
+        }
+        case 'returning': {
+          if (this.stepGatherer(g)) {
+            if (g.carrying) {
+              hut.outputStore++;
+              g.carrying = false;
+            }
+            g.phase = 'idle';
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  /** Path a woodcutter back to its hut; deposit on the spot if unreachable. */
+  private sendGathererHome(g: Woodcutter, hut: Building): void {
+    const path = findPath(this.ctx.grid, g.tile, hut.accessTiles(this.ctx.grid));
+    if (path) {
+      g.setPath(path);
+      g.phase = 'returning';
+    } else {
+      if (g.carrying) {
+        hut.outputStore++;
+        g.carrying = false;
+      }
+      g.phase = 'idle';
+    }
+  }
+
+  private stepGatherer(g: Woodcutter): boolean {
+    const tile = g.tile;
+    const roadBonus = this.ctx.grid.speedFactorAt(tile.x, tile.y);
+    const base = WORKER_SPEED / TICK_RATE;
+    return g.step(base * roadBonus * this.ctx.getSpeedFactor());
   }
 
   /** Create jobs from building demand/supply, bounded by reservations. */

@@ -4,6 +4,7 @@ import { getDef } from '../data/buildings';
 import type { Building } from '../entities/Building';
 import type { Enemy } from '../entities/Enemy';
 import type { Soldier } from '../entities/Soldier';
+import type { Woodcutter } from '../entities/Woodcutter';
 import type { Worker } from '../entities/Worker';
 import type { Projectile } from '../systems/CombatSystem';
 import type { Camera } from '../world/Camera';
@@ -59,6 +60,7 @@ export interface RenderState {
   grid: IsoGrid;
   buildings: Map<number, Building>;
   workers: Worker[];
+  gatherers: Woodcutter[];
   soldiers: Soldier[];
   enemies: Enemy[];
   projectiles: Projectile[];
@@ -96,6 +98,7 @@ export class WorldRenderer {
   private buildingViews = new Map<number, BuildingViewEntry>();
   private unitSprites = new UnitSprites();
   private workerViews = new Map<number, UnitViewEntry>();
+  private gathererViews = new Map<number, UnitViewEntry>();
   private soldierViews = new Map<number, UnitViewEntry>();
   private enemyViews = new Map<number, UnitViewEntry>();
   private projectileView!: Graphics;
@@ -226,10 +229,12 @@ export class WorldRenderer {
   clearEntities(): void {
     for (const entry of this.buildingViews.values()) entry.view.destroy({ children: true });
     for (const entry of this.workerViews.values()) entry.view.destroy({ children: true });
+    for (const entry of this.gathererViews.values()) entry.view.destroy({ children: true });
     for (const entry of this.soldierViews.values()) entry.view.destroy({ children: true });
     for (const entry of this.enemyViews.values()) entry.view.destroy({ children: true });
     this.buildingViews.clear();
     this.workerViews.clear();
+    this.gathererViews.clear();
     this.soldierViews.clear();
     this.enemyViews.clear();
     this.projectileView?.clear();
@@ -292,6 +297,7 @@ export class WorldRenderer {
     camera.apply(this.world);
     this.syncBuildings(state);
     this.syncWorkers(state, alpha);
+    this.syncGatherers(state, alpha);
     this.syncSoldiers(state, alpha);
     this.syncEnemies(state, alpha);
     this.syncProjectiles(state);
@@ -539,6 +545,40 @@ export class WorldRenderer {
     }
   }
 
+  private syncGatherers(state: RenderState, alpha: number): void {
+    const liveIds = new Set<number>();
+    for (const g of state.gatherers) {
+      liveIds.add(g.id);
+      let entry = this.gathererViews.get(g.id);
+      if (!entry) {
+        entry = this.createUnitEntry('worker');
+        this.gathererViews.set(g.id, entry);
+      }
+      const key = g.carrying ? 'wood' : '';
+      if (entry.lastKey !== key) {
+        entry.lastKey = key;
+        entry.gfx.clear();
+        if (entry.sprite) {
+          if (g.carrying) {
+            entry.gfx
+              .rect(2, -21, 7, 6)
+              .fill(RESOURCE_INFO.wood.color)
+              .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+          }
+        } else {
+          drawWorker(entry.gfx, g.carrying ? RESOURCE_INFO.wood.color : null);
+        }
+      }
+      this.placeUnit(entry, g.prevX, g.prevY, g.x, g.y, alpha, ((g.id * 37) % 13) - 6);
+    }
+    for (const [id, entry] of this.gathererViews) {
+      if (!liveIds.has(id)) {
+        entry.view.destroy({ children: true });
+        this.gathererViews.delete(id);
+      }
+    }
+  }
+
   private syncGhost(state: RenderState): void {
     const ghost = state.ghost;
     if (!ghost) {
@@ -588,6 +628,10 @@ export class WorldRenderer {
     for (const chunk of this.terrainChunks.values()) chunk.view.visible = visible(chunk.bounds);
     for (const entry of this.buildingViews.values()) entry.view.visible = visible(entry.bounds);
     for (const entry of this.workerViews.values()) {
+      const { x, y } = entry.view.position;
+      entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+    for (const entry of this.gathererViews.values()) {
       const { x, y } = entry.view.position;
       entry.view.visible = x >= minX && x <= maxX && y >= minY && y <= maxY;
     }

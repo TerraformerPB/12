@@ -118,7 +118,8 @@ export const BUILDING_DEFS = {
     placement: PlacementRule.AdjacentForest,
     recipe: { output: 'wood', duration: 4 },
     workersRequired: 1,
-    description: 'Produziert 1 Holz alle 4 Sekunden. Muss an Wald grenzen.',
+    description:
+      'Schickt einen Holzfäller in den umliegenden Wald, der das Holz zur Hütte bringt. Muss an Wald grenzen.',
     art: { color: 0x7a5230, height: 26 },
   },
   quarry: {

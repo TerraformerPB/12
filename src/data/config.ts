@@ -62,8 +62,12 @@ export const TERRAIN_RIVER_WIDTH = 2;
 export const TERRAIN_SAFE_RADIUS = 6;
 /** Walking through forest is slow (units prefer paths around it). */
 export const FOREST_MOVE_COST = 1.6;
-/** Wood a lumberjack harvests before one adjacent forest tile is felled. */
+/** Wood a lumberjack harvests before the forest tile it works is felled. */
 export const FOREST_WOOD_PER_TILE = 10;
+/** Lumberjacks send their woodcutter to forest within this radius (tiles). */
+export const LUMBERJACK_RANGE = 6;
+/** Seconds a woodcutter spends chopping at a tree before hauling wood home. */
+export const WOODCUTTER_CHOP_SECONDS = 2.5;
 /** Every N seconds a few forest tiles try to spread to adjacent grass. */
 export const FOREST_REGROW_INTERVAL = 10;
 export const FOREST_REGROW_ATTEMPTS = 6;

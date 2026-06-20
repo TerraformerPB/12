@@ -38,6 +38,7 @@ import type { ResourceId } from '../data/config';
 import { Building } from '../entities/Building';
 import { Enemy } from '../entities/Enemy';
 import { Soldier } from '../entities/Soldier';
+import { Woodcutter } from '../entities/Woodcutter';
 import { Worker } from '../entities/Worker';
 import { WorldRenderer } from '../render/WorldRenderer';
 import { BuildSystem } from '../systems/BuildSystem';
@@ -144,6 +145,8 @@ export class Game {
 
   readonly buildings = new Map<number, Building>();
   readonly workers: Worker[] = [];
+  /** Woodcutters derived from staffed lumberjacks (transient, not saved). */
+  readonly gatherers: Woodcutter[] = [];
   readonly soldiers: Soldier[] = [];
   readonly enemies: Enemy[] = [];
   readonly techs = new Set<TechId>();
@@ -254,6 +257,7 @@ export class Game {
     this.selectedSoldierId = null;
     this.buildings.clear();
     this.workers.length = 0;
+    this.gatherers.length = 0;
     this.soldiers.length = 0;
     this.enemies.length = 0;
     this.techs.clear();
@@ -286,6 +290,7 @@ export class Game {
       store,
       buildings: this.buildings,
       workers: this.workers,
+      gatherers: this.gatherers,
       getWarehouse: () => this.buildings.get(this.warehouseId) ?? null,
       nextEntityId: () => this.nextId++,
       getSoldierCount: () => this.soldiers.length,
@@ -294,6 +299,7 @@ export class Game {
         (this.techs.has('freeBeer') ? TECH_EFFECTS.freeBeerSpeed : 1) *
         this.moraleSpeedFactor(),
       fellForestTile: (b) => this.fellForest(b),
+      fellTileAt: (tile) => this.fellTile(tile),
       depleteOreTile: (b) => this.depleteOre(b),
       getFarmFactor: () => (this.season === 2 ? AUTUMN_FARM_BONUS : this.season === 3 ? 0 : 1),
       onConstructionFinished: (b) => {
@@ -889,6 +895,12 @@ export class Game {
   private fellForest(b: Building): void {
     const tile = b.adjacentTerrainTile(this.grid, Terrain.Forest);
     if (!tile) return;
+    this.fellTile(tile);
+  }
+
+  /** Turn one specific forest tile to grass (a woodcutter exhausted it). */
+  private fellTile(tile: Point): void {
+    if (this.grid.terrainAt(tile.x, tile.y) !== Terrain.Forest) return;
     this.grid.setTerrain(tile.x, tile.y, Terrain.Grass);
     this.renderer.rebuildChunkAt(this.grid, tile.x, tile.y);
   }
@@ -991,6 +1003,7 @@ export class Game {
         grid: this.grid,
         buildings: this.buildings,
         workers: this.workers,
+        gatherers: this.gatherers,
         soldiers: this.soldiers,
         enemies: this.enemies,
         projectiles: this.combatSystem?.projectiles ?? [],

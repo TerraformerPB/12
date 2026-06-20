@@ -430,11 +430,13 @@ describe('ore depletion (phase 20)', () => {
       store: new ResourceStore(),
       buildings,
       workers: [],
+      gatherers: [],
       getWarehouse: () => null,
       nextEntityId: () => 99,
       getSoldierCount: () => 0,
       getSpeedFactor: () => 1,
       fellForestTile: () => {},
+      fellTileAt: () => {},
       depleteOreTile: (b) => {
         depleted++;
         const tile = b.adjacentTerrainTile(grid, Terrain.Ore);

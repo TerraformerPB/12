@@ -251,6 +251,29 @@ export class Building {
     return null;
   }
 
+  /**
+   * Nearest tile of the given terrain within `range` tiles of the footprint
+   * (Chebyshev distance), or null. Used by lumberjacks to reach forest beyond
+   * the immediate neighbours.
+   */
+  nearestTerrainTile(grid: IsoGrid, terrain: number, range: number): Point | null {
+    let best: Point | null = null;
+    let bestDist = Infinity;
+    for (let y = this.y - range; y < this.y + this.h + range; y++) {
+      for (let x = this.x - range; x < this.x + this.w + range; x++) {
+        if (!grid.inBounds(x, y) || grid.terrainAt(x, y) !== terrain) continue;
+        const ddx = x < this.x ? this.x - x : x >= this.x + this.w ? x - (this.x + this.w - 1) : 0;
+        const ddy = y < this.y ? this.y - y : y >= this.y + this.h ? y - (this.y + this.h - 1) : 0;
+        const dist = Math.max(ddx, ddy);
+        if (dist <= range && dist < bestDist) {
+          bestDist = dist;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
+  }
+
   /** Walkable tiles orthogonally adjacent to the footprint (carrier targets). */
   accessTiles(grid: IsoGrid): Point[] {
     const tiles: Point[] = [];
